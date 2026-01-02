@@ -138,22 +138,29 @@ def freeze_encoder(detector: VisionTransformerDetector) -> VisionTransformerDete
         Detector model with frozen encoder
     """
     # Freeze patch embedding
-    for param in detector.patch_embed.parameters():
-        param.requires_grad = False
-    
-    # Freeze cls token and pos encoding
-    detector.cls_token.requires_grad = False
-    for param in detector.pos_encoding.parameters():
-        param.requires_grad = False
-    
-    # Freeze encoder blocks
-    for block in detector.encoder_blocks:
-        for param in block.parameters():
+    if hasattr(detector, 'patch_embed'):
+        for param in detector.patch_embed.parameters():
             param.requires_grad = False
     
+    # Freeze cls token
+    if hasattr(detector, 'cls_token'):
+        detector.cls_token.requires_grad = False
+    
+    # Freeze pos encoding
+    if hasattr(detector, 'pos_encoding'):
+        for param in detector.pos_encoding.parameters():
+            param.requires_grad = False
+    
+    # Freeze encoder blocks
+    if hasattr(detector, 'encoder_blocks'):
+        for block in detector.encoder_blocks:
+            for param in block.parameters():
+                param.requires_grad = False
+    
     # Freeze encoder norm
-    for param in detector.norm.parameters():
-        param.requires_grad = False
+    if hasattr(detector, 'norm'):
+        for param in detector.norm.parameters():
+            param.requires_grad = False
     
     print("Encoder parameters frozen")
     

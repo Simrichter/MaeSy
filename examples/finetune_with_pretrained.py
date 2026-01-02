@@ -93,6 +93,9 @@ def main():
         except FileNotFoundError:
             print(f"Warning: MAE checkpoint not found at {mae_checkpoint}")
             print("Training from scratch...")
+        except Exception as e:
+            print(f"Warning: Failed to load MAE checkpoint: {e}")
+            print("Training from scratch...")
     
     if use_classification_pretrained:
         print(f"\nLoading classification pretrained weights from {classification_checkpoint}...")
@@ -101,6 +104,9 @@ def main():
             print("Classification pretrained weights loaded successfully!")
         except FileNotFoundError:
             print(f"Warning: Classification checkpoint not found at {classification_checkpoint}")
+            print("Training from scratch...")
+        except Exception as e:
+            print(f"Warning: Failed to load classification checkpoint: {e}")
             print("Training from scratch...")
     
     # Optionally freeze encoder

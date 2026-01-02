@@ -55,7 +55,11 @@ class MaskedAutoencoderViT(nn.Module):
         self.decoder_pos_embed = nn.Parameter(torch.randn(1, config.num_patches + 1, decoder_embed_dim) * 0.02)
         
         # Decoder transformer blocks
+        # Create decoder config based on encoder config but with decoder-specific dimensions
         decoder_config = ModelConfig(
+            image_size=config.image_size,
+            patch_size=config.patch_size,
+            in_channels=config.in_channels,
             embed_dim=decoder_embed_dim,
             num_layers=decoder_num_layers,
             num_heads=config.num_heads,
@@ -106,6 +110,14 @@ class MaskedAutoencoderViT(nn.Module):
             patches: [B, num_patches, patch_size**2 * C]
         """
         p = self.config.patch_size
+        
+        # Validate that image is square
+        if imgs.shape[2] != imgs.shape[3]:
+            raise ValueError(f"MAE expects square images, got {imgs.shape[2]}x{imgs.shape[3]}")
+        
+        if imgs.shape[2] != self.config.image_size:
+            raise ValueError(f"Image size {imgs.shape[2]} doesn't match config image_size {self.config.image_size}")
+        
         h = w = self.config.image_size // p
         
         x = imgs.reshape(imgs.shape[0], self.config.in_channels, h, p, w, p)

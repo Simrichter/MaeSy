@@ -253,8 +253,8 @@ class Trainer:
                 
                 # Log validation metrics
                 for key, value in val_metrics.items():
-                    # Remove 'val_' prefix since we add it in tensorboard path
-                    metric_name = key.replace('val_', '')
+                    # Remove 'val_' prefix if present since we add it in tensorboard path
+                    metric_name = key[4:] if key.startswith('val_') else key
                     self.writer.add_scalar(f'val/{metric_name}', value, epoch)
                 
                 print(f"Epoch {epoch + 1}/{self.config.num_epochs} - "

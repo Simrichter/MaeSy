@@ -1,6 +1,7 @@
 """Example inference script for Vision Transformer object detection."""
 
 import torch
+import argparse
 from PIL import Image
 import torchvision.transforms as T
 
@@ -34,26 +35,30 @@ def load_image(image_path: str, image_size: int = 224) -> torch.Tensor:
 def main():
     """Main inference function."""
     
-    # Configuration
-    image_size = 224
-    num_classes = 80
-    checkpoint_path = "./checkpoints/best_model.pth"
-    image_path = "./test_image.jpg"
-    output_path = "./prediction.jpg"
+    parser = argparse.ArgumentParser(description='Run inference with Vision Transformer detector')
+    parser.add_argument('--checkpoint', type=str, default='./checkpoints/best_model.pth',
+                        help='Path to model checkpoint')
+    parser.add_argument('--image', type=str, default='./test_image.jpg',
+                        help='Path to input image')
+    parser.add_argument('--output', type=str, default='./prediction.jpg',
+                        help='Path to save output visualization')
+    parser.add_argument('--image-size', type=int, default=224,
+                        help='Input image size')
+    parser.add_argument('--num-classes', type=int, default=80,
+                        help='Number of object classes')
+    parser.add_argument('--confidence', type=float, default=0.5,
+                        help='Confidence threshold for detections')
+    parser.add_argument('--device', type=str, default='cuda',
+                        help='Device to use (cuda/cpu)')
     
-    # Category names (example for COCO dataset)
-    category_names = [
-        "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
-        "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
-        "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
-        "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
-        "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
-        "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-        "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
-        "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
-        "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-        "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
-    ]
+    args = parser.parse_args()
+    
+    # Configuration
+    checkpoint_path = args.checkpoint
+    image_path = args.image
+    output_path = args.output
+    image_size = args.image_size
+    num_classes = args.num_classes
     
     # Create model
     print("Loading model...")
@@ -70,7 +75,7 @@ def main():
     model = VisionTransformerDetector(model_config)
     
     # Load checkpoint
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.to(device)
@@ -88,7 +93,28 @@ def main():
     # Make prediction
     print("Running inference...")
     with torch.no_grad():
-        predictions = evaluator.predict(image, confidence_threshold=0.5)
+        predictions = evaluator.predict(image, confidence_threshold=args.confidence)
+    
+    # Category names (example for COCO dataset - 80 classes)
+    category_names = [
+        "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
+        "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
+        "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
+        "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
+        "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
+        "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+        "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
+        "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
+        "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+        "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
+    ]
+    
+    # Extend or truncate category names based on num_classes
+    if num_classes != len(category_names):
+        if num_classes < len(category_names):
+            category_names = category_names[:num_classes]
+        else:
+            category_names.extend([f"class_{i}" for i in range(len(category_names), num_classes)])
     
     # Print predictions
     print(f"\nDetected {len(predictions['boxes'])} objects:")

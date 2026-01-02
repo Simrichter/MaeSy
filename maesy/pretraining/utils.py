@@ -43,9 +43,10 @@ def load_mae_pretrained_weights(
             if key in detector_state_dict:
                 pretrained_dict[key] = value
         elif key == 'pos_embed':
-            # Positional embedding
-            if key in detector_state_dict:
-                pretrained_dict[key] = value
+            # Positional embedding - map to pos_encoding.pos_embed in detector
+            detector_key = 'pos_encoding.pos_embed'
+            if detector_key in detector_state_dict:
+                pretrained_dict[detector_key] = value
         elif key.startswith('encoder_blocks'):
             # Encoder blocks
             detector_key = key
@@ -62,7 +63,7 @@ def load_mae_pretrained_weights(
     detector.load_state_dict(detector_state_dict, strict=strict)
     
     print(f"Loaded {len(pretrained_dict)} pretrained weights from MAE checkpoint")
-    print(f"Loaded weights for: patch_embed, cls_token, pos_embed, encoder_blocks, norm")
+    print(f"Loaded weights for: patch_embed, cls_token, pos_encoding.pos_embed, encoder_blocks, norm")
     
     return detector
 
@@ -103,9 +104,10 @@ def load_classification_pretrained_weights(
             if key in detector_state_dict:
                 pretrained_dict[key] = value
         elif key == 'pos_embed':
-            # Positional embedding
-            if key in detector_state_dict:
-                pretrained_dict[key] = value
+            # Positional embedding - map to pos_encoding.pos_embed in detector
+            detector_key = 'pos_encoding.pos_embed'
+            if detector_key in detector_state_dict:
+                pretrained_dict[detector_key] = value
         elif key.startswith('encoder_blocks'):
             # Encoder blocks
             detector_key = key
@@ -122,7 +124,7 @@ def load_classification_pretrained_weights(
     detector.load_state_dict(detector_state_dict, strict=strict)
     
     print(f"Loaded {len(pretrained_dict)} pretrained weights from classification checkpoint")
-    print(f"Loaded weights for: patch_embed, cls_token, pos_embed, encoder_blocks, norm")
+    print(f"Loaded weights for: patch_embed, cls_token, pos_encoding.pos_embed, encoder_blocks, norm")
     
     return detector
 

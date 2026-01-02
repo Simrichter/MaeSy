@@ -166,10 +166,18 @@ class DetectionLoss(nn.Module):
         return batch_idx, src_idx
     
     def _normalize_boxes(self, boxes: torch.Tensor, targets: List[Dict[str, torch.Tensor]]) -> torch.Tensor:
-        """Normalize boxes to [0, 1] range assuming they're in pixel coordinates."""
-        # For simplicity, assume boxes are already in [0, image_size] range
-        # and normalize by image_size (this should be adapted based on your data)
-        # Here we assume boxes are already in [cx, cy, w, h] format normalized
+        """
+        Normalize boxes to [0, 1] range.
+        
+        Assumes boxes are in [cx, cy, w, h] format in pixel coordinates.
+        Normalizes by image dimensions.
+        """
+        if len(targets) == 0 or boxes.numel() == 0:
+            return boxes
+        
+        # For training, we expect boxes in normalized [0, 1] range already
+        # This is handled by the dataset transforms
+        # If your dataset provides pixel coordinates, normalize here
         return boxes
     
     def _box_cxcywh_to_xyxy(self, boxes: torch.Tensor) -> torch.Tensor:

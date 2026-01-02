@@ -20,7 +20,7 @@ class Evaluator:
     def __init__(
         self,
         model: VisionTransformerDetector,
-        data_loader: DataLoader,
+        data_loader: Optional[DataLoader] = None,
         device: str = "cuda"
     ):
         """
@@ -28,7 +28,7 @@ class Evaluator:
         
         Args:
             model: Model to evaluate
-            data_loader: Data loader for evaluation
+            data_loader: Data loader for evaluation (optional for inference-only use)
             device: Device to run evaluation on
         """
         self.model = model
@@ -53,6 +53,9 @@ class Evaluator:
         Returns:
             Dictionary with evaluation metrics
         """
+        if self.data_loader is None:
+            raise ValueError("Data loader is required for evaluation. Provide data_loader during initialization.")
+        
         all_predictions = []
         all_targets = []
         
@@ -160,10 +163,16 @@ class Evaluator:
         h, w = image.shape[:2]
         
         for box, label, score in zip(boxes, labels, scores):
-            # Convert normalized boxes to pixel coordinates
-            x1, y1, x2, y2 = box
-            x1, x2 = x1 * w, x2 * w
-            y1, y2 = y1 * h, y2 * h
+            # Model outputs boxes in [cx, cy, w, h] normalized format
+            # Convert to [x1, y1, x2, y2] pixel coordinates
+            cx, cy, bw, bh = box
+            cx, cy = cx * w, cy * h
+            bw, bh = bw * w, bh * h
+            
+            x1 = cx - bw / 2
+            y1 = cy - bh / 2
+            x2 = cx + bw / 2
+            y2 = cy + bh / 2
             
             # Draw box
             rect = patches.Rectangle(

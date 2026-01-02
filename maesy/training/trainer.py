@@ -253,7 +253,9 @@ class Trainer:
                 
                 # Log validation metrics
                 for key, value in val_metrics.items():
-                    self.writer.add_scalar(f'val/{key}', value, epoch)
+                    # Remove 'val_' prefix since we add it in tensorboard path
+                    metric_name = key.replace('val_', '')
+                    self.writer.add_scalar(f'val/{metric_name}', value, epoch)
                 
                 print(f"Epoch {epoch + 1}/{self.config.num_epochs} - "
                       f"Train Loss: {train_metrics['loss']:.4f}, "

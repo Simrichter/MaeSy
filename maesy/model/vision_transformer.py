@@ -236,7 +236,8 @@ class VisionTransformerDetector(nn.Module):
         """Initialize weights."""
         for m in self.modules():
             if isinstance(m, nn.Linear):
-                nn.init.trunc_normal_(m.weight, std=0.02)
+                # Use normal initialization with standard deviation 0.02
+                nn.init.normal_(m.weight, std=0.02)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.LayerNorm):

@@ -32,7 +32,7 @@ def get_train_transforms(image_size: int = 224):
         image = T.functional.resize(image, [image_size, image_size])
         
         # Scale boxes accordingly
-        if target['boxes'].numel() > 0:
+        if 'boxes' in target and target['boxes'].numel() > 0:
             scale_x = image_size / orig_w
             scale_y = image_size / orig_h
             boxes = target['boxes'].clone()
@@ -71,7 +71,7 @@ def get_val_transforms(image_size: int = 224):
         image = T.functional.resize(image, [image_size, image_size])
         
         # Scale boxes accordingly
-        if target['boxes'].numel() > 0:
+        if 'boxes' in target and target['boxes'].numel() > 0:
             scale_x = image_size / orig_w
             scale_y = image_size / orig_h
             boxes = target['boxes'].clone()

@@ -4,7 +4,7 @@ setup(
     name="maesy",
     version="0.1.0",
     description="Vision Transformer framework for object detection in robot soccer",
-    author="MaeSy Team",
+    author="Simon Ian Richter",
     packages=find_packages(),
     python_requires=">=3.8",
     install_requires=[

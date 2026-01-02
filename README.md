@@ -272,11 +272,8 @@ If you use MaeSy in your research, please cite:
 
 ```bibtex
 @software{maesy2026,
-  title={Leveraging Pretraining and Synthetic
-Finetuning to Train Data-Efficient
-Vision Transformers in the Context of
-Robot Soccer},
-  author={Simon Ian Richter},
+  title={MaeSy: Vision Transformer Framework for Object Detection},
+  author={MaeSy Team},
   year={2026},
   url={https://github.com/Simrichter/MaeSy}
 }

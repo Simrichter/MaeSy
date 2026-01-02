@@ -9,6 +9,7 @@ MaeSy is a Python framework for training custom Vision Transformers for object d
 ## Features
 
 - 🎯 **Custom Vision Transformer Architecture**: Built from scratch with attention mechanisms optimized for object detection
+- 🔥 **Pretraining Support**: Two pretraining methods - Masked Autoencoder (MAE) and supervised classification pretraining
 - 📦 **Dataset Management**: Easy-to-use tools for downloading, managing, and preprocessing datasets in COCO format
 - 🚀 **Training Pipeline**: Complete training infrastructure with mixed precision support, learning rate scheduling, and checkpointing
 - 📊 **Evaluation Tools**: Comprehensive evaluation metrics including mAP, precision, recall, and visualization utilities
@@ -39,7 +40,7 @@ Main dependencies:
 
 ## Framework Architecture
 
-MaeSy consists of four main modules:
+MaeSy consists of five main modules:
 
 ### 1. Dataset Module (`maesy.dataset`)
 
@@ -109,7 +110,38 @@ trainer = Trainer(
 trainer.train()
 ```
 
-### 4. Evaluation Module (`maesy.evaluation`)
+### 4. Pretraining Module (`maesy.pretraining`)
+
+Self-supervised and supervised pretraining for Vision Transformers:
+
+```python
+from maesy.pretraining import (
+    MaskedAutoencoderViT,
+    MaskedAutoencoderPretrainer,
+    MAEPretrainingConfig,
+    ClassificationViT,
+    ClassificationPretrainer,
+    ClassificationPretrainingConfig,
+    load_mae_pretrained_weights,
+    load_classification_pretrained_weights
+)
+
+# Option 1: MAE Pretraining
+mae_model = MaskedAutoencoderViT(config)
+mae_trainer = MaskedAutoencoderPretrainer(mae_model, train_loader)
+mae_trainer.train()
+
+# Option 2: Classification Pretraining
+cls_model = ClassificationViT(config, num_classes=1000)
+cls_trainer = ClassificationPretrainer(cls_model, train_loader)
+cls_trainer.train()
+
+# Load pretrained weights for fine-tuning
+detector = VisionTransformerDetector(config)
+detector = load_mae_pretrained_weights(detector, "mae_checkpoint.pth")
+```
+
+### 5. Evaluation Module (`maesy.evaluation`)
 
 Comprehensive evaluation and visualization tools:
 
@@ -165,18 +197,127 @@ trainer.train()
 
 See the [examples/](examples/) directory for complete training, evaluation, and inference scripts.
 
+## Pretraining
+
+MaeSy supports two pretraining methods to improve model performance with limited labeled data:
+
+### 1. Masked Autoencoder (MAE) Pretraining
+
+MAE is a self-supervised pretraining method where random patches of the input image are masked, and the model learns to reconstruct them. This helps the model learn robust visual representations without requiring labels.
+
+```python
+from maesy.model import ModelConfig
+from maesy.pretraining import (
+    MaskedAutoencoderViT,
+    MaskedAutoencoderPretrainer,
+    MAEPretrainingConfig
+)
+
+# Create MAE model
+config = ModelConfig(image_size=224, patch_size=16, embed_dim=768, num_layers=12, num_heads=12)
+mae_model = MaskedAutoencoderViT(config, decoder_embed_dim=512, decoder_num_layers=8)
+
+# Configure MAE pretraining
+mae_config = MAEPretrainingConfig(
+    num_epochs=100,
+    batch_size=64,
+    mask_ratio=0.75,  # Mask 75% of patches
+    learning_rate=1.5e-4,
+    save_dir="./mae_checkpoints"
+)
+
+# Pretrain
+mae_trainer = MaskedAutoencoderPretrainer(mae_model, train_loader, config=mae_config)
+mae_trainer.train()
+```
+
+### 2. Classification Pretraining
+
+Supervised classification pretraining on a large-scale dataset (e.g., ImageNet) helps the model learn general visual features that can be transferred to object detection tasks.
+
+```python
+from maesy.pretraining import (
+    ClassificationViT,
+    ClassificationPretrainer,
+    ClassificationPretrainingConfig
+)
+
+# Create classification model
+cls_model = ClassificationViT(config, num_classes=1000)  # ImageNet has 1000 classes
+
+# Configure classification pretraining
+cls_config = ClassificationPretrainingConfig(
+    num_epochs=100,
+    batch_size=64,
+    num_classes=1000,
+    learning_rate=1e-3,
+    save_dir="./classification_checkpoints"
+)
+
+# Pretrain
+cls_trainer = ClassificationPretrainer(cls_model, train_loader, config=cls_config)
+cls_trainer.train()
+```
+
+### Fine-tuning with Pretrained Weights
+
+After pretraining, you can load the pretrained weights into your detection model for fine-tuning:
+
+```python
+from maesy.model import VisionTransformerDetector
+from maesy.pretraining import (
+    load_mae_pretrained_weights,
+    load_classification_pretrained_weights,
+    freeze_encoder
+)
+
+# Create detection model
+detector = VisionTransformerDetector(model_config)
+
+# Load pretrained weights (choose one)
+detector = load_mae_pretrained_weights(detector, "./mae_checkpoints/mae_best_model.pth")
+# OR
+detector = load_classification_pretrained_weights(detector, "./classification_checkpoints/classification_best_model.pth")
+
+# Optionally freeze encoder during initial fine-tuning
+detector = freeze_encoder(detector)
+
+# Fine-tune on object detection task
+trainer = Trainer(detector, train_loader, val_loader)
+trainer.train()
+```
+
+**Benefits of Pretraining:**
+- 🎯 Better performance with limited labeled data
+- ⚡ Faster convergence during fine-tuning
+- 🛡️ More robust learned representations
+- 📈 Improved generalization to new domains
+
 ## Example Scripts
 
 The `examples/` directory contains ready-to-use scripts:
 
 - **`train.py`**: Complete training pipeline example
+- **`pretrain_mae.py`**: MAE (Masked Autoencoder) pretraining example
+- **`pretrain_classification.py`**: Classification pretraining example
+- **`finetune_with_pretrained.py`**: Fine-tuning object detection with pretrained weights
 - **`evaluate.py`**: Model evaluation with metrics computation
 - **`inference.py`**: Single image inference with visualization
 
 Run an example:
 
 ```bash
+# Standard training
 python examples/train.py
+
+# MAE pretraining
+python examples/pretrain_mae.py
+
+# Classification pretraining
+python examples/pretrain_classification.py
+
+# Fine-tuning with pretrained weights
+python examples/finetune_with_pretrained.py
 ```
 
 ## Model Architecture

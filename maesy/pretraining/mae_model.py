@@ -56,6 +56,7 @@ class MaskedAutoencoderViT(nn.Module):
         
         # Decoder transformer blocks
         # Create decoder config based on encoder config but with decoder-specific dimensions
+        # Copy all parameters from original config to ensure compatibility
         decoder_config = ModelConfig(
             image_size=config.image_size,
             patch_size=config.patch_size,
@@ -65,7 +66,14 @@ class MaskedAutoencoderViT(nn.Module):
             num_heads=config.num_heads,
             mlp_ratio=config.mlp_ratio,
             dropout=config.dropout,
-            attention_dropout=config.attention_dropout
+            attention_dropout=config.attention_dropout,
+            num_classes=config.num_classes,
+            num_queries=config.num_queries,
+            hidden_dim=config.hidden_dim,
+            num_decoder_layers=config.num_decoder_layers,
+            bbox_loss_coef=config.bbox_loss_coef,
+            class_loss_coef=config.class_loss_coef,
+            giou_loss_coef=config.giou_loss_coef
         )
         self.decoder_blocks = nn.ModuleList([
             TransformerBlock(decoder_config) for _ in range(decoder_num_layers)
@@ -110,14 +118,6 @@ class MaskedAutoencoderViT(nn.Module):
             patches: [B, num_patches, patch_size**2 * C]
         """
         p = self.config.patch_size
-        
-        # Validate that image is square
-        if imgs.shape[2] != imgs.shape[3]:
-            raise ValueError(f"MAE expects square images, got {imgs.shape[2]}x{imgs.shape[3]}")
-        
-        if imgs.shape[2] != self.config.image_size:
-            raise ValueError(f"Image size {imgs.shape[2]} doesn't match config image_size {self.config.image_size}")
-        
         h = w = self.config.image_size // p
         
         x = imgs.reshape(imgs.shape[0], self.config.in_channels, h, p, w, p)
@@ -258,6 +258,13 @@ class MaskedAutoencoderViT(nn.Module):
             pred: Predicted patches
             mask: Binary mask
         """
+        # Validate input dimensions
+        if imgs.shape[2] != imgs.shape[3]:
+            raise ValueError(f"MAE expects square images, got {imgs.shape[2]}x{imgs.shape[3]}")
+        
+        if imgs.shape[2] != self.config.image_size:
+            raise ValueError(f"Image size {imgs.shape[2]} doesn't match config image_size {self.config.image_size}")
+        
         # Encode with masking
         latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio)
         

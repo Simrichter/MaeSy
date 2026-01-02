@@ -93,7 +93,7 @@ def main():
         except FileNotFoundError:
             print(f"Warning: MAE checkpoint not found at {mae_checkpoint}")
             print("Training from scratch...")
-        except Exception as e:
+        except (RuntimeError, KeyError, ValueError) as e:
             print(f"Warning: Failed to load MAE checkpoint: {e}")
             print("Training from scratch...")
     
@@ -105,7 +105,7 @@ def main():
         except FileNotFoundError:
             print(f"Warning: Classification checkpoint not found at {classification_checkpoint}")
             print("Training from scratch...")
-        except Exception as e:
+        except (RuntimeError, KeyError, ValueError) as e:
             print(f"Warning: Failed to load classification checkpoint: {e}")
             print("Training from scratch...")
     

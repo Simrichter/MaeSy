@@ -123,9 +123,7 @@ class Trainer:
         total_loss_bbox = 0.0
         total_loss_giou = 0.0
         
-        pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch + 1}")
-        
-        for batch_idx, batch in enumerate(pbar):
+        for batch_idx, batch in enumerate(pbar := tqdm(self.train_loader, desc=f"Epoch {self.current_epoch + 1}")):
             images = batch['images'].to(self.device)
             targets = [
                 {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
@@ -134,12 +132,7 @@ class Trainer:
             ]
             
             # Forward pass
-            if self.config.use_amp:
-                with torch.cuda.amp.autocast():
-                    predictions = self.model(images)
-                    losses = self.criterion(predictions, targets)
-                    loss = losses['loss']
-            else:
+            with torch.cuda.amp.autocast(enabled=self.config.use_amp):
                 predictions = self.model(images)
                 losses = self.criterion(predictions, targets)
                 loss = losses['loss']
@@ -203,10 +196,8 @@ class Trainer:
         total_loss_ce = 0.0
         total_loss_bbox = 0.0
         total_loss_giou = 0.0
-        
-        pbar = tqdm(self.val_loader, desc="Validation")
-        
-        for batch in pbar:
+
+        for batch in tqdm(self.val_loader, desc="Validation"):
             images = batch['images'].to(self.device)
             targets = [
                 {k: v.to(self.device) if isinstance(v, torch.Tensor) else v

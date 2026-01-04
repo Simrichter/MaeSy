@@ -19,8 +19,8 @@ class PatchEmbedding(nn.Module):
         
         # Convolutional layer for patch embedding
         self.projection = nn.Conv2d(
-            config.in_channels,
-            config.embed_dim,
+            in_channels=config.in_channels,
+            out_channels=config.embed_dim,
             kernel_size=config.patch_size,
             stride=config.patch_size
         )

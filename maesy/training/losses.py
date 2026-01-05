@@ -57,8 +57,6 @@ class DetectionLoss(nn.Module):
         pred_logits = predictions['pred_logits']  # [B, num_queries, num_classes + 1]
         pred_boxes = predictions['pred_boxes']  # [B, num_queries, 4]
         
-        batch_size = pred_logits.shape[0]
-        
         # Perform Hungarian matching
         indices = self.match_predictions_to_targets(predictions, targets)
         
@@ -83,12 +81,7 @@ class DetectionLoss(nn.Module):
         # Compute bbox losses
         idx = self._get_src_permutation_idx(indices)
         src_boxes = pred_boxes[idx]
-        target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
-        
-        # Convert target boxes to [0, 1] range
-        # Note: Dataset should provide boxes in normalized format already
-        # This method is kept for compatibility and future extensions
-        target_boxes = self._normalize_boxes(target_boxes, targets)
+        target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0) # Expecting the target boxes to be 0-1 normalized
         
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
         loss_bbox = loss_bbox.sum() / max(target_classes_o.shape[0], 1)
@@ -130,25 +123,22 @@ class DetectionLoss(nn.Module):
         
         for i, target in enumerate(targets):
             tgt_ids = target['labels']
-            tgt_bbox = target['boxes']
+            tgt_bbox = target['boxes'].unsqueeze(0)
             
             if len(tgt_ids) == 0:
                 indices.append((torch.tensor([], dtype=torch.int64), torch.tensor([], dtype=torch.int64)))
                 continue
             
-            # Normalize target boxes
-            tgt_bbox_norm = self._normalize_boxes(tgt_bbox.unsqueeze(0), [target]).squeeze(0)
-            
             # Classification cost
             cost_class = -out_prob[i * num_queries:(i + 1) * num_queries, tgt_ids]
             
             # L1 cost
-            cost_bbox = torch.cdist(out_bbox[i * num_queries:(i + 1) * num_queries], tgt_bbox_norm, p=1)
+            cost_bbox = torch.cdist(out_bbox[i * num_queries:(i + 1) * num_queries], tgt_bbox, p=1)
             
             # GIoU cost
             cost_giou = -self._generalized_box_iou(
                 self._box_cxcywh_to_xyxy(out_bbox[i * num_queries:(i + 1) * num_queries]),
-                self._box_cxcywh_to_xyxy(tgt_bbox_norm)
+                self._box_cxcywh_to_xyxy(tgt_bbox)
             )
             
             # Final cost matrix
@@ -166,27 +156,6 @@ class DetectionLoss(nn.Module):
         batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
         src_idx = torch.cat([src for (src, _) in indices])
         return batch_idx, src_idx
-    
-    def _normalize_boxes(self, boxes: torch.Tensor, targets: List[Dict[str, torch.Tensor]]) -> torch.Tensor:
-        """
-        Normalize boxes to [0, 1] range if needed.
-        
-        Note: The dataset transforms should already provide boxes in normalized format.
-        This method is provided for compatibility and can be extended if your dataset
-        provides boxes in pixel coordinates.
-        
-        Args:
-            boxes: Boxes in [cx, cy, w, h] format
-            targets: List of target dictionaries
-            
-        Returns:
-            Normalized boxes
-        """
-        if len(targets) == 0 or boxes.numel() == 0:
-            return boxes
-        
-        # Boxes are expected to already be normalized by dataset transforms
-        return boxes
     
     def _box_cxcywh_to_xyxy(self, boxes: torch.Tensor) -> torch.Tensor:
         """Convert boxes from [cx, cy, w, h] to [x1, y1, x2, y2]."""

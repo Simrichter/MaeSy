@@ -117,10 +117,8 @@ class ClassificationPretrainer:
         total_loss = 0.0
         correct = 0
         total = 0
-        
-        pbar = tqdm(self.train_loader, desc=f"Classification Epoch {self.current_epoch + 1}")
-        
-        for batch_idx, batch in enumerate(pbar):
+
+        for batch_idx, batch in enumerate(pbar := tqdm(self.train_loader, desc=f"Classification Epoch {self.current_epoch + 1}")):
             # Handle different batch formats
             if isinstance(batch, dict):
                 images = batch['images'].to(self.device)
@@ -133,11 +131,7 @@ class ClassificationPretrainer:
                 raise ValueError("Batch must be a dict with 'images' and 'labels' or a tuple (images, labels)")
             
             # Forward pass
-            if self.config.use_amp:
-                with torch.cuda.amp.autocast():
-                    logits = self.model(images)
-                    loss = self.criterion(logits, labels)
-            else:
+            with torch.cuda.amp.autocast(enabled=self.config.use_amp):
                 logits = self.model(images)
                 loss = self.criterion(logits, labels)
             
@@ -198,9 +192,7 @@ class ClassificationPretrainer:
         correct = 0
         total = 0
         
-        pbar = tqdm(self.val_loader, desc="Classification Validation")
-        
-        for batch in pbar:
+        for batch in tqdm(self.val_loader, desc="Classification Validation"):
             # Handle different batch formats
             if isinstance(batch, dict):
                 images = batch['images'].to(self.device)

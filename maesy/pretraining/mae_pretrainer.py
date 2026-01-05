@@ -105,10 +105,8 @@ class MaskedAutoencoderPretrainer:
         self.model.train()
         
         total_loss = 0.0
-        
-        pbar = tqdm(self.train_loader, desc=f"MAE Epoch {self.current_epoch + 1}")
-        
-        for batch_idx, batch in enumerate(pbar):
+
+        for batch_idx, batch in enumerate(pbar := tqdm(self.train_loader, desc=f"MAE Epoch {self.current_epoch + 1}")):
             # Handle different batch formats
             if isinstance(batch, dict):
                 images = batch['images'].to(self.device)
@@ -118,10 +116,7 @@ class MaskedAutoencoderPretrainer:
                 images = batch.to(self.device)
             
             # Forward pass
-            if self.config.use_amp:
-                with torch.cuda.amp.autocast():
-                    loss, pred, mask = self.model(images, self.config.mask_ratio)
-            else:
+            with torch.cuda.amp.autocast(enabled=self.config.use_amp):
                 loss, pred, mask = self.model(images, self.config.mask_ratio)
             
             # Backward pass
@@ -172,9 +167,7 @@ class MaskedAutoencoderPretrainer:
         
         total_loss = 0.0
         
-        pbar = tqdm(self.val_loader, desc="MAE Validation")
-        
-        for batch in pbar:
+        for batch in tqdm(self.val_loader, desc="MAE Validation"):
             # Handle different batch formats
             if isinstance(batch, dict):
                 images = batch['images'].to(self.device)

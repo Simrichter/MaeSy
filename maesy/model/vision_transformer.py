@@ -59,7 +59,7 @@ class MultiHeadAttention(nn.Module):
     
     def __init__(self, embed_dim: int, num_heads: int, dropout: float = 0.1):
         super().__init__()
-        assert embed_dim % num_heads == 0
+        assert embed_dim % num_heads == 0, f"embed_dim ({embed_dim}) % num_heads ({num_heads}) is not zero ({embed_dim%num_heads})"
         
         self.embed_dim = embed_dim
         self.num_heads = num_heads

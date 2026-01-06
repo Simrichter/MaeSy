@@ -17,7 +17,7 @@ class MaskedAutoencoderViT(nn.Module):
     and the model learns to reconstruct them.
     """
     
-    def __init__(self, config: ModelConfig, decoder_embed_dim: int = 512, decoder_num_layers: int = 8):
+    def __init__(self, config: ModelConfig, decoder_embed_dim: int = 768, decoder_num_layers: int = 8):
         """
         Initialize MAE model.
         

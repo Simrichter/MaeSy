@@ -274,11 +274,11 @@ class MaskedAutoencoderViT(nn.Module):
         # Compute loss
         target = self.patchify(imgs)
         
-        # MSE loss on masked patches only
+        # MSE loss
         loss = (pred - target) ** 2
         loss = loss.mean(dim=-1)  # [B, N], mean loss per patch
         
-        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches (on masked patches only for more focussed training)
         
         return loss, pred, mask
     

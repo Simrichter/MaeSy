@@ -18,7 +18,7 @@ def main():
 
     # Configuration
     image_size = 224
-    batch_size = 1#64
+    batch_size = 16#64
     num_epochs = 100
     mask_ratio = 0.75
 
@@ -26,7 +26,7 @@ def main():
     model_config = ModelConfig(
         image_size=image_size,
         patch_size=16,
-        embed_dim=384,#768,
+        embed_dim=384, #768,
         num_layers=4,
         num_heads=4,
         in_channels=3
@@ -69,7 +69,7 @@ def main():
     train_dataset = UnlabeledDataset(
         r"C:\Users\taran\Desktop\k1_webots_simulation\controllers\TrainingDataController\images",
         transforms=train_transforms,
-        repeat_factor=512
+        repeat_factor=2
         )
 
     val_dataset = UnlabeledDataset(

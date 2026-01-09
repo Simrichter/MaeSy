@@ -387,14 +387,6 @@ TrainingConfig(
 )
 ```
 
-## Monitoring Training
-
-View training progress with TensorBoard:
-
-```bash
-tensorboard --logdir=./logs
-```
-
 ## Evaluation Metrics
 
 The framework computes:

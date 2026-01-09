@@ -195,7 +195,6 @@ Predictions (logits, boxes)
 5. **Image Size**: Larger images (384, 448) improve accuracy but require more memory
 6. **Data Augmentation**: Implement custom transforms for better generalization
 7. **Checkpointing**: Save checkpoints frequently during long training runs
-8. **Monitoring**: Use TensorBoard to monitor training progress
 
 ## Common Issues
 

@@ -3,8 +3,8 @@
 import os
 import torch
 import torch.nn as nn
+import wandb
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from pathlib import Path
 from typing import Optional, Dict
@@ -58,8 +58,12 @@ class ClassificationPretrainer:
         self.log_dir = Path(self.config.log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
-        # Setup tensorboard
-        self.writer = SummaryWriter(self.log_dir / "classification_pretraining")
+        # Setup wandb
+        self.wandb_run = wandb.init(
+            entity="simon-richter-tu-dortmund",
+            project="maesy-MAE_Pretraining",
+            config=self.config
+        )
         
         # Training state
         self.current_epoch = 0
@@ -165,10 +169,12 @@ class ClassificationPretrainer:
             
             # Log to tensorboard
             if self.global_step % self.config.log_frequency == 0:
-                self.writer.add_scalar('train/loss', loss.item(), self.global_step)
-                self.writer.add_scalar('train/accuracy', acc, self.global_step)
-                self.writer.add_scalar('train/lr', self.optimizer.param_groups[0]['lr'], self.global_step)
-            
+                self.wandb_run.log({
+                    'train/loss': loss.item(),
+                    'train/accuracy': acc,
+                    'train/lr': self.optimizer.param_groups[0]['lr']
+                })
+
             self.global_step += 1
         
         # Average metrics
@@ -249,7 +255,7 @@ class ClassificationPretrainer:
                 # Log validation metrics
                 for key, value in val_metrics.items():
                     metric_name = key[4:] if key.startswith('val_') else key
-                    self.writer.add_scalar(f'val/{metric_name}', value, epoch)
+                    self.wandb_run.log({f'val/{metric_name}', value})
                 
                 print(f"Epoch {epoch + 1}/{self.config.num_epochs} - "
                       f"Train Loss: {train_metrics['loss']:.4f}, Train Acc: {train_metrics['accuracy']:.2f}%, "
@@ -274,7 +280,7 @@ class ClassificationPretrainer:
         
         # Save final model
         self.save_checkpoint('classification_final_model.pth')
-        self.writer.close()
+        self.wandb_run.finish()
         print("Classification pretraining completed!")
     
     def save_checkpoint(self, filename: str) -> None:

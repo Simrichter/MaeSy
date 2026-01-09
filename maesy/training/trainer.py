@@ -3,8 +3,8 @@
 import os
 import torch
 import torch.nn as nn
+import wandb
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -63,9 +63,13 @@ class Trainer:
         self.log_dir = Path(self.config.log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
-        # Setup tensorboard
-        self.writer = SummaryWriter(self.log_dir)
-        
+        # Setup wandb
+        self.wandb_run = wandb.init(
+            entity="simon-richter-tu-dortmund",
+            project="maesy-Finetuning",
+            config=self.config
+        )
+
         # Training state
         self.current_epoch = 0
         self.global_step = 0
@@ -165,11 +169,14 @@ class Trainer:
             
             # Log to tensorboard
             if self.global_step % self.config.log_frequency == 0:
-                self.writer.add_scalar('train/loss', loss.item(), self.global_step)
-                self.writer.add_scalar('train/loss_ce', losses['loss_ce'].item(), self.global_step)
-                self.writer.add_scalar('train/loss_bbox', losses['loss_bbox'].item(), self.global_step)
-                self.writer.add_scalar('train/loss_giou', losses['loss_giou'].item(), self.global_step)
-                self.writer.add_scalar('train/lr', self.optimizer.param_groups[0]['lr'], self.global_step)
+
+                self.wandb_run.log({
+                    "train/loss": loss.item(),
+                    "train/loss_ce": losses['loss_ce'].item(),
+                    'train/loss_bbox': losses['loss_bbox'].item(),
+                    'train/loss_giou': losses['loss_giou'].item(),
+                    'train/lr': self.optimizer.param_groups[0]['lr']
+                })
             
             self.global_step += 1
         
@@ -246,7 +253,7 @@ class Trainer:
                 for key, value in val_metrics.items():
                     # Remove 'val_' prefix if present since we add it in tensorboard path
                     metric_name = key[4:] if key.startswith('val_') else key
-                    self.writer.add_scalar(f'val/{metric_name}', value, epoch)
+                    self.wandb_run.log({f'val/{metric_name}', value})
                 
                 print(f"Epoch {epoch + 1}/{self.config.num_epochs} - "
                       f"Train Loss: {train_metrics['loss']:.4f}, "
@@ -270,7 +277,7 @@ class Trainer:
         
         # Save final model
         self.save_checkpoint('final_model.pth')
-        self.writer.close()
+        self.wandb_run.finish()
         print("Training completed!")
     
     def save_checkpoint(self, filename: str) -> None:

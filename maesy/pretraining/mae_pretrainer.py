@@ -6,7 +6,6 @@ import torch.nn as nn
 import wandb
 from torchvision.utils import save_image
 from torch.utils.data import DataLoader
-# from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from pathlib import Path
 from typing import Optional, Dict
@@ -57,20 +56,11 @@ class MaskedAutoencoderPretrainer:
         self.log_dir = Path(self.config.log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
-        # Setup tensorboard
-        # self.writer = SummaryWriter(self.log_dir / "mae_pretraining")
+        # Setup wandb
         self.wandb_run = wandb.init(
-            # Set the wandb entity where your project will be logged (generally your team name).
             entity="simon-richter-tu-dortmund",
-            # Set the wandb project where this run will be logged.
             project="maesy-MAE_Pretraining",
-            # Track hyperparameters and run metadata.
-            # config={
-            #     "learning_rate": 0.02,
-            #     "architecture": "CNN",
-            #     "dataset": "CIFAR-100",
-            #     "epochs": 10,
-            # },
+            config=self.config
         )
 
         # Training state
@@ -156,12 +146,8 @@ class MaskedAutoencoderPretrainer:
                 'loss': loss.item(),
                 'lr': self.optimizer.param_groups[0]['lr']
             })
-            
-            # Log to tensorboard
-            if self.global_step % self.config.log_frequency == 0:
-                # self.writer.add_scalar('train/loss', loss.item(), self.global_step)
-                # self.writer.add_scalar('train/lr', self.optimizer.param_groups[0]['lr'], self.global_step)
 
+            if self.global_step % self.config.log_frequency == 0:
                 self.wandb_run.log({"train/loss": loss.item(), "train/lr": self.optimizer.param_groups[0]['lr']})
             
             self.global_step += 1
@@ -240,7 +226,6 @@ class MaskedAutoencoderPretrainer:
                 # Log validation metrics
                 for key, value in val_metrics.items():
                     metric_name = key[4:] if key.startswith('val_') else key
-                    # self.writer.add_scalar(f'val/{metric_name}', value, epoch)
                     self.wandb_run.log({f"val/{metric_name}": value})
                 
                 print(f"Epoch {epoch + 1}/{self.config.num_epochs} - "
@@ -265,7 +250,6 @@ class MaskedAutoencoderPretrainer:
         
         # Save final model
         self.save_checkpoint('mae_final_model.pth')
-        # self.writer.close()
         self.wandb_run.finish()
         print("MAE pretraining completed!")
     

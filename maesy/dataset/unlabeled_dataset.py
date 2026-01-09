@@ -16,7 +16,8 @@ class UnlabeledDataset(Dataset):
         images_dir: str,
         filetype: str = ".png",
         transforms: Optional[Callable] = None,
-        repeat_factor: int = 1
+        repeat_factor: int = 1,
+        use_first_n: int = None
     ):
         """
         Initialize UnlabeledDataset.
@@ -26,11 +27,15 @@ class UnlabeledDataset(Dataset):
             filetype: File extension
             transforms: Optional transforms to apply
             repeat_factor: Specifies, how many times the same image is repeated in the dataset (mostly for debugging)
+            use_first_n: Only use the first n images found in the images_dir (mostly for debugging)
         """
         self.images_dir = images_dir
         self.transforms = transforms
 
         self.images = [f for f in os.listdir(self.images_dir) if f.endswith(filetype)]*repeat_factor
+        if use_first_n is not None:
+            self.images = self.images[:use_first_n]
+
         if len(self.images) == 0:
             print(f"Warning: No images of type {filetype} found in this directory: {self.images_dir}")
             

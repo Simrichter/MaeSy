@@ -20,15 +20,15 @@ def main():
     image_size = 224
     batch_size = 16#64
     num_epochs = 100
-    mask_ratio = 0.75
+    mask_ratio = 0.25
 
     # Create model config
     model_config = ModelConfig(
         image_size=image_size,
         patch_size=16,
         embed_dim=384, #768,
-        num_layers=4,
-        num_heads=4,
+        num_layers=6,
+        num_heads=6,
         in_channels=3
     )
 
@@ -36,8 +36,8 @@ def main():
     print("Creating MAE model...")
     model = MaskedAutoencoderViT(
         config=model_config,
-        decoder_embed_dim=512,
-        decoder_num_layers=1
+        decoder_embed_dim=384,
+        decoder_num_layers=4
     )
 
     # Print model info
@@ -74,7 +74,8 @@ def main():
 
     val_dataset = UnlabeledDataset(
         r"C:\Users\taran\Desktop\k1_webots_simulation\controllers\TrainingDataController\images",
-        transforms=val_transforms
+        transforms=val_transforms,
+        use_first_n=32
     )
 
     # Create data loaders

@@ -3,6 +3,7 @@
 import os
 import torch
 import torch.nn as nn
+from torchvision.utils import save_image
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -57,7 +58,8 @@ class MaskedAutoencoderPretrainer:
         
         # Setup tensorboard
         self.writer = SummaryWriter(self.log_dir / "mae_pretraining")
-        
+
+
         # Training state
         self.current_epoch = 0
         self.global_step = 0
@@ -151,6 +153,7 @@ class MaskedAutoencoderPretrainer:
         
         # Average metrics
         num_batches = len(self.train_loader)
+        assert num_batches > 0, f"Error: division by zero, {self.train_loader} has len 0"
         metrics = {
             'loss': total_loss / num_batches
         }
@@ -166,7 +169,8 @@ class MaskedAutoencoderPretrainer:
         self.model.eval()
         
         total_loss = 0.0
-        
+
+        pred = None # Dummy declaration to keep the predictions of the last batch in memory
         for batch in tqdm(self.val_loader, desc="MAE Validation"):
             # Handle different batch formats
             if isinstance(batch, dict):
@@ -179,7 +183,12 @@ class MaskedAutoencoderPretrainer:
             loss, pred, mask = self.model(images, self.config.mask_ratio)
             
             total_loss += loss.item()
-        
+
+        if self.config.output_predicted_images:
+            save_path = self.save_dir / "images"
+            save_path.mkdir(parents=True, exist_ok=True)
+            save_image(self.model.unpatchify(pred)[0], f"{save_path}/predicted_image{self.global_step}.png")
+
         # Average metrics
         num_batches = len(self.val_loader)
         metrics = {

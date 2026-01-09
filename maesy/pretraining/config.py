@@ -31,6 +31,9 @@ class MAEPretrainingConfig:
     log_dir: str = "./pretrain_logs"
     save_frequency: int = 10
     log_frequency: int = 10
+    output_predicted_images: bool = False
+
+    device: str = "cuda"
     
     # Device
     device: str = "cuda"  # cuda, cpu

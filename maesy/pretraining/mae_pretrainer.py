@@ -1,8 +1,6 @@
 """Trainer for Masked Autoencoder pretraining."""
 
-import os
 import torch
-import torch.nn as nn
 import wandb
 from torchvision.utils import save_image
 from torch.utils.data import DataLoader
@@ -11,8 +9,7 @@ from pathlib import Path
 from typing import Optional, Dict
 
 from .config import MAEPretrainingConfig
-from .mae_model import MaskedAutoencoderViT
-from ..model.config import ModelConfig
+from maesy.model.mae_model import MaskedAutoencoderViT
 
 
 class MaskedAutoencoderPretrainer:

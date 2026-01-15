@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from typing import Tuple
 import math
 
-from ..model.config import ModelConfig
-from ..model.vision_transformer import PatchEmbedding, TransformerBlock
+from maesy.model.config import ModelConfig
+from maesy.model.vision_transformer import PatchEmbedding, TransformerBlock
 
 
 class MaskedAutoencoderViT(nn.Module):

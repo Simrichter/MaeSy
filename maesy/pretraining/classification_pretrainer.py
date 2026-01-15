@@ -1,6 +1,5 @@
 """Trainer for classification pretraining."""
 
-import os
 import torch
 import torch.nn as nn
 import wandb
@@ -10,8 +9,7 @@ from pathlib import Path
 from typing import Optional, Dict
 
 from .config import ClassificationPretrainingConfig
-from .classification_model import ClassificationViT
-from ..model.config import ModelConfig
+from maesy.model.classification_model import ClassificationViT
 
 
 class ClassificationPretrainer:

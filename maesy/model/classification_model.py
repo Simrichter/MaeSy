@@ -4,11 +4,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..model.config import ModelConfig
-from ..model.vision_transformer import PatchEmbedding, TransformerBlock
+from maesy.model.config import ModelConfig
+from maesy.model.vision_transformer import PatchEmbedding, TransformerBlock
+from base_model import BaseModel
+from heads import LinearHead
 
 
-class ClassificationViT(nn.Module):
+class ClassificationViT(nn.Module, BaseModel):
     """Vision Transformer for image classification pretraining.
     
     This model implements standard supervised image classification pretraining
@@ -45,7 +47,7 @@ class ClassificationViT(nn.Module):
         self.norm = nn.LayerNorm(config.embed_dim)
         
         # Classification head
-        self.head = nn.Linear(config.embed_dim, num_classes)
+        self.head = LinearHead(config.embed_dim, num_classes)
         
         self._init_weights()
     

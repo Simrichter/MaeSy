@@ -1,10 +1,7 @@
 """Utilities for loading pretrained weights."""
 
 import torch
-from typing import Dict, Optional
 from ..model import VisionTransformerDetector
-from .mae_model import MaskedAutoencoderViT
-from .classification_model import ClassificationViT
 
 
 def load_mae_pretrained_weights(

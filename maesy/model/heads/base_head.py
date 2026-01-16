@@ -1,11 +1,10 @@
-from abc import ABC, abstractmethod
-import torch.nn as nn
+from typing import Protocol
+import torch
 
-class BaseHead(ABC, nn.Module):
-    @abstractmethod
-    def __init__(self):
-        super().__init__()
+class BaseHead(Protocol):
 
-    @abstractmethod
-    def forward(self,img):
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
         pass
+
+    def __call__(self, features: torch.Tensor) -> torch.Tensor:
+        return self.forward(features)

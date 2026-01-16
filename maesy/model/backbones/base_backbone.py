@@ -1,12 +1,10 @@
-from abc import ABC, abstractmethod
-import torch.nn as nn
+from typing import Protocol
+import torch
 
-class BaseBackbone(ABC, nn.Module):
+class BaseBackbone(Protocol):
 
-    @abstractmethod
-    def __init__(self):
-        super(BaseBackbone, self).__init__()
-
-    @abstractmethod
-    def forward(self,x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         pass
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return self.forward(x)

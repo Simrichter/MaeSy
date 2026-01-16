@@ -23,12 +23,13 @@ class DatasetManager:
         self.data_root = Path(data_root)
         self.data_root.mkdir(parents=True, exist_ok=True)
         
-    def download_dataset(
+    def download_data(
         self,
         url: str,
         dataset_name: str,
         extract: bool = True,
-        force: bool = False
+        force: bool = False,
+        keep_temp: bool = False
     ) -> Path:
         """
         Download dataset from URL.
@@ -38,6 +39,7 @@ class DatasetManager:
             dataset_name: Name of the dataset
             extract: Whether to extract if zip file
             force: Force re-download even if exists
+            keep_temp: Whether to keep temp files used during downloading (i.e. zip folders)
             
         Returns:
             Path to downloaded/extracted dataset
@@ -68,19 +70,60 @@ class DatasetManager:
                         pbar.update(len(chunk))
         
         # Extract if zip file
-        if extract and filepath.suffix == '.zip':
-            print(f"Extracting {filename}...")
-            with zipfile.ZipFile(filepath, 'r') as zip_ref:
-                zip_ref.extractall(dataset_dir)
-            os.remove(filepath)
-        elif extract and filepath.suffix == '.tar':
-            print(f"Extracting {filename}...")
-            tar = tarfile.open(filepath)
-            tar.extractall(dataset_dir)
-            tar.close()
+        if extract:
+            if filepath.suffix == '.zip':
+                print(f"Extracting {filename}...")
+                with zipfile.ZipFile(filepath, 'r') as zip_ref:
+                    zip_ref.extractall(dataset_dir)
+            elif filepath.suffix == '.tar':
+                print(f"Extracting {filename}...")
+                tar = tarfile.open(filepath)
+                tar.extractall(dataset_dir)
+                tar.close()
+            else:
+                print(f"Warning: Failed to extract downloaded file. Filetype {filepath.suffix} not supported")
+                return dataset_dir
+
+            if not keep_temp:
+                os.remove(filepath)
 
         return dataset_dir
-    
+
+    def create_dataset(self,
+        folder_names: list[str],
+        dataset_name: str,
+        split_percentages: list[float]=None,
+        del_folders: bool = False
+    ) -> Path:
+        """
+        Combines mutliple folders with images into a single dataset
+
+        Arguments:
+            folder_names: List of folders that contain images
+            dataset_name: Name of the dataset
+            split_percentages: List of percentages for the data subsets in format [train, val, test]. Defaults to [0.8, 0.1, 0.1] if not/incorrectly specified
+            del_folders: Whether to delete the original folders after use
+
+        Returns:
+            Path to final dataset
+        """
+
+        if split_percentages is None or type(split_percentages) is not list:
+            print("WARNING: Using default split_percentages [0.8, 0.1, 0.1]")
+            split_percentages = [0.8, 0.1, 0.1]
+
+        # path = self.download_data(url, dataset_name, extract, force)
+
+        dataset_dir = self.data_root / dataset_name
+        os.makedirs(dataset_dir, exist_ok=True)
+        # TODO: Collect all images in newly created folder
+        #       Create train/val/test splits
+        # TODO: Add support for label files
+
+        return dataset_dir
+
+
+
     def load_coco_annotations(self, annotation_file: str) -> Dict[str, Any]:
         """
         Load COCO format annotations.

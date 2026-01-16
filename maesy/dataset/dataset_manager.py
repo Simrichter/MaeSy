@@ -7,6 +7,7 @@ import requests
 from pathlib import Path
 from typing import Optional, Dict, Any
 from tqdm import tqdm
+import tarfile
 
 
 class DatasetManager:
@@ -56,9 +57,9 @@ class DatasetManager:
         print(f"Downloading {dataset_name} from {url}...")
         response = requests.get(url, stream=True)
         response.raise_for_status()
-        
+
         total_size = int(response.headers.get('content-length', 0))
-        
+
         with open(filepath, 'wb') as f:
             with tqdm(total=total_size, unit='B', unit_scale=True) as pbar:
                 for chunk in response.iter_content(chunk_size=8192):
@@ -72,7 +73,12 @@ class DatasetManager:
             with zipfile.ZipFile(filepath, 'r') as zip_ref:
                 zip_ref.extractall(dataset_dir)
             os.remove(filepath)
-            
+        elif extract and filepath.suffix == '.tar':
+            print(f"Extracting {filename}...")
+            tar = tarfile.open(filepath)
+            tar.extractall(dataset_dir)
+            tar.close()
+
         return dataset_dir
     
     def load_coco_annotations(self, annotation_file: str) -> Dict[str, Any]:

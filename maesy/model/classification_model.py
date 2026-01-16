@@ -6,11 +6,11 @@ import torch.nn.functional as F
 
 from maesy.model.config import ModelConfig
 from maesy.model.vision_transformer import PatchEmbedding, TransformerBlock
-from base_model import BaseModel
-from heads import LinearHead
+from .base_model import BaseModel
+from .heads import LinearHead
 
 
-class ClassificationViT(nn.Module, BaseModel):
+class ClassificationViT(BaseModel):
     """Vision Transformer for image classification pretraining.
     
     This model implements standard supervised image classification pretraining

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import torch.nn as nn
-from heads import BaseHead
-from backbones import BaseBackbone
+from .heads import BaseHead
+from .backbones import BaseBackbone
 
 
 class BaseModel(ABC, nn.Module):

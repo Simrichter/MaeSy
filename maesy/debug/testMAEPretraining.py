@@ -67,15 +67,17 @@ def main():
     ])
 
     train_dataset = UnlabeledDataset(
-        r"C:\Users\taran\Desktop\k1_webots_simulation\controllers\TrainingDataController\images",
+        r"/home/simon/PycharmProjects/MaeSy/maesy/debug/data/GP1_RoboErectus_Bangkok/temp/GP1_RoboErectus_Bangkok_2025-08-15-08-54-14_out",
         transforms=train_transforms,
-        repeat_factor=2
+        repeat_factor=1,
+        filetype=".jpg"
         )
 
     val_dataset = UnlabeledDataset(
-        r"C:\Users\taran\Desktop\k1_webots_simulation\controllers\TrainingDataController\images",
+        r"/home/simon/PycharmProjects/MaeSy/maesy/debug/data/GP1_RoboErectus_Bangkok/temp/GP1_RoboErectus_Bangkok_2025-08-15-08-54-14_out",
         transforms=val_transforms,
-        use_first_n=32
+        use_first_n=32,
+        filetype=".jpg"
     )
 
     # Create data loaders

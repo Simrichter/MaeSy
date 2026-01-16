@@ -1,4 +1,4 @@
-from base_backbone import BaseBackbone
+from .base_backbone import BaseBackbone
 __all__ = [
     "BaseBackbone",
 ]

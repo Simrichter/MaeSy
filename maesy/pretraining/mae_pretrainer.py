@@ -120,7 +120,7 @@ class MaskedAutoencoderPretrainer:
             # Forward pass
             with torch.cuda.amp.autocast(enabled=self.config.use_amp):
                 loss, pred, mask = self.model(images, self.config.mask_ratio)
-            
+# TODO: Outsource loss calculation (should not be inside model)
             # Backward pass
             self.optimizer.zero_grad()
             

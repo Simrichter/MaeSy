@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from tqdm import tqdm
 import tarfile
+import random
 
 
 class DatasetManager:
     """Manages dataset downloading, extraction, and organization."""
-    
+
     def __init__(self, data_root: str = "./data"):
         """
         Initialize DatasetManager.
@@ -22,14 +23,14 @@ class DatasetManager:
         """
         self.data_root = Path(data_root)
         self.data_root.mkdir(parents=True, exist_ok=True)
-        
+
     def download_data(
-        self,
-        url: str,
-        dataset_name: str,
-        extract: bool = True,
-        force: bool = False,
-        keep_temp: bool = False
+            self,
+            url: str,
+            dataset_name: str,
+            extract: bool = True,
+            force: bool = False,
+            keep_temp: bool = False
     ) -> Path:
         """
         Download dataset from URL.
@@ -45,17 +46,17 @@ class DatasetManager:
             Path to downloaded/extracted dataset
         """
         dataset_dir = self.data_root / dataset_name
-        
+
         if dataset_dir.exists() and not force:
             print(f"Dataset {dataset_name} already exists at {dataset_dir}")
             return dataset_dir
-            
+
         dataset_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Download file
         filename = url.split("/")[-1]
         filepath = dataset_dir / filename
-        
+
         print(f"Downloading {dataset_name} from {url}...")
         response = requests.get(url, stream=True)
         response.raise_for_status()
@@ -68,18 +69,20 @@ class DatasetManager:
                     if chunk:
                         f.write(chunk)
                         pbar.update(len(chunk))
-        
+
         # Extract if zip file
         if extract:
             if filepath.suffix == '.zip':
                 print(f"Extracting {filename}...")
                 with zipfile.ZipFile(filepath, 'r') as zip_ref:
                     zip_ref.extractall(dataset_dir)
+                print("...Done")
             elif filepath.suffix == '.tar':
                 print(f"Extracting {filename}...")
                 tar = tarfile.open(filepath)
                 tar.extractall(dataset_dir)
                 tar.close()
+                print("...Done")
             else:
                 print(f"Warning: Failed to extract downloaded file. Filetype {filepath.suffix} not supported")
                 return dataset_dir
@@ -90,13 +93,13 @@ class DatasetManager:
         return dataset_dir
 
     def create_dataset(self,
-        folder_names: list[str],
-        dataset_name: str,
-        split_percentages: list[float]=None,
-        del_folders: bool = False
-    ) -> Path:
+                       folder_names: list[str],
+                       dataset_name: str,
+                       split_percentages: list[float] = None,
+                       del_folders: bool = False
+                       ) -> Path:
         """
-        Combines mutliple folders with images into a single dataset
+        Combines multiple folders with images into a single dataset
 
         Arguments:
             folder_names: List of folders that contain images
@@ -115,14 +118,52 @@ class DatasetManager:
         # path = self.download_data(url, dataset_name, extract, force)
 
         dataset_dir = self.data_root / dataset_name
+        train_path = dataset_dir / "train"
+        val_path = dataset_dir / "val"
+        test_path = dataset_dir / "test"
         os.makedirs(dataset_dir, exist_ok=True)
-        # TODO: Collect all images in newly created folder
-        #       Create train/val/test splits
+        os.makedirs(train_path, exist_ok=True)
+        os.makedirs(val_path, exist_ok=True)
+        os.makedirs(test_path, exist_ok=True)
+
+        for folder in folder_names:
+            folder_path = Path(folder)
+            if not folder_path.exists() or not folder_path.is_dir():
+                print(f"WARNING: Folder {folder} does not exist or is not a directory. Skipping...")
+                continue
+
+            image_files = [f for f in folder_path.iterdir() if
+                           f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
+            num_images = len(image_files)
+
+            if num_images == 0:
+                print(f"WARNING: No image files found in folder {folder}. Skipping...")
+                continue
+
+            # Shuffle images
+            random.shuffle(image_files)
+
+            # Calculate split indices
+            train_end = int(split_percentages[0] * num_images)
+            val_end = train_end + int(split_percentages[1] * num_images)
+
+            # Copy files to respective folders
+            for i, img_file in enumerate(image_files):
+                if i < train_end:
+                    dest_path = train_path / img_file.name
+                elif i < val_end:
+                    dest_path = val_path / img_file.name
+                else:
+                    dest_path = test_path / img_file.name
+
+                os.rename(img_file, dest_path)
+
+            if del_folders:
+                os.rmdir(folder_path)
+
         # TODO: Add support for label files
 
         return dataset_dir
-
-
 
     def load_coco_annotations(self, annotation_file: str) -> Dict[str, Any]:
         """
@@ -137,13 +178,13 @@ class DatasetManager:
         with open(annotation_file, 'r') as f:
             annotations = json.load(f)
         return annotations
-    
+
     def prepare_dataset(
-        self,
-        dataset_name: str,
-        images_dir: str,
-        annotations_file: str,
-        split: str = "train"
+            self,
+            dataset_name: str,
+            images_dir: str,
+            annotations_file: str,
+            split: str = "train"
     ) -> Dict[str, Any]:
         """
         Prepare dataset for training/evaluation.
@@ -166,15 +207,15 @@ class DatasetManager:
             "num_annotations": 0,
             "categories": []
         }
-        
+
         if os.path.exists(annotations_file):
             annotations = self.load_coco_annotations(annotations_file)
             dataset_info["num_images"] = len(annotations.get("images", []))
             dataset_info["num_annotations"] = len(annotations.get("annotations", []))
             dataset_info["categories"] = annotations.get("categories", [])
-            
+
         return dataset_info
-    
+
     def list_datasets(self) -> list:
         """
         List all datasets in data root.

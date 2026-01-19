@@ -122,76 +122,7 @@ class MaskedAutoencoderViT(BaseModel):
     #     mask = torch.gather(mask, dim=1, index=ids_restore)
     #
     #     return x_masked, mask, ids_restore
-    
-    def forward_encoder(self, x: torch.Tensor, mask_ratio: float) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass through encoder with masking.
-        
-        Args:
-            x: Input images [B, C, H, W]
-            mask_ratio: Ratio of patches to mask
-            
-        Returns:
-            x: Encoded visible patches [B, N_visible, D]
-            mask: Binary mask
-            ids_restore: Indices to restore original order
-        """
-        # Patch embedding
-        x = self.patch_embed(x)  # [B, num_patches, embed_dim]
-        
-        # Add positional encoding (without cls token)
-        x = x + self.pos_embed[:, 1:, :]
-        
-        # Masking: length -> length * (1 - mask_ratio)
-        x, mask, ids_restore = self.random_masking(x, mask_ratio)
-        
-        # Append cls token
-        cls_token = self.cls_token + self.pos_embed[:, :1, :]
-        cls_tokens = cls_token.expand(x.shape[0], -1, -1)
-        x = torch.cat([cls_tokens, x], dim=1)
-        
-        # Apply encoder blocks
-        for block in self.encoder_blocks:
-            x = block(x)
-        x = self.encoder_norm(x)
-        
-        return x, mask, ids_restore
-    
-    def forward_decoder(self, x: torch.Tensor, ids_restore: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through decoder.
-        
-        Args:
-            x: Encoded visible patches [B, N_visible + 1, D]
-            ids_restore: Indices to restore original order
-            
-        Returns:
-            x: Reconstructed patches [B, num_patches, patch_size**2 * C]
-        """
-        # Embed tokens
-        x = self.decoder_embed(x)
-        
-        # Append mask tokens to sequence
-        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
-        x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
-        x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
-        x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
-        
-        # Add positional encoding
-        x = x + self.decoder_pos_embed
-        
-        # Apply decoder blocks
-        for block in self.decoder_blocks:
-            x = block(x)
-        x = self.decoder_norm(x)
-        
-        # Predict pixel values
-        x = self.decoder_pred(x)
-        
-        # Remove cls token
-        x = x[:, 1:, :]
-        
-        return x
+
     
     def forward(self, imgs: torch.Tensor, mask_ratio: float = 0.75) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -206,12 +137,12 @@ class MaskedAutoencoderViT(BaseModel):
             pred: Predicted patches
             mask: Binary mask
         """
-        # Validate input dimensions
-        if imgs.shape[2] != imgs.shape[3]:
-            raise ValueError(f"MAE expects square images, got {imgs.shape[2]}x{imgs.shape[3]}")
-        
-        if imgs.shape[2] != self.config.image_size:
-            raise ValueError(f"Image size {imgs.shape[2]} doesn't match config image_size {self.config.image_size}")
+        # # Validate input dimensions
+        # if imgs.shape[2] != imgs.shape[3]:
+        #     raise ValueError(f"MAE expects square images, got {imgs.shape[2]}x{imgs.shape[3]}")
+        #
+        # if imgs.shape[2] != self.config.image_size:
+        #     raise ValueError(f"Image size {imgs.shape[2]} doesn't match config image_size {self.config.image_size}")
         
         # Encode with masking
         latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio)
@@ -222,10 +153,10 @@ class MaskedAutoencoderViT(BaseModel):
         # Compute loss
         target = self.patchify(imgs)
         
-        # MSE loss
-        loss = (pred - target) ** 2
-        loss = loss.mean(dim=-1)  # [B, N], mean loss per patch
-        
-        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches (on masked patches only for more focussed training)
+        # # MSE loss
+        # loss = (pred - target) ** 2
+        # loss = loss.mean(dim=-1)  # [B, N], mean loss per patch
+        #
+        # loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches (on masked patches only for more focussed training)
         
         return loss, pred, mask

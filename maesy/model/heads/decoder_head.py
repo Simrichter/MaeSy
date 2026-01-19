@@ -59,3 +59,39 @@ class DecoderHead(nn.Module):
             elif isinstance(m, nn.LayerNorm):
                 nn.init.constant_(m.weight, 1.0)
                 nn.init.constant_(m.bias, 0)
+
+    def forward(self, x: torch.Tensor, ids_restore: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass through decoder.
+
+        Args:
+            x: Encoded visible patches [B, N_visible + 1, D]
+            ids_restore: Indices to restore original order
+
+        Returns:
+            x: Reconstructed patches [B, num_patches, patch_size**2 * C]
+        """
+        # Embed tokens
+        x = self.decoder_embed(x)
+
+        # Append mask tokens to sequence
+        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
+        x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
+        x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
+        x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
+
+        # Add positional encoding
+        x = x + self.decoder_pos_embed
+
+        # Apply decoder blocks
+        for block in self.decoder_blocks:
+            x = block(x)
+        x = self.decoder_norm(x)
+
+        # Predict pixel values
+        x = self.decoder_pred(x)
+
+        # Remove cls token
+        x = x[:, 1:, :]
+
+        return x

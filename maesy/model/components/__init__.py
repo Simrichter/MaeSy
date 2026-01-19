@@ -1,4 +1,4 @@
-from transformer_components import PatchEmbedding, PositionalEncoding, TransformerBlock, Utils
+from .transformer_components import PatchEmbedding, PositionalEncoding, TransformerBlock, Utils
 
 __all__ = [
     "PatchEmbedding",

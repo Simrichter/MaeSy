@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -56,22 +58,11 @@ class TransformerBackbone(nn.Module):
         Forward pass.
 
         Args:
-            x: Input images [B, C, H, W]
+            x: Preprocessed tokens [B, N_visible + 1, D]
 
         Returns:
-            Logits [B, embed_dim]
+            x: Encoded visible patches (+cls token) [B, N_visible(+1), D]
         """
-        B = x.shape[0]
-
-        # Patch embedding
-        x = self.patch_embed(x)  # [B, num_patches, embed_dim]
-
-        # Add class token
-        cls_tokens = self.cls_token.expand(B, -1, -1)
-        x = torch.cat([cls_tokens, x], dim=1)  # [B, num_patches + 1, embed_dim]
-
-        # Add positional encoding
-        x = x + self.pos_embed
         x = self.pos_dropout(x)
 
         # Transformer encoder
@@ -80,7 +71,30 @@ class TransformerBackbone(nn.Module):
 
         x = self.norm(x)
 
-        # Extract features (use cls token)
-        cls_token_final = x[:, 0]
+        return x
 
-        return cls_token_final
+    def preprocess(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Preprocess input images by applying patch embedding, positional embedding, random masking and attaching a class token
+
+        Args:
+            x: Input images [B, C, H, W]
+        Returns:
+            x: Preprocessed tokens [B, N_visible + 1, D]
+            mask: Binary mask
+            ids_restore: Indices to restore original order
+        """
+        x = self.patch_embed(x)  # [B, num_patches, embed_dim]
+
+        # Add positional encoding (without cls token)
+        x = x + self.pos_embed[:, 1:, :]
+
+# TODO: use ids_restore + mask such that random_masking can be done outside the model
+
+        # Masking: length -> length * (1 - mask_ratio)
+        x, mask, ids_restore = self.random_masking(x, self.config.mask_ratio)
+
+        # Append cls token
+        cls_token = self.cls_token + self.pos_embed[:, :1, :]
+        cls_tokens = cls_token.expand(x.shape[0], -1, -1)
+        x = torch.cat([cls_tokens, x], dim=1)
+        return x, mask, ids_restore

@@ -1,24 +1,52 @@
 """Masked Autoencoder Vision Transformer for pretraining."""
-
+import overrides
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple
 import math
 
+from torch import Tensor
+
 from maesy.model.config import ModelConfig
 from .base_model import BaseModel
 from .backbones import TransformerBackbone, TransformerBackboneConfig
 from .heads import DecoderHead, DecoderHeadConfig
+from .components import Utils
 
 class MaskedAutoencoderViT(BaseModel):
     """Masked Autoencoder Vision Transformer.
     
-    This model implements MAE pretraining where random patches are masked
+    This model implements a MAE architecture
+    Its usage is a pretraining where random patches are masked
     and the model learns to reconstruct them.
     """
-    
-    def __init__(self, config: ModelConfig, decoder_embed_dim: int = 768, decoder_num_layers: int = 8, mpl_ratio=4.0, dropout=0.1, attention_dropout=0.1):
+
+    def preprocess(self, imgs: torch.Tensor) -> tuple[Tensor, dict[str, Tensor]]:
+        """
+        Converts images into a sequence of patches and applies random masking
+        Args:
+        :param imgs: The images to preprocess in format [B, C, H, W]
+        :return:
+            x_masked: The preprocessed images in format [B, NVP, D]
+            preprocess_data: Additional information from preprocess for image reconstruction
+        """
+
+        patches = Utils.patchify(imgs, self.config.image_size, self.config.patch_size)
+        x_masked, mask, ids_restore = Utils.random_masking(patches, self.config.mask_ratio)
+        return x_masked, {"mask": mask, "ids_restore": ids_restore}
+
+    def postprocess(self, model_out, preprocess_data):
+        """
+        Converts the sequence of generated patches into an image
+        :param model_out: The raw output of the model with shape [B, NP, D]
+        :param preprocess_data: Additional information from preprocess for image reconstruction
+        :return: final_out: The model's final output image in format [B, C, H, W]
+        """
+        return Utils.unpatchify(model_out, self.config.image_size, self.config.patch_size)
+
+    def __init__(self, config: ModelConfig, decoder_embed_dim: int = 768, decoder_num_layers: int = 8, mpl_ratio=4.0,
+                 dropout=0.1, attention_dropout=0.1):
         """
         Initialize MAE model.
         
@@ -54,7 +82,6 @@ class MaskedAutoencoderViT(BaseModel):
             in_channels=config.in_channels
         )
         self.head = DecoderHead(head_config)
-    
     # def patchify(self, imgs: torch.Tensor) -> torch.Tensor:
     #     """
     #     Convert images to patches.
@@ -123,40 +150,31 @@ class MaskedAutoencoderViT(BaseModel):
     #
     #     return x_masked, mask, ids_restore
 
-    
-    def forward(self, imgs: torch.Tensor, mask_ratio: float = 0.75) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass for MAE.
-        
-        Args:
-            imgs: Input images [B, C, H, W]
-            mask_ratio: Ratio of patches to mask
-            
-        Returns:
-            loss: Reconstruction loss
-            pred: Predicted patches
-            mask: Binary mask
-        """
-        # # Validate input dimensions
-        # if imgs.shape[2] != imgs.shape[3]:
-        #     raise ValueError(f"MAE expects square images, got {imgs.shape[2]}x{imgs.shape[3]}")
-        #
-        # if imgs.shape[2] != self.config.image_size:
-        #     raise ValueError(f"Image size {imgs.shape[2]} doesn't match config image_size {self.config.image_size}")
-        
-        # Encode with masking
-        latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio)
-        
-        # Decode
-        pred = self.forward_decoder(latent, ids_restore)
-        
-        # Compute loss
-        target = self.patchify(imgs)
-        
-        # # MSE loss
-        # loss = (pred - target) ** 2
-        # loss = loss.mean(dim=-1)  # [B, N], mean loss per patch
-        #
-        # loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches (on masked patches only for more focussed training)
-        
-        return loss, pred, mask
+    # def forward(self, imgs: torch.Tensor, mask_ratio: float = 0.75) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    #     """
+    #     Forward pass for MAE.
+    #
+    #     Args:
+    #         imgs: Input images [B, C, H, W]
+    #         mask_ratio: Ratio of patches to mask
+    #
+    #     Returns:
+    #         loss: Reconstruction loss
+    #         pred: Predicted patches
+    #         mask: Binary mask
+    #     """
+    #     # # Validate input dimensions
+    #     # if imgs.shape[2] != imgs.shape[3]:
+    #     #     raise ValueError(f"MAE expects square images, got {imgs.shape[2]}x{imgs.shape[3]}")
+    #     #
+    #     # if imgs.shape[2] != self.config.image_size:
+    #     #     raise ValueError(f"Image size {imgs.shape[2]} doesn't match config image_size {self.config.image_size}")
+    #
+    #     # Encode with masking
+    #     latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio)
+    #
+    #     # Decode
+    #     pred = self.forward_decoder(latent, ids_restore)
+    #     loss = torch.tensor(-1.0)
+    #
+    #     return loss, pred, mask

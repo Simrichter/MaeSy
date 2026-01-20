@@ -47,7 +47,6 @@ class PositionalEncoding(nn.Module):
         """Add positional encoding to input."""
         return self.dropout(x + self.pos_embed)
 
-
 class TransformerBlock(nn.Module):
     """Transformer encoder block."""
 

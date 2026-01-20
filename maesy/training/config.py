@@ -14,6 +14,7 @@ class TrainingConfig:
     learning_rate: float = 1e-4
     weight_decay: float = 1e-4
     warmup_epochs: int = 5
+    criterion: str = "DetectionLoss"
     
     # Optimizer
     optimizer: str = "adamw"  # adamw, adam, sgd

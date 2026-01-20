@@ -33,6 +33,12 @@ class DetectionLoss(nn.Module):
         self.bbox_loss_coef = bbox_loss_coef
         self.class_loss_coef = class_loss_coef
         self.giou_loss_coef = giou_loss_coef
+
+        # Collecting metrics for logging
+        self.total_loss = 0.0
+        self.total_loss_ce = 0.0
+        self.total_loss_bbox = 0.0
+        self.total_loss_giou = 0.0
         
         # Adjust weights for class imbalance
         empty_weight = torch.ones(num_classes + 1)
@@ -100,9 +106,21 @@ class DetectionLoss(nn.Module):
             'loss_giou': loss_giou * self.giou_loss_coef
         }
         losses['loss'] = sum(losses.values())
-        
+
+        # Log the sums of the losses per epoch
+        self.total_loss += losses['loss'].item()
+        self.total_loss_ce += losses['loss_ce'].item()
+        self.total_loss_bbox += losses['loss_bbox'].item()
+        self.total_loss_giou += losses['loss_giou'].item()
+
         return losses
-    
+
+    def get_metrics(self) -> dict[str, float]:
+        return {"total_loss": self.total_loss,
+                "total_loss_ce": self.total_loss_ce,
+                "total_loss_bbox": self.total_loss_bbox,
+                "total_loss_giou": self.total_loss_giou}
+
     @torch.no_grad()
     def match_predictions_to_targets(
         self,
@@ -201,3 +219,19 @@ class DetectionLoss(nn.Module):
         giou = iou - (area_enclosing - union) / area_enclosing
         
         return giou
+
+class MaskedMSE(nn.Module):
+
+    def __init__(self):
+        self.total_loss = 0.0
+
+    def get_metrics(self) -> dict[str, float]:
+        return {"total_loss": self.total_loss}
+
+    def forward(self, pred, target, mask=None):
+        # target = self.patchify(imgs)
+        dist = (pred - target) ** 2
+        md = dist.mean(dim=-1)  # [B, N], mean loss per patch
+        tmd = (md if mask is None else (md * mask)).sum() / mask.sum()  # mean loss (on unmasked patches only for more focussed training)
+        self.total_loss += tmd.item()
+        return tmd

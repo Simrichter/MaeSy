@@ -3,6 +3,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 class PatchEmbedding(nn.Module):
     """Convert image into patches and embed them."""
@@ -130,6 +131,24 @@ class TransformerBlock(nn.Module):
 
 class Utils:
     """Utility functions for transformer components."""
+
+    @staticmethod
+    def get_sinusoidal_encoding(context_length: int, embedding_dimension: int, ) -> torch.Tensor:
+        """
+        This function creates a positional embedding using sinusoidal encoding matrix
+        :returns Tensor of shape [context_length, embed_dim]
+        """
+
+        def get_single_encoding(embed_dim, pos):
+            """
+            This function returns an encoding vector for a given position.
+            It is used as a helper function to create the positional embedding matrix and to extend it if needed in the GPT model.
+            """
+            return [np.sin(pos / np.power(10000, i / embed_dim)) if i % 2 == 0 else np.cos(
+                pos / np.power(10000, (i - 1) / embed_dim)) for i in range(embed_dim)]
+
+        return torch.FloatTensor(
+            [get_single_encoding(embedding_dimension, i) for i in range(context_length)]).unsqueeze(0)
 
     @staticmethod
     def init_weights(module: nn.Module):

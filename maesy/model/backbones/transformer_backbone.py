@@ -35,13 +35,15 @@ class TransformerBackbone(nn.Module):
         super().__init__()
 
         # Patch embedding
-        self.patch_embed = PatchEmbedding(**asdict(config))
+        # self.patch_embed = PatchEmbedding(**asdict(config))
+        self.patch_embed = nn.Linear(config.embed_dim, config.embed_dim)
 
         # Class token
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.embed_dim) * 0.02)
+        # self.cls_token = nn.Parameter(torch.randn(1, 1, config.embed_dim) * 0.02)
 
         # Positional encoding
-        self.pos_embed = nn.Parameter(torch.randn(1, config.num_patches + 1, config.embed_dim) * 0.02)
+        # self.pos_embed = nn.Parameter(torch.randn(1, config.num_patches + 1, config.embed_dim) * 0.02)
+        self.pos_embed = Utils.get_sinusoidal_encoding(config.num_patches, config.embed_dim)
         self.pos_dropout = nn.Dropout(config.dropout)
 
         # Transformer encoder

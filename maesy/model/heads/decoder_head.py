@@ -36,7 +36,7 @@ class DecoderHead(nn.Module):
         # Prediction head - reconstruct pixels
         self.decoder_pred = nn.Linear(config.embed_dim, config.patch_size ** 2 * config.in_channels)
 
-        Utils.init_weights(self)
+        # Utils.init_weights(self)
 
     def _init_weights(self):
         """Initialize weights."""
@@ -60,13 +60,13 @@ class DecoderHead(nn.Module):
                 nn.init.constant_(m.weight, 1.0)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x: torch.Tensor, ids_restore: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, ids_shuffle: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Forward pass through decoder.
 
         Args:
             x: Encoded visible patches [B, N_visible + 1, D]
-            ids_restore: Indices to restore original order
+            ids_shuffle: Indices that were used to shuffle the patches [B, num_patches]
 
         Returns:
             x: Reconstructed patches [B, num_patches, patch_size**2 * C]
@@ -75,6 +75,7 @@ class DecoderHead(nn.Module):
         x = self.decoder_embed(x)
 
         # Append mask tokens to sequence
+        ids_restore = torch.argsort(ids_shuffle, dim=1)
         mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
         x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
         x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle

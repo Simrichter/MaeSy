@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 from .config import TrainingConfig
-from .losses import DetectionLoss, MaskedMSE
+from .losses import DetectionLoss, MaskedMSE, BaseLoss
 from ..model import VisionTransformerDetector, ModelConfig, BaseModel
 
 
@@ -48,14 +48,11 @@ class BaseTrainer(ABC):
         # Setup learning rate scheduler
         self.scheduler = self._create_scheduler()
 
-        self.loss, self.loss_metrics = self._create_loss()
+        self.loss: BaseLoss = self._create_loss()
 
         # Setup directories
         self.save_dir = Path(self.config.save_dir)
         self.save_dir.mkdir(parents=True, exist_ok=True)
-
-        self.log_dir = Path(self.config.log_dir)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
 
         # Setup wandb
         self.wandb_run = wandb.init(
@@ -113,7 +110,7 @@ class BaseTrainer(ABC):
             print(f"Warning: Unknown scheduler '{self.config.lr_scheduler}'")
             return None
 
-    def _create_loss(self):
+    def _create_loss(self) -> Optional[BaseLoss]:
         if self.config.criterion == "DetectionLoss":
             loss = DetectionLoss(
                 num_classes=self.model.config.num_classes,
@@ -128,23 +125,43 @@ class BaseTrainer(ABC):
             print(f"Warning: Unknown loss '{self.config.criterion}'")
             return None
 
+    def forward_model(self, images: torch.Tensor, targets: Optional[torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Manages the forward pass through the model.
+        Can be overwritten to add model-specific preprocessing
+        """
+        return self.loss(self.model(images), targets)
+
+    def handle_raw_batch(self, batch: Any) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Extract images and targets from raw batch data.
+        Can be overwritten to handle different batch formats.
+        """
+        targets = None
+        if isinstance(batch, dict):
+            images = batch['images']
+            targets = batch['targets']
+        elif isinstance(batch, (list, tuple)):
+            images = batch[0]
+            targets = batch[1]
+        else:
+            images = batch
+
+        images = images.to(self.device, non_blocking=True)
+        if targets is not None:
+            targets = batch['targets'].to(self.device, non_blocking=True)
+        return images, targets
+
     def train_epoch(self) -> Dict[str, float]:
         """Train for one epoch."""
         self.model.train()
+        self.loss.reset_metrics()
 
         for batch_idx, batch in enumerate(pbar := tqdm(self.train_loader, desc=f"Epoch {self.current_epoch + 1}")):
-            images = batch['images'].to(self.device)
-            images, preprocess_data = self.model.preprocess(images)
-            targets = [
-                {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
-                 for k, v in target.items()}
-                for target in batch['targets']
-            ]
+            images, targets = self.handle_raw_batch(batch)
 
             # Forward pass
             with torch.cuda.amp.autocast(enabled=self.config.use_amp):
-                predictions = self.model(images)
-                losses = self.loss(predictions, targets)
+                losses = self.forward_model(images, targets)
                 loss = losses['loss']
 
             # Backward pass
@@ -169,17 +186,13 @@ class BaseTrainer(ABC):
 
             # Log to tensorboard
             if self.global_step % self.config.log_frequency == 0:
-                metrics = self.loss.get_metrics()
-                metrics["lr"] = self.optimizer.param_groups[0]['lr']
-                self.wandb_run.log(metrics)
+                data = {f"train/{k}": v.item() for k, v in losses.items()}
+                data['train/lr'] = self.optimizer.param_groups[0]['lr']
+                self.wandb_run.log(data=data, step=self.global_step, commit=True)
 
             self.global_step += 1
 
-        # Average metrics
-        num_batches = len(self.train_loader)
-        metrics = {k: v/num_batches for k, v in self.loss.get_metrics().items()}
-
-        return metrics
+        return self.loss.get_metrics()
 
     @torch.no_grad()
     def validate(self) -> Dict[str, float]:
@@ -187,40 +200,15 @@ class BaseTrainer(ABC):
         if self.val_loader is None:
             return {}
 
+        self.loss.reset_metrics()
         self.model.eval()
 
-        total_loss = 0.0
-        total_loss_ce = 0.0
-        total_loss_bbox = 0.0
-        total_loss_giou = 0.0
-
         for batch in tqdm(self.val_loader, desc="Validation"):
-            images = batch['images'].to(self.device)
-            targets = [
-                {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
-                 for k, v in target.items()}
-                for target in batch['targets']
-            ]
+            images, targets = self.handle_raw_batch(batch)
 
-            #TODO: Add masking support (maybe over preprocess fun??)
-            predictions = self.model(images)
-            losses = self.loss(predictions, targets)
+            _ = self.forward_model(images, targets) # return value "losses" is not needed, because the loss function automatically accumulates the average metrics
 
-            total_loss += losses['loss'].item()
-            total_loss_ce += losses['loss_ce'].item()
-            total_loss_bbox += losses['loss_bbox'].item()
-            total_loss_giou += losses['loss_giou'].item()
-
-        # Average metrics
-        num_batches = len(self.val_loader)
-        metrics = {
-            'val_loss': total_loss / num_batches,
-            'val_loss_ce': total_loss_ce / num_batches,
-            'val_loss_bbox': total_loss_bbox / num_batches,
-            'val_loss_giou': total_loss_giou / num_batches
-        }
-
-        return metrics
+        return self.loss.get_metrics()
 
     def train(self) -> None:
         """Main training loop."""
@@ -238,25 +226,20 @@ class BaseTrainer(ABC):
 
             # Validate
             if self.val_loader is not None:
-                val_metrics = self.validate()
-
-                # Log validation metrics
-                for key, value in val_metrics.items():
-                    # Remove 'val_' prefix if present since we add it in tensorboard path
-                    metric_name = key[4:] if key.startswith('val_') else key
-                    self.wandb_run.log({f'val/{metric_name}': value})
+                val_metrics = {f"val/{k}": v for k, v in self.validate().items()}
+                self.wandb_run.log(data=val_metrics)
 
                 print(f"Epoch {epoch + 1}/{self.config.num_epochs} - "
-                      f"Train Loss: {train_metrics['loss']:.4f}, "
-                      f"Val Loss: {val_metrics['val_loss']:.4f}")
+                      f"Train Loss: {train_metrics['total_loss']:.4f}, "
+                      f"Val Loss: {val_metrics['val/total_loss']:.4f}")
 
                 # Save best model
-                if val_metrics['val_loss'] < self.best_val_loss:
-                    self.best_val_loss = val_metrics['val_loss']
+                if val_metrics['val/total_loss'] < self.best_val_loss:
+                    self.best_val_loss = val_metrics['val/total_loss']
                     self.save_checkpoint('best_model.pth')
             else:
                 print(f"Epoch {epoch + 1}/{self.config.num_epochs} - "
-                      f"Train Loss: {train_metrics['loss']:.4f}")
+                      f"Train Loss: {train_metrics['total_loss']:.4f}")
 
             # Step scheduler
             if self.scheduler is not None and epoch >= self.config.warmup_epochs:

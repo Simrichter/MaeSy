@@ -4,13 +4,10 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from maesy.model import ModelConfig
+from maesy.model import MAEConfig, MaskedAutoencoderViT
 from maesy.dataset import UnlabeledDataset
-from maesy.pretraining import (
-    MaskedAutoencoderViT,
-    MaskedAutoencoderPretrainer,
-    MAEPretrainingConfig
-)
+
+from maesy.training import MaeTrainer, MAEPretrainingConfig
 
 
 def main():
@@ -18,24 +15,28 @@ def main():
 
     # Configuration
     image_size = 224
-    batch_size = 16#64
+    batch_size = 16
     num_epochs = 100
     mask_ratio = 0.25
 
-    # Create model config
-    model_config = ModelConfig(
+    # Create training config
+    mae_config = MAEConfig(
         image_size=image_size,
         patch_size=16,
-        embed_dim=384, #768,
+        embed_dim=384,
         num_layers=6,
-        num_heads=6,
-        in_channels=3
+        num_heads=4,
+        mlp_ratio=4.0,
+        dropout=0.1,
+        attention_dropout=0.1,
+        hidden_dim=256,
+        num_decoder_layers=3
     )
 
     # Create MAE model
     print("Creating MAE model...")
     model = MaskedAutoencoderViT(
-        config=model_config,
+        config=mae_config,
         decoder_embed_dim=384,
         decoder_num_layers=4
     )
@@ -67,16 +68,17 @@ def main():
     ])
 
     train_dataset = UnlabeledDataset(
-        r"/home/simon/PycharmProjects/MaeSy/maesy/debug/data/GP1_RoboErectus_Bangkok/temp/GP1_RoboErectus_Bangkok_2025-08-15-08-54-14_out",
+        r"C:\Users\taran\PycharmProjects\MaeSy\maesy\debug\test_data\Beijing_Test\train",
         transforms=train_transforms,
         repeat_factor=1,
+        use_first_n=384,
         filetype=".jpg"
-        )
+    )
 
     val_dataset = UnlabeledDataset(
-        r"/home/simon/PycharmProjects/MaeSy/maesy/debug/data/GP1_RoboErectus_Bangkok/temp/GP1_RoboErectus_Bangkok_2025-08-15-08-54-14_out",
+        r"C:\Users\taran\PycharmProjects\MaeSy\maesy\debug\test_data\Beijing_Test\val",
         transforms=val_transforms,
-        use_first_n=32,
+        use_first_n=96,
         filetype=".jpg"
     )
 
@@ -87,7 +89,7 @@ def main():
         shuffle=True,
         num_workers=4,
         pin_memory=True,
-        drop_last=False
+        drop_last=True
     )
 
     val_loader = DataLoader(
@@ -110,7 +112,6 @@ def main():
         warmup_epochs=1,
         mask_ratio=mask_ratio,
         save_dir="./mae_checkpoints",
-        log_dir="./mae_logs",
         output_predicted_images=True,
         device="cuda" if torch.cuda.is_available() else "cpu",
         num_workers=4,
@@ -118,7 +119,7 @@ def main():
     )
 
     # Create pretrainer
-    pretrainer = MaskedAutoencoderPretrainer(
+    pretrainer = MaeTrainer(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,

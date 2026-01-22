@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Optional
 
+import torch.cuda
+
 
 @dataclass
 class TrainingConfig:
@@ -14,7 +16,7 @@ class TrainingConfig:
     learning_rate: float = 1e-4
     weight_decay: float = 1e-4
     warmup_epochs: int = 5
-    criterion: str = "DetectionLoss"
+    criterion: str = "None"  # e.g., DetectionLoss, MaskedMSE, etc.
     
     # Optimizer
     optimizer: str = "adamw"  # adamw, adam, sgd
@@ -27,19 +29,30 @@ class TrainingConfig:
     
     # Checkpoint and logging
     save_dir: str = "./checkpoints"
-    log_dir: str = "./logs"
-    save_frequency: int = 5
-    log_frequency: int = 10
+    save_frequency: int = 5 # Save every n epochs
+    log_frequency: int = 10 # Log every n global steps
     
     # Device
-    device: str = "cuda"  # cuda, cpu
+    device: str = "cuda" if torch.cuda.is_available() else 'cpu'
     num_workers: int = 4
     
     # Gradient clipping
-    max_grad_norm: float = 0.1
+    max_grad_norm: float = 1.0
     
     # Early stopping
     early_stopping_patience: Optional[int] = None
     
     # Mixed precision training
-    use_amp: bool = False
+    use_amp: bool = True
+
+@dataclass
+class MAEPretrainingConfig(TrainingConfig):
+    """Configuration for Masked Autoencoder pretraining."""
+    criterion: str = "MaskedMSE"
+
+    # MAE specific parameters
+    mask_ratio: float = 0.75  # Ratio of patches to mask
+
+    # Checkpoint and logging
+    save_dir: str = "./MAEpretrain_checkpoints"
+    output_predicted_images: bool = False # Whether to save predicted images during validation

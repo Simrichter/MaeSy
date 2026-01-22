@@ -20,6 +20,11 @@ setup(
         "pycocotools>=2.0.4",
         "scipy>=1.7.0",
     ],
+    entry_points={
+        "console_scripts": [
+            "testMAEPretraining = maesy.debug.testMAEPretraining:main",
+        ]
+    },
     extras_require={
         "dev": [
             "pytest>=7.0.0",

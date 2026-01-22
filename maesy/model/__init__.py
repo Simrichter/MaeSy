@@ -3,9 +3,12 @@
 from .vision_transformer import VisionTransformerDetector
 from .config import ModelConfig
 from .base_model import BaseModel
+from maesy.model.mae_model import MaskedAutoencoderViT, MAEConfig
 
 __all__ = [
     "VisionTransformerDetector",
     "ModelConfig",
     "BaseModel",
+    "MaskedAutoencoderViT",
+    "MAEConfig"
 ]

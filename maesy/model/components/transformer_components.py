@@ -216,19 +216,19 @@ class Utils:
         return imgs
 
     @staticmethod
-    def random_masking(x: torch.Tensor, mask_ratio: float) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def random_masking(x: torch.Tensor, mask_ratio: float) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Perform random masking.
+            Perform random masking.
 
-        Args:
-            x: [B, N, D] - input sequence
-            mask_ratio: Ratio of patches to mask
+            Args:
+                x: [B, N, D] - input sequence
+                mask_ratio: float - ratio of patches to mask
 
-        Returns:
-            x_masked: [B, N * (1 - mask_ratio), D] - masked sequence
-            mask: [B, N] - binary mask (0 is keep, 1 is remove)
-            ids_restore: [B, N] - indices to restore original order
-        """
+            Returns:
+                x_masked: [B, N * (1 - mask_ratio), D] - masked sequence
+                mask: [B, N] - binary mask (0 is keep, 1 is remove)
+                ids_restore: [B, N] - indices to restore original order
+            """
         B, N, D = x.shape
         len_keep = int(N * (1 - mask_ratio))
 
@@ -246,4 +246,4 @@ class Utils:
         mask[:, :len_keep] = 0
         mask = torch.gather(mask, dim=1, index=ids_restore)
 
-        return x_masked, mask, ids_restore
+        return x_masked, mask, ids_shuffle

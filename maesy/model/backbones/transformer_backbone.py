@@ -2,9 +2,8 @@ from typing import Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from dataclasses import dataclass, asdict
-from ..components import PatchEmbedding, TransformerBlock, Utils
+from ..components import TransformerBlock, Utils
 
 @dataclass
 class TransformerBackboneConfig:
@@ -35,14 +34,11 @@ class TransformerBackbone(nn.Module):
         super().__init__()
 
         # Patch embedding
-        # self.patch_embed = PatchEmbedding(**asdict(config))
-        self.patch_embed = nn.Linear(config.embed_dim, config.embed_dim)
+        self.patch_embed = nn.Linear(config.patch_size**2*config.in_channels, config.embed_dim)
 
         # Class token
-        # self.cls_token = nn.Parameter(torch.randn(1, 1, config.embed_dim) * 0.02)
 
         # Positional encoding
-        # self.pos_embed = nn.Parameter(torch.randn(1, config.num_patches + 1, config.embed_dim) * 0.02)
         self.pos_embed = Utils.get_sinusoidal_encoding(config.num_patches, config.embed_dim)
         self.pos_dropout = nn.Dropout(config.dropout)
 
@@ -53,18 +49,24 @@ class TransformerBackbone(nn.Module):
 
         self.norm = nn.LayerNorm(config.embed_dim)
 
-        Utils.init_weights(self)
+        # Utils.init_weights(self)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, ids_shuffle: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Forward pass.
 
         Args:
-            x: Preprocessed tokens [B, N_visible + 1, D]
-
+            x: Preprocessed tokens [B, N_visible, patch_size*patch_size*in_channels]
+            .param ids_shuffle: Indices that were used to shuffle the patches [B, N]
         Returns:
-            x: Encoded visible patches (+cls token) [B, N_visible(+1), D]
+            x: Encoded visible patches (+cls token) [B, N_visible, D]
         """
+        x = self.patch_embed(x)  # [B, num_patches, embed_dim]
+        B, N, D = x.shape
+
+        x = x + torch.gather(self.pos_embed.repeat(B, 1, 1), dim=1, index=ids_shuffle[:, :N].unsqueeze(-1).repeat(1, 1, D))
+        # x = x + self.pos_embed[:, :]
+
         x = self.pos_dropout(x)
 
         # Transformer encoder
@@ -74,29 +76,3 @@ class TransformerBackbone(nn.Module):
         x = self.norm(x)
 
         return x
-
-    def preprocess(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Preprocess input images by applying patch embedding, positional embedding, random masking and attaching a class token
-
-        Args:
-            x: Input images [B, C, H, W]
-        Returns:
-            x: Preprocessed tokens [B, N_visible + 1, D]
-            mask: Binary mask
-            ids_restore: Indices to restore original order
-        """
-        x = self.patch_embed(x)  # [B, num_patches, embed_dim]
-
-        # Add positional encoding (without cls token)
-        x = x + self.pos_embed[:, 1:, :]
-
-# TODO: use ids_restore + mask such that random_masking can be done outside the model
-
-        # Masking: length -> length * (1 - mask_ratio)
-        x, mask, ids_restore = self.random_masking(x, self.config.mask_ratio)
-
-        # Append cls token
-        cls_token = self.cls_token + self.pos_embed[:, :1, :]
-        cls_tokens = cls_token.expand(x.shape[0], -1, -1)
-        x = torch.cat([cls_tokens, x], dim=1)
-        return x, mask, ids_restore

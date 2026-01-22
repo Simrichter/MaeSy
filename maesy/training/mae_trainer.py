@@ -32,7 +32,8 @@ class MaeTrainer(BaseTrainer):
         # TODO: Remove ugly quick fix with patchify (maybe unpatchify mask?)
         # losses = self.loss(model_out, images, mask)
         losses = self.loss(out, target, mask)
-        model_out = Utils.unpatchify(out.detach()*mask, self.model.config.image_size, self.model.config.patch_size)
+        model_out = Utils.unpatchify(out.detach()*mask.unsqueeze(-1), self.model.config.image_size, self.model.config.patch_size)
         img_prediction = torch.cat((model_out[0], images[0]), dim=-1)
+
         losses["img_out"] = img_prediction
         return losses

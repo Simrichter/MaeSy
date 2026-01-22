@@ -6,9 +6,12 @@ import torch
 import torch.nn as nn
 import wandb
 from torch.utils.data import DataLoader
+from torchvision.utils import save_image
 from tqdm import tqdm
 from pathlib import Path
 from typing import Optional, Dict, Any
+
+from wandb import Image
 
 from .config import TrainingConfig
 from .losses import DetectionLoss, MaskedMSE, BaseLoss
@@ -196,22 +199,26 @@ class BaseTrainer(ABC):
         return self.loss.get_metrics()
 
     @torch.no_grad()
-    def validate(self) -> Dict[str, float]:
+    def validate(self) -> Dict[str, Any]:
         """Validate model."""
         if self.val_loader is None:
             return {}
 
         self.loss.reset_metrics()
         self.model.eval()
-        losses = None
+        losses: dict[str, Any] = {}
         for batch in tqdm(self.val_loader, desc="Validation"):
             images, targets = self.handle_raw_batch(batch)
 
             losses = self.forward_model(images, targets)
 
-        imgs_to_log = {f"val/{k}": wandb.Image(v) for k, v in losses.items() if k.startswith('img_')}
-        if imgs_to_log: # Log validation image output if existent
-            self.wandb_run.log(data=imgs_to_log, step=self.global_step)
+        imgs_to_log: dict[str, Image] = {k: wandb.Image(v) for k, v in losses.items() if k.startswith('img_')}
+        save_path = self.save_dir / "images"
+        save_path.mkdir(parents=True, exist_ok=True)
+        for name, img in losses.items():
+            if name.startswith('img_'):
+                save_image(img, f"{save_path}/predicted_image{self.global_step}_{name}.png")
+        losses.update(imgs_to_log)
 
         return self.loss.get_metrics()
 
@@ -223,7 +230,7 @@ class BaseTrainer(ABC):
         if self.val_loader:
             print(f"Validation samples: {len(self.val_loader.dataset)}")
 
-        for epoch in range(self.config.num_epochs):
+        for epoch in range(self.current_epoch, self.config.num_epochs):
             self.current_epoch = epoch
 
             # Train
@@ -232,9 +239,9 @@ class BaseTrainer(ABC):
             # Validate
             if self.val_loader is not None:
                 val_metrics = {f"val/{k}": v for k, v in self.validate().items()}
-                self.wandb_run.log(data=val_metrics)
+                self.wandb_run.log(data=val_metrics, step=self.global_step)
 
-                print(f"Epoch {epoch + 1}/{self.config.num_epochs} - "
+                print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
                       f"Train Loss: {train_metrics['total_loss']:.4f}, "
                       f"Val Loss: {val_metrics['val/total_loss']:.4f}")
 
@@ -243,16 +250,17 @@ class BaseTrainer(ABC):
                     self.best_val_loss = val_metrics['val/total_loss']
                     self.save_checkpoint('best_model.pth')
             else:
-                print(f"Epoch {epoch + 1}/{self.config.num_epochs} - "
+                print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
                       f"Train Loss: {train_metrics['total_loss']:.4f}")
 
             # Step scheduler
-            if self.scheduler is not None and epoch >= self.config.warmup_epochs:
+            if self.scheduler is not None and self.current_epoch >= self.config.warmup_epochs:
                 self.scheduler.step()
 
             # Save checkpoint periodically
-            if (epoch + 1) % self.config.save_frequency == 0:
-                self.save_checkpoint(f'checkpoint_epoch_{epoch + 1}.pth')
+            if (self.current_epoch + 1) % self.config.save_frequency == 0:
+                self.save_checkpoint(f'checkpoint_epoch_{self.current_epoch + 1}.pth')
+
 
         # Save final model
         self.save_checkpoint('final_model.pth')

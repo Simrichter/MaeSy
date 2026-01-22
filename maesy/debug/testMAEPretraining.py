@@ -15,7 +15,7 @@ def main():
 
     # Configuration
     image_size = 224
-    batch_size = 16
+    batch_size = 32
     num_epochs = 100
     mask_ratio = 0.25
 
@@ -24,13 +24,13 @@ def main():
         image_size=image_size,
         patch_size=16,
         embed_dim=384,
-        num_layers=6,
-        num_heads=4,
+        num_layers=8,
+        num_heads=6,
         mlp_ratio=4.0,
         dropout=0.1,
         attention_dropout=0.1,
         hidden_dim=256,
-        num_decoder_layers=3
+        num_decoder_layers=4
     )
 
     # Create MAE model
@@ -71,14 +71,14 @@ def main():
         r"/home/simon/PycharmProjects/MaeSy/maesy/debug/data/Test/train",
         transforms=train_transforms,
         repeat_factor=1,
-        use_first_n=384,
+        # use_first_n=384,
         filetype=".jpg"
     )
 
     val_dataset = UnlabeledDataset(
         r"/home/simon/PycharmProjects/MaeSy/maesy/debug/data/Test/val",
         transforms=val_transforms,
-        use_first_n=96,
+        use_first_n=192,
         filetype=".jpg"
     )
 
@@ -97,7 +97,8 @@ def main():
         batch_size=batch_size,
         shuffle=False,
         num_workers=4,
-        pin_memory=True
+        pin_memory=True,
+        drop_last=False
     )
 
     print(f"Training samples: {len(train_dataset)}")
@@ -109,7 +110,7 @@ def main():
         batch_size=batch_size,
         learning_rate=1.5e-4,
         weight_decay=0.05,
-        warmup_epochs=1,
+        warmup_epochs=5,
         mask_ratio=mask_ratio,
         save_dir="./mae_checkpoints",
         output_predicted_images=True,
@@ -126,6 +127,10 @@ def main():
         val_loader=val_loader,
         config=pretraining_config
     )
+
+    checkpoint = "/home/simon/PycharmProjects/MaeSy/maesy/debug/mae_checkpoints/best_model.pth"
+    print(f"\nLoading checkpoint{checkpoint}...")
+    pretrainer.load_checkpoint(checkpoint)
 
     # Start pretraining
     print("\nStarting MAE pretraining...")

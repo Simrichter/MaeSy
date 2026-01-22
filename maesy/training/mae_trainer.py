@@ -27,10 +27,12 @@ class MaeTrainer(BaseTrainer):
         x, mask, ids_shuffle = Utils.random_masking(x, self.config.mask_ratio)
         # print(x.shape, mask.shape, ids_shuffle.shape)
         out = self.model(x, **{"mask": mask, "ids_shuffle": ids_shuffle})
-        model_out = Utils.unpatchify(out, self.model.config.image_size, self.model.config.patch_size)
 
         target = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
         # TODO: Remove ugly quick fix with patchify (maybe unpatchify mask?)
         # losses = self.loss(model_out, images, mask)
         losses = self.loss(out, target, mask)
+        model_out = Utils.unpatchify(out.detach()*mask, self.model.config.image_size, self.model.config.patch_size)
+        img_prediction = torch.cat((model_out[0], images[0]), dim=-1)
+        losses["img_out"] = img_prediction
         return losses

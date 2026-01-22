@@ -186,7 +186,7 @@ class BaseTrainer(ABC):
 
             # Log to tensorboard
             if self.global_step % self.config.log_frequency == 0:
-                data = {f"train/{k}": v.item() for k, v in losses.items()}
+                data = {f"train/{k}": v.item() for k, v in losses.items() if not k.startswith('img_')}
                 data['train/lr'] = self.optimizer.param_groups[0]['lr']
                 self.wandb_run.log(data=data, step=self.global_step, commit=True)
 
@@ -202,11 +202,15 @@ class BaseTrainer(ABC):
 
         self.loss.reset_metrics()
         self.model.eval()
-
+        losses = None
         for batch in tqdm(self.val_loader, desc="Validation"):
             images, targets = self.handle_raw_batch(batch)
 
-            _ = self.forward_model(images, targets) # return value "losses" is not needed, because the loss function automatically accumulates the average metrics
+            losses = self.forward_model(images, targets)
+
+        imgs_to_log = {f"val/{k}": wandb.Image(v) for k, v in losses.items() if k.startswith('img_')}
+        if imgs_to_log: # Log validation image output if existent
+            self.wandb_run.log(data=imgs_to_log, step=self.global_step)
 
         return self.loss.get_metrics()
 

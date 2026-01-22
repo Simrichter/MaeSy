@@ -221,11 +221,11 @@ class Utils:
             Perform random masking.
 
             Args:
-                x: [B, N, D] - input sequence
+                x: [B, N, P**2*C] - input sequence
                 mask_ratio: float - ratio of patches to mask
 
             Returns:
-                x_masked: [B, N * (1 - mask_ratio), D] - masked sequence
+                x_masked: [B, N * (1 - mask_ratio), P**2*C] - masked sequence
                 mask: [B, N] - binary mask (0 is keep, 1 is remove)
                 ids_restore: [B, N] - indices to restore original order
             """

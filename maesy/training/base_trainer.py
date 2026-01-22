@@ -21,6 +21,7 @@ class BaseTrainer(ABC):
             self,
             model: BaseModel,
             train_loader: DataLoader,
+            project_name: str,
             val_loader: Optional[DataLoader] = None,
             config: Optional[TrainingConfig] = None
     ):
@@ -57,7 +58,7 @@ class BaseTrainer(ABC):
         # Setup wandb
         self.wandb_run = wandb.init(
             entity="simon-richter-tu-dortmund",
-            project="maesy-Finetuning",
+            project=project_name,
             config=asdict(self.config)
         )
 

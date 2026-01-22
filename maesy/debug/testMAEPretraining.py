@@ -68,7 +68,7 @@ def main():
     ])
 
     train_dataset = UnlabeledDataset(
-        r"C:\Users\taran\PycharmProjects\MaeSy\maesy\debug\test_data\Beijing_Test\train",
+        r"/home/simon/PycharmProjects/MaeSy/maesy/debug/data/Test/train",
         transforms=train_transforms,
         repeat_factor=1,
         use_first_n=384,
@@ -76,7 +76,7 @@ def main():
     )
 
     val_dataset = UnlabeledDataset(
-        r"C:\Users\taran\PycharmProjects\MaeSy\maesy\debug\test_data\Beijing_Test\val",
+        r"/home/simon/PycharmProjects/MaeSy/maesy/debug/data/Test/val",
         transforms=val_transforms,
         use_first_n=96,
         filetype=".jpg"
@@ -121,6 +121,7 @@ def main():
     # Create pretrainer
     pretrainer = MaeTrainer(
         model=model,
+        project_name="maesy-MAE_Pretraining",
         train_loader=train_loader,
         val_loader=val_loader,
         config=pretraining_config
@@ -133,11 +134,10 @@ def main():
     print("\nMAE pretraining completed!")
     print(f"Best validation loss: {pretrainer.best_val_loss:.4f}")
     print(f"Checkpoints saved to: {pretraining_config.save_dir}")
-    print(f"Logs saved to: {pretraining_config.log_dir}")
-    print("\nTo use the pretrained weights for object detection:")
-    print("  from maesy.pretraining import load_mae_pretrained_weights")
-    print("  detector = VisionTransformerDetector(config)")
-    print(f"  detector = load_mae_pretrained_weights(detector, '{pretraining_config.save_dir}/mae_best_model.pth')")
+    # print("\nTo use the pretrained weights for object detection:")
+    # print("  from maesy.pretraining import load_mae_pretrained_weights")
+    # print("  detector = VisionTransformerDetector(config)")
+    # print(f"  detector = load_mae_pretrained_weights(detector, '{pretraining_config.save_dir}/mae_best_model.pth')")
 
 
 if __name__ == "__main__":

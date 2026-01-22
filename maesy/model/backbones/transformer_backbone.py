@@ -39,7 +39,8 @@ class TransformerBackbone(nn.Module):
         # Class token
 
         # Positional encoding
-        self.pos_embed = Utils.get_sinusoidal_encoding(config.num_patches, config.embed_dim)
+        # self.pos_embed = Utils.get_sinusoidal_encoding(config.num_patches, config.embed_dim)
+        self.register_buffer('pos_embed', Utils.get_sinusoidal_encoding(config.num_patches, config.embed_dim))
         self.pos_dropout = nn.Dropout(config.dropout)
 
         # Transformer encoder
@@ -56,14 +57,14 @@ class TransformerBackbone(nn.Module):
         Forward pass.
 
         Args:
-            x: Preprocessed tokens [B, N_visible, patch_size*patch_size*in_channels]
-            .param ids_shuffle: Indices that were used to shuffle the patches [B, N]
+            :param x: Preprocessed tokens [B, N_visible, patch_size*patch_size*in_channels]
+            :param ids_shuffle: Indices that were used to shuffle the patches [B, N]
         Returns:
             x: Encoded visible patches (+cls token) [B, N_visible, D]
         """
         x = self.patch_embed(x)  # [B, num_patches, embed_dim]
         B, N, D = x.shape
-
+        # self.pos_embed = self.pos_embed.to(x.device)
         x = x + torch.gather(self.pos_embed.repeat(B, 1, 1), dim=1, index=ids_shuffle[:, :N].unsqueeze(-1).repeat(1, 1, D))
         # x = x + self.pos_embed[:, :]
 

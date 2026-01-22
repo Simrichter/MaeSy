@@ -26,7 +26,7 @@ class MaeTrainer(BaseTrainer):
         x = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
         x, mask, ids_shuffle = Utils.random_masking(x, self.config.mask_ratio)
         # print(x.shape, mask.shape, ids_shuffle.shape)
-        out = self.model(x, **{"mask": mask, "ids_shuffle": ids_shuffle})
+        out = self.model(x, **{"mask": mask, "ids_shuffle": ids_shuffle.to(device=self.device, non_blocking=True)})
 
         target = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
         # TODO: Remove ugly quick fix with patchify (maybe unpatchify mask?)

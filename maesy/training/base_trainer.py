@@ -218,9 +218,10 @@ class BaseTrainer(ABC):
         for name, img in losses.items():
             if name.startswith('img_'):
                 save_image(img, f"{save_path}/predicted_image{self.global_step}_{name}.png")
-        losses.update(imgs_to_log)
+        metrics = self.loss.get_metrics()
+        metrics.update(imgs_to_log)
 
-        return self.loss.get_metrics()
+        return metrics
 
     def train(self) -> None:
         """Main training loop."""
@@ -238,7 +239,7 @@ class BaseTrainer(ABC):
 
             # Validate
             if self.val_loader is not None:
-                val_metrics = {f"val/{k}": v for k, v in self.validate().items()}
+                val_metrics = {f"val/{k}": wandb.Image(v) if k.startswith("img_") else v for k, v in self.validate().items()} # Preparations for logging
                 self.wandb_run.log(data=val_metrics, step=self.global_step)
 
                 print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
@@ -256,6 +257,9 @@ class BaseTrainer(ABC):
             # Step scheduler
             if self.scheduler is not None and self.current_epoch >= self.config.warmup_epochs:
                 self.scheduler.step()
+
+            # Save most recent epoch
+            self.save_checkpoint('latest_model.pth')
 
             # Save checkpoint periodically
             if (self.current_epoch + 1) % self.config.save_frequency == 0:

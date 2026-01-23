@@ -46,3 +46,8 @@ logs/
 test_data/
 /maesy/debug/*
 /.idea/*
+
+# images
+*.png
+# others
+/wandb/*

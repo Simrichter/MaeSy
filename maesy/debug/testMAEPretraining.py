@@ -17,7 +17,7 @@ def main():
     image_size = 224
     batch_size = 32
     num_epochs = 100
-    mask_ratio = 0.25
+    mask_ratio = 0.75
 
     # Create training config
     mae_config = MAEConfig(
@@ -95,7 +95,7 @@ def main():
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=True,
         num_workers=4,
         pin_memory=True,
         drop_last=False
@@ -128,7 +128,7 @@ def main():
         config=pretraining_config
     )
 
-    checkpoint = "/home/simon/PycharmProjects/MaeSy/maesy/debug/mae_checkpoints/best_model.pth"
+    checkpoint = "/home/simon/PycharmProjects/MaeSy/mae_checkpoints/latest_model.pth"
     print(f"\nLoading checkpoint{checkpoint}...")
     pretrainer.load_checkpoint(checkpoint)
 

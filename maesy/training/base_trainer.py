@@ -212,7 +212,7 @@ class BaseTrainer(ABC):
 
             losses = self.forward_model(images, targets)
 
-        imgs_to_log: dict[str, Image] = {k: wandb.Image(v) for k, v in losses.items() if k.startswith('img_')}
+        imgs_to_log: dict[str, Image] = {k: wandb.Image(v*255) for k, v in losses.items() if k.startswith('img_')}
         save_path = self.save_dir / "images"
         save_path.mkdir(parents=True, exist_ok=True)
         for name, img in losses.items():
@@ -239,7 +239,7 @@ class BaseTrainer(ABC):
 
             # Validate
             if self.val_loader is not None:
-                val_metrics = {f"val/{k}": wandb.Image(v) if k.startswith("img_") else v for k, v in self.validate().items()} # Preparations for logging
+                val_metrics = {f"val/{k}": v for k, v in self.validate().items()} # Preparations for logging
                 self.wandb_run.log(data=val_metrics, step=self.global_step)
 
                 print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "

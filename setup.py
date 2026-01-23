@@ -8,9 +8,9 @@ setup(
     packages=find_packages(),
     python_requires=">=3.8",
     install_requires=[
-        "torch>=2.0.0",
-        "torchvision>=0.15.0",
-        "numpy>=1.21.0",
+        "torch==1.13.1+cu117",
+        "torchvision>=0.14.1+cu117",
+        "numpy<2",
         "pillow>=9.0.0",
         "tqdm>=4.62.0",
         "pyyaml>=6.0",

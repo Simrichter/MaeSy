@@ -2,6 +2,7 @@
 
 import os
 import json
+import shutil
 import zipfile
 import requests
 from pathlib import Path
@@ -96,22 +97,24 @@ class DatasetManager:
                        folder_names: list[str],
                        dataset_name: str,
                        split_percentages: list[float] = None,
+                       resize: list[int] = None,
                        del_folders: bool = False
                        ) -> Path:
         """
         Combines multiple folders with images into a single dataset
 
         Arguments:
-            folder_names: List of folders that contain images
-            dataset_name: Name of the dataset
-            split_percentages: List of percentages for the data subsets in format [train, val, test]. Defaults to [0.8, 0.1, 0.1] if not/incorrectly specified
-            del_folders: Whether to delete the original folders after use
+            :param folder_names: List of folders that contain images
+            :param dataset_name: Name of the dataset
+            :param split_percentages: List of percentages for the data subsets in format [train, val, test]. Defaults to [0.8, 0.1, 0.1] if not/incorrectly specified
+            :param resize: Resize images to WIDTH HEIGHT or WIDTH² if HEIGHT not specified
+            :param del_folders: Whether to delete the original folders after use
 
         Returns:
             Path to final dataset
         """
 
-        if split_percentages is None or type(split_percentages) is not list:
+        if split_percentages is None or type(split_percentages) is not list or len(split_percentages)!=3 or not abs(sum(split_percentages) - 1.0) < 1e-6:
             print("WARNING: Using default split_percentages [0.8, 0.1, 0.1]")
             split_percentages = [0.8, 0.1, 0.1]
 
@@ -148,7 +151,7 @@ class DatasetManager:
             val_end = train_end + int(split_percentages[1] * num_images)
 
             # Copy files to respective folders
-            for i, img_file in enumerate(image_files):
+            for i, img_file in enumerate(tqdm(image_files, desc="Copying files")):
                 if i < train_end:
                     dest_path = train_path / img_file.name
                 elif i < val_end:
@@ -156,10 +159,24 @@ class DatasetManager:
                 else:
                     dest_path = test_path / img_file.name
 
-                os.rename(img_file, dest_path)
+                if resize is None:
+                    # os.rename(img_file, dest_path)
+                    shutil.copy(img_file, dest_path)
+                else:
+                    from PIL import Image
+                    with Image.open(img_file) as img:
+                        if len(resize) == 2:
+                            img = img.resize((resize[0], resize[1]))
+                        else:
+                            print("WARNING: Resize parameter must be a list of two integers. Skipping resizing.")
+                            shutil.copy(img_file, dest_path)
+                            continue
+                        img.save(dest_path)
 
             if del_folders:
-                os.rmdir(folder_path)
+                print("Deleting original folder:", folder_path)
+                shutil.rmtree(folder_path)
+                # os.rmdir(folder_path)
 
         # TODO: Add support for label files
 

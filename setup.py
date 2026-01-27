@@ -8,9 +8,9 @@ setup(
     packages=find_packages(),
     python_requires=">=3.8",
     install_requires=[
-        "torch==1.13.1+cu117",
-        "torchvision>=0.14.1+cu117",
-        "numpy<2",
+        "torch>=2.1", #1.13.1+cu117",
+        "torchvision", #>=0.14.1+cu117",
+        "numpy",
         "pillow>=9.0.0",
         "tqdm>=4.62.0",
         "pyyaml>=6.0",
@@ -19,10 +19,11 @@ setup(
         "opencv-python>=4.5.0",
         "pycocotools>=2.0.4",
         "scipy>=1.7.0",
+        "tqdm>=4.62.0",
     ],
     entry_points={
         "console_scripts": [
-            "testMAEPretraining = maesy.debug.testMAEPretraining:main",
+            "maesy = maesy.command_line:main",
         ]
     },
     extras_require={

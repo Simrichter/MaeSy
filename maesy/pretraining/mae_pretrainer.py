@@ -89,10 +89,12 @@ class MaskedAutoencoderPretrainer:
     def _create_scheduler(self):
         """Create learning rate scheduler."""
         if self.config.lr_scheduler.lower() == "cosine":
-            return torch.optim.lr_scheduler.CosineAnnealingLR(
+            warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: min((step + 1) / self.config.warmup_epochs, 1.0))
+            cosine =torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
                 T_max=self.config.num_epochs - self.config.warmup_epochs
             )
+            return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, cosine], milestones=[self.config.warmup_epochs])
         elif self.config.lr_scheduler.lower() == "step":
             return torch.optim.lr_scheduler.StepLR(
                 self.optimizer,

@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from dataclasses import dataclass
 
@@ -11,5 +12,5 @@ class LinearHead(nn.Module):
         super().__init__()
         self.linear = nn.Linear(config.embed_dim, config.num_classes)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs) -> torch.Tensor:
         return self.linear(x)

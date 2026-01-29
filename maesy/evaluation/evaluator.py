@@ -10,8 +10,9 @@ import matplotlib.patches as patches
 from PIL import Image
 import numpy as np
 
-from ..model import VisionTransformerDetector
+from ..model import VisionTransformerDetector, BaseModel
 from .metrics import compute_map, compute_precision_recall
+from maesy.evaluation.inferer import Inferer
 
 
 class Evaluator:
@@ -19,9 +20,9 @@ class Evaluator:
     
     def __init__(
         self,
-        model: VisionTransformerDetector,
+        model: BaseModel,
         data_loader: Optional[DataLoader] = None,
-        device: str = "cuda"
+        device: torch.device = torch.device("cuda")
     ):
         """
         Initialize evaluator.
@@ -31,11 +32,13 @@ class Evaluator:
             data_loader: Data loader for evaluation (optional for inference-only use)
             device: Device to run evaluation on
         """
-        self.model = model
-        self.data_loader = data_loader
-        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
-        self.model.to(self.device)
-        self.model.eval()
+        # self.model = model
+        # self.data_loader = data_loader
+        # self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+        # self.model.to(self.device)
+
+        self.Inferer = Inferer(model, data_loader, device)
+
     
     @torch.no_grad()
     def evaluate(
@@ -53,22 +56,7 @@ class Evaluator:
         Returns:
             Dictionary with evaluation metrics
         """
-        if self.data_loader is None:
-            raise ValueError("Data loader is required for evaluation. Provide data_loader during initialization.")
-        
-        all_predictions = []
-        all_targets = []
-        
-        print("Running evaluation...")
-        for batch in tqdm(self.data_loader):
-            images = batch['images'].to(self.device)
-            targets = batch['targets']
-            
-            # Get predictions
-            predictions = self.model.inference(images, confidence_threshold)
-            
-            all_predictions.extend(predictions)
-            all_targets.extend(targets)
+        all_predictions, all_targets = Inferer.infer()
         
         # Compute metrics
         num_classes = self.model.config.num_classes

@@ -4,6 +4,7 @@ from .dataset_manager import DatasetManager
 from .object_detection_dataset import ObjectDetectionDataset
 from .transforms import get_train_transforms, get_val_transforms
 from .unlabeled_dataset import UnlabeledDataset
+from .multi_dataset import MultiDataset
 
 __all__ = [
     "DatasetManager",
@@ -11,4 +12,5 @@ __all__ = [
     "get_train_transforms",
     "get_val_transforms",
     "UnlabeledDataset",
+    "MultiDataset",
 ]

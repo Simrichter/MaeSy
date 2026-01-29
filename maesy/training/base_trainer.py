@@ -16,6 +16,7 @@ from wandb import Image
 from .config import TrainingConfig
 from .losses import DetectionLoss, MaskedMSE, BaseLoss
 from ..model import VisionTransformerDetector, ModelConfig, BaseModel
+from .utils import handle_raw_batch
 
 
 class BaseTrainer(ABC):
@@ -136,32 +137,13 @@ class BaseTrainer(ABC):
         """
         return self.loss(self.model(images), targets)
 
-    def handle_raw_batch(self, batch: Any) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Extract images and targets from raw batch data.
-        Can be overwritten to handle different batch formats.
-        """
-        targets = None
-        if isinstance(batch, dict):
-            images = batch['images']
-            targets = batch['targets']
-        elif isinstance(batch, (list, tuple)):
-            images = batch[0]
-            targets = batch[1]
-        else:
-            images = batch
-
-        images = images.to(self.device, non_blocking=True)
-        if targets is not None:
-            targets = batch['targets'].to(self.device, non_blocking=True)
-        return images, targets
-
     def train_epoch(self) -> Dict[str, float]:
         """Train for one epoch."""
         self.model.train()
         self.loss.reset_metrics()
 
         for batch_idx, batch in enumerate(pbar := tqdm(self.train_loader, desc=f"Epoch {self.current_epoch + 1}")):
-            images, targets = self.handle_raw_batch(batch)
+            images, targets = handle_raw_batch(batch, self.device)
 
             # Forward pass
             with torch.cuda.amp.autocast(enabled=self.config.use_amp):
@@ -208,11 +190,11 @@ class BaseTrainer(ABC):
         self.model.eval()
         losses: dict[str, Any] = {}
         for batch in tqdm(self.val_loader, desc="Validation"):
-            images, targets = self.handle_raw_batch(batch)
+            images, targets = handle_raw_batch(batch, self.device)
 
             losses = self.forward_model(images, targets)
 
-        imgs_to_log: dict[str, Image] = {k: wandb.Image(v*255) for k, v in losses.items() if k.startswith('img_')}
+        imgs_to_log: dict[str, Image] = {k: wandb.Image(v * 255) for k, v in losses.items() if k.startswith('img_')}
         save_path = self.save_dir / "images"
         save_path.mkdir(parents=True, exist_ok=True)
         for name, img in losses.items():
@@ -239,7 +221,7 @@ class BaseTrainer(ABC):
 
             # Validate
             if self.val_loader is not None:
-                val_metrics = {f"val/{k}": v for k, v in self.validate().items()} # Preparations for logging
+                val_metrics = {f"val/{k}": v for k, v in self.validate().items()}  # Preparations for logging
                 self.wandb_run.log(data=val_metrics, step=self.global_step)
 
                 print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
@@ -264,7 +246,6 @@ class BaseTrainer(ABC):
             # Save checkpoint periodically
             if (self.current_epoch + 1) % self.config.save_frequency == 0:
                 self.save_checkpoint(f'checkpoint_epoch_{self.current_epoch + 1}.pth')
-
 
         # Save final model
         self.save_checkpoint('final_model.pth')

@@ -93,6 +93,21 @@ class DatasetManager:
 
         return dataset_dir
 
+    def cluster_data(self, folder_names: list[str], num_clusters: int, imgs_per_cluster: int, method: str = "resnet+kmeans"):
+        """
+            Clusters all images in the given folders into num_clusters clusters using the specified method.
+            The paths of the images to be used are returned as a list
+
+        Arguments:
+            :param folder_names: A list of paths to image data folders
+            :param num_clusters: The number of clusters to create
+            :param imgs_per_cluster: The number of images to include from each cluster
+            :param method: A string specifying the clustering method to use. Default is resnet+kmeans
+            :return: A list of paths to the selected images
+        """
+
+        
+
     def create_dataset(self,
                        folder_names: list[str],
                        dataset_name: str,

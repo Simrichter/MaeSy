@@ -3,6 +3,7 @@
 from .vision_transformer import VisionTransformerDetector
 from .config import ModelConfig
 from .base_model import BaseModel
+from .resnet_featureextractor import ResnetFeatureExtractor
 from maesy.model.mae_model import MaskedAutoencoderViT, MAEConfig
 
 __all__ = [
@@ -10,5 +11,6 @@ __all__ = [
     "ModelConfig",
     "BaseModel",
     "MaskedAutoencoderViT",
-    "MAEConfig"
+    "MAEConfig",
+    "ResnetFeatureExtractor",
 ]

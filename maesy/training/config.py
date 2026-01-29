@@ -29,7 +29,7 @@ class TrainingConfig:
     
     # Checkpoint and logging
     save_dir: str = "./checkpoints"
-    save_frequency: int = 5 # Save every n epochs
+    save_frequency: int = 10 # Save every n epochs
     log_frequency: int = 10 # Log every n global steps
     
     # Device

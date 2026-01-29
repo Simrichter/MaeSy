@@ -108,15 +108,16 @@ def testMAE():
     pretraining_config = MAEPretrainingConfig(
         num_epochs=num_epochs,
         batch_size=batch_size,
-        learning_rate=1.5e-4,
-        weight_decay=0.05,
+        learning_rate=1e-3,
+        weight_decay=0.01,
         warmup_epochs=5,
         mask_ratio=mask_ratio,
         save_dir="./mae_checkpoints",
+        save_frequency=10,
         output_predicted_images=True,
         device="cuda" if torch.cuda.is_available() else "cpu",
         num_workers=4,
-        use_amp=False
+        use_amp=True
     )
 
     # Create pretrainer

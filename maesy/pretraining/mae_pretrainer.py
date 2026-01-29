@@ -185,10 +185,10 @@ class MaskedAutoencoderPretrainer:
             total_loss += loss.item()
 
         if self.config.output_predicted_images:
-            save_path = self.save_dir / "images"
-            save_path.mkdir(parents=True, exist_ok=True)
+            # save_path = self.save_dir / "images"
+            # save_path.mkdir(parents=True, exist_ok=True)
             img = wandb.Image(self.model.unpatchify(pred)[0], caption=f"Predicted Image at step {self.global_step}")
-            self.wandb_run.log({"predicted_image": img})
+            self.wandb_run.log(data={"predicted_image": img})
             # save_image(self.model.unpatchify(pred)[0], f"{save_path}/predicted_image{self.global_step}.png")
 
         # Average metrics

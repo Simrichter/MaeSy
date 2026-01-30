@@ -1,6 +1,8 @@
 """Object detection dataset implementation."""
 
 import os
+from pathlib import Path
+
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
@@ -13,7 +15,7 @@ class UnlabeledDataset(Dataset):
     
     def __init__(
         self,
-        images_dir: str,
+        images_dir: str | Path,
         filetype: str = ".png",
         transforms: Optional[Callable] = None,
         repeat_factor: int = 1,
@@ -32,7 +34,7 @@ class UnlabeledDataset(Dataset):
         self.images_dir = images_dir
         self.transforms = transforms
 
-        self.images = [f for f in os.listdir(self.images_dir) if f.endswith(filetype)]*repeat_factor
+        self.images = [f for f in sorted(os.listdir(self.images_dir)) if f.endswith(filetype)]*repeat_factor
         if use_first_n is not None:
             self.images = self.images[:use_first_n]
 

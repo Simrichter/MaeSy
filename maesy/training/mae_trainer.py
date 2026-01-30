@@ -24,16 +24,19 @@ class MaeTrainer(BaseTrainer):
         Returns:
             model_out: The output from the model after postprocessing [B, C, H, W].
         """
-        x = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
-        x, mask, ids_shuffle = Utils.random_masking(x, self.config.mask_ratio)
-        # print(x.shape, mask.shape, ids_shuffle.shape)
-        out = self.model(x, **{"mask": mask, "ids_shuffle": ids_shuffle.to(device=self.device, non_blocking=True)})
+        # x = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
+        # x, mask, ids_shuffle = Utils.random_masking(x, self.config.mask_ratio)
+        # # print(x.shape, mask.shape, ids_shuffle.shape)
+        # out = self.model(x, **{"mask": mask, "ids_shuffle": ids_shuffle.to(device=self.device, non_blocking=True)})
+
+        out, additional_data = self.model.forward(images, mask_ratio=self.config.mask_ratio)
 
         target = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
-        # TODO: Remove ugly quick fix with patchify (maybe unpatchify mask?)
+        # TODO: Remove ugly quick fix with patchify and instead calculate loss directly on image (maybe unpatchify mask?)
         # losses = self.loss(model_out, images, mask)
-        losses = self.loss(out, target, mask)
-        model_out = Utils.unpatchify(out.detach()*mask.unsqueeze(-1), self.model.config.image_size, self.model.config.patch_size)
+        losses = self.loss(out, target, additional_data['mask'])
+
+        model_out = self.model.reconstruct(out, **additional_data)
         img_prediction = torch.cat((model_out[0], images[0]), dim=-1)
 
         losses["img_out"] = img_prediction

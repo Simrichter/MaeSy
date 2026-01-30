@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset
 
 
-class multi_dataset(Dataset):
+class MultiDataset(Dataset):
     def __init__(self, datasets: list[Dataset]):
         """
         A dataset that combines multiple datasets.
@@ -32,3 +32,13 @@ class multi_dataset(Dataset):
         else:
             sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
         return self.datasets[dataset_idx][sample_idx]
+
+    def get_image_path(self, idx):
+        dataset_idx = 0
+        while idx >= self.cumulative_sizes[dataset_idx]:
+            dataset_idx += 1
+        if dataset_idx == 0:
+            sample_idx = idx
+        else:
+            sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
+        self.datasets[dataset_idx].get_image_path(sample_idx) # TODO: implement get-iamge_path

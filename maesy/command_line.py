@@ -16,7 +16,7 @@ def main():
 
     train = subparsers.add_parser('train', help="Train a model")
     debug = subparsers.add_parser('debug', help="Call debug utilities")
-    subparsers.add_parser('evaluate', help="Evaluate a model")
+    eval = subparsers.add_parser('evaluate', help="Evaluate a model")
     subparsers.add_parser('predict', help="Make predictions with a model")
     data = subparsers.add_parser('dataset', help="Manage datasets")
     data.add_argument("-p", "--path", type=str, help="Path to the data root dir (default: ./data)", default="./data")
@@ -28,7 +28,13 @@ def main():
     # TODO
 
     # Command: maesy evaluate
-    # TODO
+    eval_parser = eval.add_subparsers(dest="command")
+
+    infer = eval_parser.add_parser("infer", help="Run inference on a folder of images")
+    infer.add_argument("imgpath", help="Path to folder of images for inference")
+    infer.add_argument("checkpoint", help="Path to model checkpoint file")
+    infer.add_argument("-o", "--output_path", type=str, default="./inference_results", help="Folder to save inference results")
+
 
     # Command: maesy predict
     # TODO
@@ -47,11 +53,14 @@ def main():
 
     # Command: maesy dataset create
     dataset_creator_parser = data_subs.add_parser('create', help="Create dataset from local folders")
-    dataset_creator_parser.add_argument("data_paths", help="Comma-separated list of paths to data folders", nargs='+')
+    dataset_creator_parser.add_argument("data_paths", help="Space-separated list of paths to data folders", nargs='+')
     dataset_creator_parser.add_argument("dataset_name", help="Name of the dataset to create")
     dataset_creator_parser.add_argument("-s", "--split", type=float, nargs=3, metavar=('TRAIN', 'VAL', 'TEST'), default=None)
     dataset_creator_parser.add_argument("-d", "--delete", action="store_true", help="Delete original folders after creating dataset")
     dataset_creator_parser.add_argument("-r", "--resize", type=int, nargs=2, metavar=('WIDTH', 'HEIGHT'), default=None, help="Resize images to WIDTH HEIGHT")
+    dataset_creator_parser.add_argument("-t", "--step", type=int, default=1, help="Step size for sampling images from folders")
+    dataset_creator_parser.add_argument("-i", "--start-index", type=int, default=0, help="Start index for sampling images from folders")
+    dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans"], default=None, help="Clustering method to use for dataset creation")
 
 
 

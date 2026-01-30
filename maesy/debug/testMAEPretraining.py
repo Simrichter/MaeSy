@@ -1,4 +1,5 @@
 """Example script for MAE (Masked Autoencoder) pretraining."""
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
@@ -16,8 +17,8 @@ def testMAE():
     # Configuration
     image_size = 224
     batch_size = 128
-    num_epochs = 100
-    mask_ratio = 0.75
+    num_epochs = 200
+    mask_ratio = 0.5
 
     # Create training config
     mae_config = MAEConfig(
@@ -67,18 +68,20 @@ def testMAE():
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
+    dataset_path = Path(r"/home/simon/Desktop/maesy-training/data/BeijingDataset")
+
     train_dataset = UnlabeledDataset(
-        r"/home/simon/Desktop/maesy-training/data/BeijingDataset/train",
+        dataset_path/"train",
         transforms=train_transforms,
-        # repeat_factor=1,
+        repeat_factor=2,
         # use_first_n=384,
         filetype=".jpg"
     )
 
     val_dataset = UnlabeledDataset(
-        r"/home/simon/Desktop/maesy-training/data/BeijingDataset/val",
+        dataset_path/"val",
         transforms=val_transforms,
-        use_first_n=640, # 5 batches
+        # use_first_n=640, # 5 batches
         filetype=".jpg"
     )
 
@@ -113,7 +116,7 @@ def testMAE():
         warmup_epochs=5,
         mask_ratio=mask_ratio,
         save_dir="./mae_checkpoints",
-        save_frequency=10,
+        save_frequency=100,
         output_predicted_images=True,
         device="cuda" if torch.cuda.is_available() else "cpu",
         num_workers=4,

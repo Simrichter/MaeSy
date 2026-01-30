@@ -101,10 +101,13 @@ class BaseTrainer(ABC):
     def _create_scheduler(self):
         """Create learning rate scheduler."""
         if self.config.lr_scheduler.lower() == "cosine":
-            return torch.optim.lr_scheduler.CosineAnnealingLR(
+            warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: min(
+                (step + 1) / self.config.warmup_epochs, 1.0))
+            cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
                 T_max=self.config.num_epochs - self.config.warmup_epochs
             )
+            return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, cosine],  milestones=[self.config.warmup_epochs])
         elif self.config.lr_scheduler.lower() == "step":
             return torch.optim.lr_scheduler.StepLR(
                 self.optimizer,
@@ -146,7 +149,7 @@ class BaseTrainer(ABC):
             images, targets = handle_raw_batch(batch, self.device)
 
             # Forward pass
-            with torch.cuda.amp.autocast(enabled=self.config.use_amp):
+            with torch.amp.autocast("cuda", enabled=self.config.use_amp):
                 losses = self.forward_model(images, targets)
                 loss = losses['loss']
 
@@ -237,7 +240,7 @@ class BaseTrainer(ABC):
                       f"Train Loss: {train_metrics['total_loss']:.4f}")
 
             # Step scheduler
-            if self.scheduler is not None and self.current_epoch >= self.config.warmup_epochs:
+            if self.scheduler is not None:
                 self.scheduler.step()
 
             # Save most recent epoch

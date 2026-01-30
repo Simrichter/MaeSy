@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from .base_model import BaseModel
 from .backbones import TransformerBackbone, TransformerBackboneConfig
+from .components import Utils
 from .heads import DecoderHead, DecoderHeadConfig
 
 @dataclass
@@ -76,3 +77,19 @@ class MaskedAutoencoderViT(BaseModel):
             in_channels=config.in_channels
         )
         self.head = DecoderHead(head_config)
+
+    def forward(self, x, **kwargs):
+        x = Utils.patchify(x, self.config.image_size, self.config.patch_size)
+        x, mask, ids_shuffle = Utils.random_masking(x, **kwargs)
+        out = super().forward(x, **{"mask": mask, "ids_shuffle": ids_shuffle}) # to(device=self.device, non_blocking=True)
+        return out, {"mask": mask, "ids_shuffle": ids_shuffle}
+
+    def reconstruct(self, out, orig_images = None, **kwargs):
+        out = out.detach() * kwargs['mask'].unsqueeze(-1)
+        if orig_images is not None:
+            orig_patches = Utils.patchify(orig_images, self.config.image_size, self.config.patch_size)
+            out += orig_patches * (1 - kwargs['mask']).unsqueeze(-1)
+
+        model_out = Utils.unpatchify(out, self.config.image_size,
+                                     self.config.patch_size)
+        return model_out

@@ -93,7 +93,7 @@ class DatasetManager:
 
         return dataset_dir
 
-    def cluster_data(self, folder_names: list[str], num_clusters: int, imgs_per_cluster: int, method: str = "resnet+kmeans"):
+    def cluster_data(self, folder_names: list[str], num_clusters: int, cluster_method: str = "resnet+kmeans"):
         """
             Clusters all images in the given folders into num_clusters clusters using the specified method.
             The paths of the images to be used are returned as a list
@@ -101,19 +101,22 @@ class DatasetManager:
         Arguments:
             :param folder_names: A list of paths to image data folders
             :param num_clusters: The number of clusters to create
-            :param imgs_per_cluster: The number of images to include from each cluster
-            :param method: A string specifying the clustering method to use. Default is resnet+kmeans
+            :param cluster_method: A string specifying the clustering method to use. Default is resnet+kmeans
             :return: A list of paths to the selected images
         """
+        from maesy.dataset.clustering_methods.resnet_kmeans import cluster
+        return cluster(folder_names, n_C=num_clusters)
 
-        
 
     def create_dataset(self,
                        folder_names: list[str],
                        dataset_name: str,
                        split_percentages: list[float] = None,
                        resize: list[int] = None,
-                       del_folders: bool = False
+                       step: int = 1,
+                       start_index: int = 0,
+                       del_folders: bool = False,
+                       cluster_method = None
                        ) -> Path:
         """
         Combines multiple folders with images into a single dataset
@@ -123,7 +126,10 @@ class DatasetManager:
             :param dataset_name: Name of the dataset
             :param split_percentages: List of percentages for the data subsets in format [train, val, test]. Defaults to [0.8, 0.1, 0.1] if not/incorrectly specified
             :param resize: Resize images to WIDTH HEIGHT or WIDTH² if HEIGHT not specified
+            :param step: Step size for selecting images from folders. Default=1 (use all images)
+            :param start_index: Start index for selecting images from folders. Default=0
             :param del_folders: Whether to delete the original folders after use
+            :param cluster_method: If specified, use clustering_method to select images. Default=None
 
         Returns:
             Path to final dataset
@@ -144,19 +150,70 @@ class DatasetManager:
         os.makedirs(val_path, exist_ok=True)
         os.makedirs(test_path, exist_ok=True)
 
-        for folder in folder_names:
-            folder_path = Path(folder)
-            if not folder_path.exists() or not folder_path.is_dir():
-                print(f"WARNING: Folder {folder} does not exist or is not a directory. Skipping...")
-                continue
+        if cluster_method is None:
+            # TODO: Make nice (loop over folders and call single method "handle_folder" or so)
+            for folder in folder_names:
+                folder_path = Path(folder)
+                if not folder_path.exists() or not folder_path.is_dir():
+                    print(f"WARNING: Folder {folder} does not exist or is not a directory. Skipping...")
+                    continue
+
+                image_files = [f for f in folder_path.iterdir() if
+                               f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
+                num_images = len(image_files)
+
+                if num_images == 0:
+                    print(f"WARNING: No image files found in folder {folder}. Skipping...")
+                    continue
+
+                # Shuffle images
+                random.shuffle(image_files)
+
+                # Calculate split indices
+                train_end = int(split_percentages[0] * num_images)
+                val_end = train_end + int(split_percentages[1] * num_images)
+
+                # Copy files to respective folders
+                for i, img_file in enumerate(tqdm(image_files, desc="Copying files"), start=start_index):
+                    if i%step != 0: #TODO: Also make this option possible with clustering?
+                        continue
+                    if i < train_end:
+                        dest_path = train_path / img_file.name
+                    elif i < val_end:
+                        dest_path = val_path / img_file.name
+                    else:
+                        dest_path = test_path / img_file.name
+
+                    if resize is None:
+                        # os.rename(img_file, dest_path)
+                        shutil.copy(img_file, dest_path)
+                    else:
+                        from PIL import Image
+                        with Image.open(img_file) as img:
+                            if len(resize) == 2:
+                                img = img.resize((resize[0], resize[1]))
+                            else:
+                                print("WARNING: Resize parameter must be a list of two integers. Skipping resizing.")
+                                shutil.copy(img_file, dest_path)
+                                continue
+                            img.save(dest_path)
+
+                if del_folders:
+                    print("Deleting original folder:", folder_path)
+                    shutil.rmtree(folder_path)
+                    # os.rmdir(folder_path)
+            # TODO: Add support for label files
+            return dataset_dir
+        else:
+            folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=100)
 
             image_files = [f for f in folder_path.iterdir() if
                            f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
             num_images = len(image_files)
 
             if num_images == 0:
-                print(f"WARNING: No image files found in folder {folder}. Skipping...")
-                continue
+                print(f"WARNING: No image files found after clustering. Exiting...")
+                return dataset_dir
 
             # Shuffle images
             random.shuffle(image_files)
@@ -175,7 +232,6 @@ class DatasetManager:
                     dest_path = test_path / img_file.name
 
                 if resize is None:
-                    # os.rename(img_file, dest_path)
                     shutil.copy(img_file, dest_path)
                 else:
                     from PIL import Image
@@ -191,10 +247,7 @@ class DatasetManager:
             if del_folders:
                 print("Deleting original folder:", folder_path)
                 shutil.rmtree(folder_path)
-                # os.rmdir(folder_path)
-
         # TODO: Add support for label files
-
         return dataset_dir
 
     def load_coco_annotations(self, annotation_file: str) -> Dict[str, Any]:

@@ -11,7 +11,7 @@ class BaseModel(ABC, nn.Module):
     head: BaseHead
     backbone: BaseBackbone
 
-    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         out = self.backbone.forward(x, **kwargs)
         out = self.head.forward(out, **kwargs)
         return out

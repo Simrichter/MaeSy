@@ -60,7 +60,7 @@ def main():
     dataset_creator_parser.add_argument("-r", "--resize", type=int, nargs=2, metavar=('WIDTH', 'HEIGHT'), default=None, help="Resize images to WIDTH HEIGHT")
     dataset_creator_parser.add_argument("-t", "--step", type=int, default=1, help="Step size for sampling images from folders")
     dataset_creator_parser.add_argument("-i", "--start-index", type=int, default=0, help="Start index for sampling images from folders")
-    dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans"], default=None, help="Clustering method to use for dataset creation")
+    dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "sequential_similarity"], default=None, help="Clustering method to use for dataset creation")
 
 
 

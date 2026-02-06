@@ -68,3 +68,15 @@ class UnlabeledDataset(Dataset):
             image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
             
         return image
+    
+    def get_image_path(self, idx: int) -> str:
+        """
+        Get the full path to an image at the given index.
+        
+        Args:
+            idx: Index of the image
+            
+        Returns:
+            Full path to the image file
+        """
+        return os.path.join(self.images_dir, self.images[idx])

@@ -102,10 +102,19 @@ class DatasetManager:
             :param folder_names: A list of paths to image data folders
             :param num_clusters: The number of clusters to create
             :param cluster_method: A string specifying the clustering method to use. Default is resnet+kmeans
+                                   Options: "resnet_kmeans", "sequential_similarity"
             :return: A list of paths to the selected images
         """
-        from maesy.dataset.clustering_methods.resnet_kmeans import cluster
-        return cluster(folder_names, n_C=num_clusters)
+        if cluster_method == "sequential_similarity":
+            from maesy.dataset.clustering_methods.sequential_similarity import cluster
+            # For sequential similarity, num_clusters parameter is interpreted as similarity_threshold
+            # Convert num_clusters to a reasonable threshold (e.g., 100 clusters -> 0.85 threshold)
+            # This is a heuristic: more clusters desired -> lower threshold (keep more diverse images)
+            similarity_threshold = max(0.7, min(0.95, 1.0 - (num_clusters / 500)))
+            return cluster(folder_names, similarity_threshold=similarity_threshold)
+        else:  # Default to resnet_kmeans
+            from maesy.dataset.clustering_methods.resnet_kmeans import cluster
+            return cluster(folder_names, n_C=num_clusters)
 
 
     def create_dataset(self,

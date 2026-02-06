@@ -16,7 +16,7 @@ from maesy.evaluation import Evaluator
 from maesy.evaluation.inferer import Inferer
 from maesy.model import ResnetFeatureExtractor, BaseModel
 
-def cluster(paths, n_C=100, batch_size=500, forward_scale=128):
+def cluster(paths, n_C=100, batch_size=500, forward_scale=128, step=1, start_index=0):
     # default_path = "C:\\Users\\taran\\CLionProjects\\NDevils2015\\Config\\Logs\\PNGs\\Images\\NDevils2015-Config-1st\\Lower" # The path to the images
     # n_C = 100 # The number of clusters (Decides how many images will be extracted from the dataset)
     # batch_size = 500 # The batch size for passing the data through the neural net.
@@ -39,7 +39,7 @@ def cluster(paths, n_C=100, batch_size=500, forward_scale=128):
     ])
 
     # TODO: Make filetype dynamic (not only supporting .jpg)
-    multi_dataset = MultiDataset([UnlabeledDataset(images_dir=path, transforms=transfs, filetype=".jpg") for path in paths])
+    multi_dataset = MultiDataset([UnlabeledDataset(images_dir=path, transforms=transfs, filetype=".jpg", step=step, start_index=start_index) for path in paths])
     multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=False)
 
     model: BaseModel = ResnetFeatureExtractor("resnet50")

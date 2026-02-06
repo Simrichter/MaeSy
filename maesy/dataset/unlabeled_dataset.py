@@ -19,6 +19,8 @@ class UnlabeledDataset(Dataset):
         filetype: str = ".png",
         transforms: Optional[Callable] = None,
         repeat_factor: int = 1,
+        step: int = 1,
+        start_index: int = 0,
         use_first_n: int = None
     ):
         """
@@ -29,12 +31,14 @@ class UnlabeledDataset(Dataset):
             filetype: File extension
             transforms: Optional transforms to apply
             repeat_factor: Specifies, how many times the same image is repeated in the dataset (mostly for debugging)
+            step: Step size for selecting images from the directory
+            start_index: Starting index for selecting images from the directory
             use_first_n: Only use the first n images found in the images_dir (mostly for debugging)
         """
         self.images_dir = images_dir
         self.transforms = transforms
 
-        self.images = [f for f in sorted(os.listdir(self.images_dir)) if f.endswith(filetype)]*repeat_factor
+        self.images = [f for f in sorted(os.listdir(self.images_dir)) if f.endswith(filetype)][start_index::step]*repeat_factor
         if use_first_n is not None:
             self.images = self.images[:use_first_n]
 
@@ -69,7 +73,7 @@ class UnlabeledDataset(Dataset):
             
         return image
     
-    def get_image_path(self, idx: int) -> str:
+    def get_image_path(self, idx: int) -> Path:
         """
         Get the full path to an image at the given index.
         
@@ -79,4 +83,4 @@ class UnlabeledDataset(Dataset):
         Returns:
             Full path to the image file
         """
-        return os.path.join(self.images_dir, self.images[idx])
+        return Path(os.path.join(self.images_dir, self.images[idx]))

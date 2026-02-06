@@ -100,17 +100,21 @@ class DatasetManager:
 
         Arguments:
             :param folder_names: A list of paths to image data folders
-            :param num_clusters: The number of clusters to create
+            :param num_clusters: The number of clusters to create (for resnet_kmeans)
+                                or a proxy for similarity threshold (for sequential_similarity)
             :param cluster_method: A string specifying the clustering method to use. Default is resnet+kmeans
                                    Options: "resnet_kmeans", "sequential_similarity"
             :return: A list of paths to the selected images
         """
         if cluster_method == "sequential_similarity":
             from maesy.dataset.clustering_methods.sequential_similarity import cluster
-            # For sequential similarity, num_clusters parameter is interpreted as similarity_threshold
-            # Convert num_clusters to a reasonable threshold (e.g., 100 clusters -> 0.85 threshold)
-            # This is a heuristic: more clusters desired -> lower threshold (keep more diverse images)
-            similarity_threshold = max(0.7, min(0.95, 1.0 - (num_clusters / 500)))
+            # For sequential similarity, num_clusters parameter is mapped to similarity_threshold
+            # Heuristic mapping: threshold = 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)
+            # - Higher num_clusters (e.g., 400) -> lower threshold (0.20) -> more diverse/dissimilar images kept
+            # - Lower num_clusters (e.g., 50) -> higher threshold (0.90) -> only very dissimilar images kept
+            # MAX_CLUSTERS_REFERENCE = 500 provides a reasonable range: [0.70, 0.95]
+            MAX_CLUSTERS_REFERENCE = 500
+            similarity_threshold = max(0.7, min(0.95, 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)))
             return cluster(folder_names, similarity_threshold=similarity_threshold)
         else:  # Default to resnet_kmeans
             from maesy.dataset.clustering_methods.resnet_kmeans import cluster

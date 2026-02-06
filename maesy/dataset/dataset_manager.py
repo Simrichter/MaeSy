@@ -6,7 +6,7 @@ import shutil
 import zipfile
 import requests
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from tqdm import tqdm
 import tarfile
 import random
@@ -93,7 +93,7 @@ class DatasetManager:
 
         return dataset_dir
 
-    def cluster_data(self, folder_names: list[str], num_clusters: int, cluster_method: str = "resnet+kmeans"):
+    def cluster_data(self, folder_names: list[str], num_clusters: int, cluster_method: str = "resnet_kmeans", step: int = 1, start_index: int = 0) -> List[Path]:
         """
             Clusters all images in the given folders into num_clusters clusters using the specified method.
             The paths of the images to be used are returned as a list
@@ -102,10 +102,16 @@ class DatasetManager:
             :param folder_names: A list of paths to image data folders
             :param num_clusters: The number of clusters to create
             :param cluster_method: A string specifying the clustering method to use. Default is resnet+kmeans
+            :param step: Step size for selecting images from folders. Default=1 (use all images)
+            :param start_index: Start index for selecting images from folders. Default=0
             :return: A list of paths to the selected images
         """
-        from maesy.dataset.clustering_methods.resnet_kmeans import cluster
-        return cluster(folder_names, n_C=num_clusters)
+        match cluster_method:
+            case "resnet_kmeans":
+                from maesy.dataset.clustering_methods.resnet_kmeans import cluster
+                return cluster(folder_names, n_C=num_clusters, step=step, start_index=start_index)
+            case _:
+                raise ValueError(f"Unknown clustering method {cluster_method}")
 
 
     def create_dataset(self,
@@ -135,10 +141,11 @@ class DatasetManager:
             Path to final dataset
         """
 
-        if split_percentages is None or type(split_percentages) is not list or len(split_percentages)!=3 or not abs(sum(split_percentages) - 1.0) < 1e-6:
+        if split_percentages is None or type(split_percentages) is not list or len(split_percentages)!=3 or not abs(sum(split_percentages) - 1.0) < 1e-6 or not abs(sum(split_percentages))-100.0 < 1e-6:
             print("WARNING: Using default split_percentages [0.8, 0.1, 0.1]")
             split_percentages = [0.8, 0.1, 0.1]
-
+        if abs(sum(split_percentages))-100.0 < 1e-6:
+            split_percentages = [p/100.0 for p in split_percentages]
         # path = self.download_data(url, dataset_name, extract, force)
 
         dataset_dir = self.data_root / dataset_name
@@ -205,9 +212,9 @@ class DatasetManager:
             # TODO: Add support for label files
             return dataset_dir
         else:
-            folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=100)
+            folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=100, step=step, start_index=start_index)
 
-            image_files = [f for f in folder_path.iterdir() if
+            image_files = [f for f in folder_path if
                            f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
             num_images = len(image_files)
 

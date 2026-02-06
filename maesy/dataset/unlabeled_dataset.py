@@ -19,6 +19,8 @@ class UnlabeledDataset(Dataset):
         filetype: str = ".png",
         transforms: Optional[Callable] = None,
         repeat_factor: int = 1,
+        step: int = 1,
+        start_index: int = 0,
         use_first_n: int = None
     ):
         """
@@ -34,7 +36,7 @@ class UnlabeledDataset(Dataset):
         self.images_dir = images_dir
         self.transforms = transforms
 
-        self.images = [f for f in sorted(os.listdir(self.images_dir)) if f.endswith(filetype)]*repeat_factor
+        self.images = [f for f in sorted(os.listdir(self.images_dir)) if f.endswith(filetype)][start_index::step]*repeat_factor
         if use_first_n is not None:
             self.images = self.images[:use_first_n]
 
@@ -68,3 +70,7 @@ class UnlabeledDataset(Dataset):
             image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
             
         return image
+
+    def get_image_path(self, idx: int) -> Path:
+        """Get the file path of the image at the specified index."""
+        return Path(os.path.join(self.images_dir, self.images[idx]))

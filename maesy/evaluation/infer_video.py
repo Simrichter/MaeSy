@@ -8,13 +8,13 @@ from torchvision.transforms.functional import to_pil_image
 from tqdm import tqdm
 
 from maesy.evaluation.inferer import Inferer
-from maesy.evaluation.save_images import save_images
 from maesy.dataset import UnlabeledDataset
-from maesy.model import MaskedAutoencoderViT, MAEConfig
+from maesy.model import MAEConfig
 
-import numpy as np
-from PIL import Image, ImageDraw
-import cv2
+from PIL import Image
+
+from maesy.model_tools.model_factory import create_model
+
 
 def write_video_from_imgs(images:list, output_path:str, fps:int=30):
     images = [to_pil_image(img[0]) for img in images]  # images, just convert it into PIL.Image obj
@@ -52,17 +52,13 @@ def infer_video(args):
         mlp_ratio=4.0,
         dropout=0.1,
         attention_dropout=0.1,
-        hidden_dim=256,
-        num_decoder_layers=4
+        decoder_embed_dim=384,
+        decoder_num_layers=4
     )
 
     # Create MAE model
     print("Creating MAE model...")
-    model = MaskedAutoencoderViT(
-        config=mae_config,
-        decoder_embed_dim=384,
-        decoder_num_layers=4
-    ) # TODO: Implement a get_model() method in maesy.model to load models dynamically (Factory pattern?)
+    model = create_model("mae", mae_config) # MaskedAutoencoderViT(config=mae_config,)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

@@ -31,6 +31,8 @@ class UnlabeledDataset(Dataset):
             filetype: File extension
             transforms: Optional transforms to apply
             repeat_factor: Specifies, how many times the same image is repeated in the dataset (mostly for debugging)
+            step: Step size for selecting images from the directory
+            start_index: Starting index for selecting images from the directory
             use_first_n: Only use the first n images found in the images_dir (mostly for debugging)
         """
         self.images_dir = images_dir
@@ -70,7 +72,15 @@ class UnlabeledDataset(Dataset):
             image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
             
         return image
-
+    
     def get_image_path(self, idx: int) -> Path:
-        """Get the file path of the image at the specified index."""
+        """
+        Get the full path to an image at the given index.
+        
+        Args:
+            idx: Index of the image
+            
+        Returns:
+            Full path to the image file
+        """
         return Path(os.path.join(self.images_dir, self.images[idx]))

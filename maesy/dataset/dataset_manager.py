@@ -100,13 +100,25 @@ class DatasetManager:
 
         Arguments:
             :param folder_names: A list of paths to image data folders
-            :param num_clusters: The number of clusters to create
-            :param cluster_method: A string specifying the clustering method to use. Default is resnet+kmeans
+            :param num_clusters: The number of clusters to create (for resnet_kmeans)
+                                or a proxy for similarity threshold (for sequential_similarity)
+            :param cluster_method: A string specifying the clustering method to use. Default is resnet_kmeans
+                                   Options: "resnet_kmeans", "sequential_similarity"
             :param step: Step size for selecting images from folders. Default=1 (use all images)
             :param start_index: Start index for selecting images from folders. Default=0
             :return: A list of paths to the selected images
         """
         match cluster_method:
+            case "sequential_similarity":
+                from maesy.dataset.clustering_methods.sequential_similarity import cluster
+                # For sequential similarity, num_clusters parameter is mapped to similarity_threshold
+                # Heuristic mapping: threshold = 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)
+                # - Higher num_clusters (e.g., 400) -> lower threshold (0.20) -> more diverse/dissimilar images kept
+                # - Lower num_clusters (e.g., 50) -> higher threshold (0.90) -> only very dissimilar images kept
+                # MAX_CLUSTERS_REFERENCE = 500 provides a reasonable range: [0.70, 0.95]
+                MAX_CLUSTERS_REFERENCE = 500
+                similarity_threshold = max(0.7, min(0.95, 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)))
+                return cluster(folder_names, similarity_threshold=similarity_threshold, step=step, start_index=start_index)
             case "resnet_kmeans":
                 from maesy.dataset.clustering_methods.resnet_kmeans import cluster
                 return cluster(folder_names, n_C=num_clusters, step=step, start_index=start_index)
@@ -141,11 +153,12 @@ class DatasetManager:
             Path to final dataset
         """
 
-        if split_percentages is None or type(split_percentages) is not list or len(split_percentages)!=3 or not abs(sum(split_percentages) - 1.0) < 1e-6 or not abs(sum(split_percentages))-100.0 < 1e-6:
+        if split_percentages is None or type(split_percentages) is not list or len(split_percentages)!=3 or not (abs(sum(split_percentages) - 1.0) < 1e-6 or abs(sum(split_percentages) - 100.0) < 1e-6):
             print("WARNING: Using default split_percentages [0.8, 0.1, 0.1]")
             split_percentages = [0.8, 0.1, 0.1]
-        if abs(sum(split_percentages))-100.0 < 1e-6:
+        if abs(sum(split_percentages) - 100.0) < 1e-6:
             split_percentages = [p/100.0 for p in split_percentages]
+
         # path = self.download_data(url, dataset_name, extract, force)
 
         dataset_dir = self.data_root / dataset_name

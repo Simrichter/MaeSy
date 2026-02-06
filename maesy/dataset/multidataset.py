@@ -41,4 +41,4 @@ class MultiDataset(Dataset):
             sample_idx = idx
         else:
             sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
-        return self.datasets[dataset_idx].get_image_path(sample_idx) # TODO: implement get-iamge_path
+        return self.datasets[dataset_idx].get_image_path(sample_idx)

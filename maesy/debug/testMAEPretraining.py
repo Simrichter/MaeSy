@@ -30,16 +30,14 @@ def testMAE():
         mlp_ratio=4.0,
         dropout=0.1,
         attention_dropout=0.1,
-        hidden_dim=256,
-        num_decoder_layers=4
+        decoder_embed_dim=384,
+        decoder_num_layers=4
     )
 
     # Create MAE model
     print("Creating MAE model...")
     model = MaskedAutoencoderViT(
-        config=mae_config,
-        decoder_embed_dim=384,
-        decoder_num_layers=4
+        config=mae_config
     )
 
     # Print model info
@@ -132,9 +130,9 @@ def testMAE():
         config=pretraining_config
     )
 
-    # checkpoint = "/home/simon/PycharmProjects/MaeSy/mae_checkpoints/latest_model.pth"
-    # print(f"\nLoading checkpoint{checkpoint}...")
-    # pretrainer.load_checkpoint(checkpoint)
+    checkpoint = "/home/simon/Desktop/maesy-training/mae_checkpoints/pious-vortex-40/latest_model.pth"
+    if Path(checkpoint).exists():
+        pretrainer.load_checkpoint(checkpoint)
 
     # Start pretraining
     print("\nStarting MAE pretraining...")

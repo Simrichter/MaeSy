@@ -1,0 +1,3 @@
+Test Clustering:
+    maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" cluster_test -r 224 224 -t 5 -c resnet_kmeans
+    maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" cluster_test -r 224 224 -c resnet_kmeans -s 90 10 0

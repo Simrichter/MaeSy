@@ -32,6 +32,8 @@ class TransformerBackboneConfig:
 class TransformerBackbone(nn.Module):
     def __init__(self, config: TransformerBackboneConfig):
         super().__init__()
+        self.type = "TransformerBackbone"
+        self.config = config
 
         # Patch embedding
         self.patch_embed = nn.Linear(config.patch_size**2*config.in_channels, config.embed_dim)
@@ -52,7 +54,7 @@ class TransformerBackbone(nn.Module):
 
         # Utils.init_weights(self)
 
-    def forward(self, x: torch.Tensor, ids_shuffle: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, ids_shuffle: torch.Tensor) -> torch.Tensor: # WARNING: Removed **kwargs (unused and trouble for ONNX)
         """
         Forward pass.
 

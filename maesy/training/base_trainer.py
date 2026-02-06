@@ -17,6 +17,7 @@ from .config import TrainingConfig
 from .losses import DetectionLoss, MaskedMSE, BaseLoss
 from ..model import VisionTransformerDetector, ModelConfig, BaseModel
 from .utils import handle_raw_batch
+from ..model_tools.checkpoint_handler import CheckpointHandler
 
 
 class BaseTrainer(ABC):
@@ -55,10 +56,6 @@ class BaseTrainer(ABC):
 
         self.loss: BaseLoss = self._create_loss()
 
-        # Setup directories
-        self.save_dir = Path(self.config.save_dir)
-        self.save_dir.mkdir(parents=True, exist_ok=True)
-
         # Setup wandb
         self.wandb_run = wandb.init(
             entity="simon-richter-tu-dortmund",
@@ -66,13 +63,19 @@ class BaseTrainer(ABC):
             config=asdict(self.config)
         )
 
+        # Setup directories
+        self.save_dir = Path(self.config.save_dir)/self.wandb_run.name
+        self.checkpoint_handler = CheckpointHandler(self.save_dir, self.device)
+
         # Training state
         self.current_epoch = 0
         self.global_step = 0
         self.best_val_loss = float('inf')
 
         # Mixed precision training
-        self.scaler = torch.cuda.amp.GradScaler() if self.config.use_amp else None
+        self.scaler = torch.amp.GradScaler("cuda") if self.config.use_amp else None
+
+
 
     def _create_optimizer(self) -> torch.optim.Optimizer:
         """Create optimizer."""
@@ -234,7 +237,7 @@ class BaseTrainer(ABC):
                 # Save best model
                 if val_metrics['val/total_loss'] < self.best_val_loss:
                     self.best_val_loss = val_metrics['val/total_loss']
-                    self.save_checkpoint('best_model.pth')
+                    self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config,  'best_model.pth', self.scheduler)
             else:
                 print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
                       f"Train Loss: {train_metrics['total_loss']:.4f}")
@@ -244,46 +247,20 @@ class BaseTrainer(ABC):
                 self.scheduler.step()
 
             # Save most recent epoch
-            self.save_checkpoint('latest_model.pth')
+            self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, 'latest_model.pth', self.scheduler)
 
             # Save checkpoint periodically
             if (self.current_epoch + 1) % self.config.save_frequency == 0:
-                self.save_checkpoint(f'checkpoint_epoch_{self.current_epoch + 1}.pth')
+                self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, f'checkpoint_epoch_{self.current_epoch + 1}.pth', self.scheduler)
 
         # Save final model
-        self.save_checkpoint('final_model.pth')
+        self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer,
+                                                self.best_val_loss, self.config,
+                                                'final_model.pth', self.scheduler)
         self.wandb_run.finish()
         print("Training completed!")
 
-    def save_checkpoint(self, filename: str) -> None:
-        """Save model checkpoint."""
-        checkpoint = {
-            'epoch': self.current_epoch,
-            'global_step': self.global_step,
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'best_val_loss': self.best_val_loss,
-            'config': self.config
-        }
-
-        if self.scheduler is not None:
-            checkpoint['scheduler_state_dict'] = self.scheduler.state_dict()
-
-        filepath = self.save_dir / filename
-        torch.save(checkpoint, filepath)
-        print(f"Checkpoint saved to {filepath}")
 
     def load_checkpoint(self, filepath: str) -> None:
-        """Load model checkpoint."""
-        checkpoint = torch.load(filepath, map_location=self.device)
-
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.current_epoch = checkpoint['epoch']
-        self.global_step = checkpoint['global_step']
-        self.best_val_loss = checkpoint['best_val_loss']
-
-        if 'scheduler_state_dict' in checkpoint and self.scheduler is not None:
-            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-
-        print(f"Checkpoint loaded from {filepath}")
+        """Load training checkpoint."""
+        self.current_epoch, self.global_step, self.best_val_loss = self.checkpoint_handler.load_checkpoint(filepath, self.model, self.optimizer, self.scheduler)

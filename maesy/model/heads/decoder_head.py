@@ -18,7 +18,8 @@ class DecoderHeadConfig:
 class DecoderHead(nn.Module):
     def __init__(self, config: DecoderHeadConfig):
         super().__init__()
-
+        self.type = "DecoderHead"
+        self.config = config
         # Decoder components
         self.decoder_embed = nn.Linear(config.embed_dim, config.embed_dim)
 
@@ -60,7 +61,7 @@ class DecoderHead(nn.Module):
                 nn.init.constant_(m.weight, 1.0)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x: torch.Tensor, ids_shuffle: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, ids_shuffle: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through decoder.
 

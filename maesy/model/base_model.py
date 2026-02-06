@@ -15,3 +15,6 @@ class BaseModel(ABC, nn.Module):
         out = self.backbone.forward(x, **kwargs)
         out = self.head.forward(out, **kwargs)
         return out
+
+    def infer(self, images, targets, **kwargs):
+        return self.forward(images, **kwargs), targets

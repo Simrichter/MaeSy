@@ -39,7 +39,8 @@ class ClassificationViT(BaseModel):
         )
 
         self.backbone = TransformerBackbone(backbone_config)
+        self.backbonetype = "TransformerBackbone"
 
         self.head = LinearHead(head_config)
-        
+        self.headtype = "LinearHead"
 

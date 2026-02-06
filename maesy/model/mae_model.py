@@ -1,5 +1,8 @@
 """Masked Autoencoder Vision Transformer for pretraining."""
 from dataclasses import dataclass
+
+import torch
+
 from .base_model import BaseModel
 from .backbones import TransformerBackbone, TransformerBackboneConfig
 from .components import Utils
@@ -7,7 +10,9 @@ from .heads import DecoderHead, DecoderHeadConfig
 
 @dataclass
 class MAEConfig:
-    """Configuration for Vision Transformer Detector model."""
+    """
+    Configuration for Masked Autoencoder model.
+    """
 
     # Image parameters
     image_size: int = 224
@@ -23,8 +28,11 @@ class MAEConfig:
     attention_dropout: float = 0.1
 
     # Detection head parameters
-    hidden_dim: int = 256
-    num_decoder_layers: int = 6
+    decoder_embed_dim: int = 768
+    decoder_num_layers: int = 8
+    decoder_mpl_ratio = 4.0
+    decoder_dropout = 0.1
+    decoder_attention_dropout = 0.1
 
     def __post_init__(self):
         """Validate configuration."""
@@ -40,15 +48,12 @@ class MaskedAutoencoderViT(BaseModel):
     and the model learns to reconstruct them.
     """
 
-    def __init__(self, config: MAEConfig, decoder_embed_dim: int = 768, decoder_num_layers: int = 8, decoder_mpl_ratio=4.0,
-                 decoder_dropout=0.1, decoder_attention_dropout=0.1):
+    def __init__(self, config: MAEConfig):
         """
         Initialize MAE model.
         
         Args:
             config: Model configuration
-            decoder_embed_dim: Decoder embedding dimension
-            decoder_num_layers: Number of decoder layers
         """
         super().__init__()
         self.config = config
@@ -66,14 +71,14 @@ class MaskedAutoencoderViT(BaseModel):
         self.backbone = TransformerBackbone(backbone_config)
 
         head_config = DecoderHeadConfig(
-            embed_dim=decoder_embed_dim,
+            embed_dim=config.decoder_embed_dim,
             num_patches=backbone_config.num_patches,
             patch_size=config.patch_size,
             num_heads=config.num_heads,
-            mlp_ratio=decoder_mpl_ratio,
-            dropout=decoder_dropout,
-            attention_dropout=decoder_attention_dropout,
-            num_layers=decoder_num_layers,
+            mlp_ratio=config.decoder_mpl_ratio,
+            dropout=config.decoder_dropout,
+            attention_dropout=config.decoder_attention_dropout,
+            num_layers=config.decoder_num_layers,
             in_channels=config.in_channels
         )
         self.head = DecoderHead(head_config)
@@ -81,7 +86,7 @@ class MaskedAutoencoderViT(BaseModel):
     def forward(self, x, **kwargs):
         x = Utils.patchify(x, self.config.image_size, self.config.patch_size)
         x, mask, ids_shuffle = Utils.random_masking(x, **kwargs)
-        out = super().forward(x, **{"mask": mask, "ids_shuffle": ids_shuffle}) # to(device=self.device, non_blocking=True)
+        out = super().forward(x, **{"ids_shuffle": ids_shuffle}) # to(device=self.device, non_blocking=True)
         return out, {"mask": mask, "ids_shuffle": ids_shuffle}
 
     def reconstruct(self, out, orig_images = None, **kwargs):
@@ -93,3 +98,18 @@ class MaskedAutoencoderViT(BaseModel):
         model_out = Utils.unpatchify(out, self.config.image_size,
                                      self.config.patch_size)
         return model_out
+
+    def infer(self, images, targets, **kwargs):
+        # Get predictions
+        predictions, additional_data = self.model.forward(images, **kwargs)
+        img_preds = self.model.reconstruct(predictions, orig_images=images, **additional_data)
+
+        # clamp values to [0, 255]
+        img_preds = torch.clamp(img_preds, 0, 255)
+
+        patches = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
+        imgs_masked = Utils.unpatchify(patches * (1 - additional_data["mask"]).unsqueeze(-1),
+                                       self.model.config.image_size, self.model.config.patch_size)
+        img_preds = torch.cat((images, imgs_masked, img_preds), dim=-1)
+
+        return img_preds, targets

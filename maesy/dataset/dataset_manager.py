@@ -118,7 +118,7 @@ class DatasetManager:
                 # MAX_CLUSTERS_REFERENCE = 500 provides a reasonable range: [0.70, 0.95]
                 MAX_CLUSTERS_REFERENCE = 500
                 similarity_threshold = max(0.7, min(0.95, 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)))
-                return cluster(folder_names, similarity_threshold=similarity_threshold)
+                return cluster(folder_names, similarity_threshold=similarity_threshold, step=step, start_index=start_index)
             case "resnet_kmeans":
                 from maesy.dataset.clustering_methods.resnet_kmeans import cluster
                 return cluster(folder_names, n_C=num_clusters, step=step, start_index=start_index)
@@ -153,10 +153,10 @@ class DatasetManager:
             Path to final dataset
         """
 
-        if split_percentages is None or type(split_percentages) is not list or len(split_percentages)!=3 or not abs(sum(split_percentages) - 1.0) < 1e-6 or not abs(sum(split_percentages))-100.0 < 1e-6:
+        if split_percentages is None or type(split_percentages) is not list or len(split_percentages)!=3 or not (abs(sum(split_percentages) - 1.0) < 1e-6 or abs(sum(split_percentages) - 100.0) < 1e-6):
             print("WARNING: Using default split_percentages [0.8, 0.1, 0.1]")
             split_percentages = [0.8, 0.1, 0.1]
-        if abs(sum(split_percentages))-100.0 < 1e-6:
+        if abs(sum(split_percentages) - 100.0) < 1e-6:
             split_percentages = [p/100.0 for p in split_percentages]
 
         # path = self.download_data(url, dataset_name, extract, force)

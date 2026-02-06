@@ -27,7 +27,7 @@ from maesy.evaluation.inferer import Inferer
 from maesy.model import ResnetFeatureExtractor, BaseModel
 
 
-def cluster(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, filetype=".jpg"):
+def cluster(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, filetype=".jpg", step=1, start_index=0):
     """
     Select diverse images using sequential similarity-based filtering.
     
@@ -39,6 +39,8 @@ def cluster(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, 
         batch_size: Batch size for neural network inference
         forward_scale: Size to resize images to before feature extraction (default: 128)
         filetype: File extension to filter for (default: ".jpg")
+        step: Step size for selecting images from directories (default: 1)
+        start_index: Starting index for selecting images from directories (default: 0)
     
     Returns:
         List of Path objects pointing to selected representative images
@@ -52,7 +54,7 @@ def cluster(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, 
     
     # Create dataset from all image directories
     multi_dataset = MultiDataset([
-        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype) 
+        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype, step=step, start_index=start_index) 
         for path in paths
     ])
     
@@ -128,7 +130,7 @@ def cluster(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, 
     return representative_paths
 
 
-def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, filetype=".jpg"):
+def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, filetype=".jpg", step=1, start_index=0):
     """
     Sequential similarity-based clustering with FAISS for faster similarity search.
     
@@ -141,6 +143,8 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_
         batch_size: Batch size for neural network inference
         forward_scale: Size to resize images to before feature extraction
         filetype: File extension to filter for (default: ".jpg")
+        step: Step size for selecting images from directories (default: 1)
+        start_index: Starting index for selecting images from directories (default: 0)
     
     Returns:
         List of Path objects pointing to selected representative images
@@ -149,7 +153,7 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_
         import faiss
     except ImportError:
         print("FAISS not available, falling back to standard implementation")
-        return cluster(paths, similarity_threshold, batch_size, forward_scale, filetype)
+        return cluster(paths, similarity_threshold, batch_size, forward_scale, filetype, step, start_index)
     
     # Setup transforms for feature extraction
     transfs = transforms.Compose([
@@ -159,7 +163,7 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_
     
     # Create dataset from all image directories
     multi_dataset = MultiDataset([
-        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype) 
+        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype, step=step, start_index=start_index) 
         for path in paths
     ])
     

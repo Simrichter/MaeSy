@@ -1,3 +1,5 @@
 Test Clustering:
-    maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" cluster_test -r 224 224 -t 5 -c resnet_kmeans
     maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" cluster_test -r 224 224 -c resnet_kmeans -s 90 10 0
+    maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" cluster_test -r 224 224 -c sequential_similarity -s 90 10 0
+    FULL:
+        maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" "/media/simon/42A099D63E90C520/Raw Training Data/BlazeMexico/temp/GP2_Blaze_Mexiko_2025-08-15-11-43-35_out" "/media/simon/42A099D63E90C520/Raw Training Data/RoboErectusBangkok/temp/GP1_RoboErectus_Bangkok_2025-08-15-08-54-14_out" "/media/simon/42A099D63E90C520/Raw Training Data/HephaestusMontreal/temp/GP4_Hephaestus_Montreal_2025-08-15-16-54-11_out" "/media/simon/42A099D63E90C520/Raw Training Data/NuBotsBordeaux/temp/GP6_NuBots_Bordeaux_2025-08-16-11-33-17_out" cluster_test -r 224 224 -c sequential_similarity -s 90 10 0

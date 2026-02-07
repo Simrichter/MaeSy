@@ -6,7 +6,7 @@ from ..model.components import Utils
 
 from maesy.training import BaseTrainer
 
-class MaeTrainer(BaseTrainer):
+class DetectionTrainer(BaseTrainer):
     """Trainer for Masked Autoencoder Vision Transformer (MAE ViT) models.
 
     This trainer handles the training loop, loss computation, and optimization
@@ -20,21 +20,17 @@ class MaeTrainer(BaseTrainer):
         Args:
             :param images: Input images [B, C, H, W].
             :param targets: Target images for reconstruction (are not used in MAE training, only there for consistency with superclass).
-            :param val: Whether this is a validation pass (outputs additional data for visualization if True).
+            :param val: Whether this is a validation pass
 
         Returns:
             model_out: The output from the model after postprocessing [B, C, H, W].
         """
+        out, additional_data = self.model.forward(images, mask_ratio=0)
+        losses = self.loss(out, targets)
 
-        out, additional_data = self.model.forward(images, mask_ratio=self.config.mask_ratio)
-
-        target = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
-        # TODO: Remove ugly quick fix with patchify and instead calculate loss directly on image (maybe unpatchify mask?)
-        losses = self.loss(out, target, additional_data['mask'])
-
-        if val:
-            model_out = self.model.reconstruct(out, images, **additional_data)
-            img_prediction = model_out[0] # torch.cat((model_out[0], images[0]), dim=-1)
-            losses["img_out"] = img_prediction
+        # if val:
+        #     model_out = self.model.reconstruct(out, images, **additional_data)
+        #     img_prediction = model_out[0] # torch.cat((model_out[0], images[0]), dim=-1)
+        #     losses["img_out"] = img_prediction
 
         return losses

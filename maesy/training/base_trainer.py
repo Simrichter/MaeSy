@@ -136,7 +136,7 @@ class BaseTrainer(ABC):
             print(f"Warning: Unknown loss '{self.config.criterion}'")
             return None
 
-    def forward_model(self, images: torch.Tensor, targets: Optional[torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward_model(self, images: torch.Tensor, targets: Optional[torch.Tensor], val: bool) -> Dict[str, torch.Tensor]:
         """
         Manages the forward pass through the model.
         Can be overwritten to add model-specific preprocessing
@@ -153,7 +153,7 @@ class BaseTrainer(ABC):
 
             # Forward pass
             with torch.amp.autocast("cuda", enabled=self.config.use_amp):
-                losses = self.forward_model(images, targets)
+                losses = self.forward_model(images, targets, val=False)
                 loss = losses['loss']
 
             # Backward pass
@@ -198,7 +198,7 @@ class BaseTrainer(ABC):
         for batch in tqdm(self.val_loader, desc="Validation"):
             images, targets = handle_raw_batch(batch, self.device)
 
-            losses = self.forward_model(images, targets)
+            losses = self.forward_model(images, targets, val=True)
 
         imgs_to_log: dict[str, Image] = {k: wandb.Image(v * 255) for k, v in losses.items() if k.startswith('img_')}
         save_path = self.save_dir / "images"

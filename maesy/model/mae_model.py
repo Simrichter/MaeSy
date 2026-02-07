@@ -91,25 +91,25 @@ class MaskedAutoencoderViT(BaseModel):
 
     def reconstruct(self, out, orig_images = None, **kwargs):
         out = out.detach() * kwargs['mask'].unsqueeze(-1)
+        model_out = Utils.unpatchify(out, self.config.image_size, self.config.patch_size)
+        model_out = torch.clamp(model_out, 0, 255)  # Clamp to valid color range
         if orig_images is not None:
             orig_patches = Utils.patchify(orig_images, self.config.image_size, self.config.patch_size)
-            out += orig_patches * (1 - kwargs['mask']).unsqueeze(-1)
-
-        model_out = Utils.unpatchify(out, self.config.image_size,
-                                     self.config.patch_size)
+            given_patches = orig_patches * (1 - kwargs['mask']).unsqueeze(-1)
+            # model_out += given_patches
+            imgs_masked = Utils.unpatchify(given_patches, self.config.image_size, self.config.patch_size)
+            model_out += imgs_masked
+            model_out = torch.cat((imgs_masked, model_out), dim=-1)
         return model_out
 
     def infer(self, images, targets, **kwargs):
         # Get predictions
-        predictions, additional_data = self.model.forward(images, **kwargs)
-        img_preds = self.model.reconstruct(predictions, orig_images=images, **additional_data)
+        predictions, additional_data = self.forward(images, **kwargs)
+        img_preds = self.reconstruct(predictions, orig_images=images, **additional_data)
 
-        # clamp values to [0, 255]
-        img_preds = torch.clamp(img_preds, 0, 255)
-
-        patches = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
-        imgs_masked = Utils.unpatchify(patches * (1 - additional_data["mask"]).unsqueeze(-1),
-                                       self.model.config.image_size, self.model.config.patch_size)
-        img_preds = torch.cat((images, imgs_masked, img_preds), dim=-1)
+        # patches = Utils.patchify(images, self.model.config.image_size, self.model.config.patch_size)
+        # imgs_masked = Utils.unpatchify(patches * (1 - additional_data["mask"]).unsqueeze(-1),
+        #                                self.model.config.image_size, self.model.config.patch_size)
+        img_preds = torch.cat((images, img_preds), dim=-1)
 
         return img_preds, targets

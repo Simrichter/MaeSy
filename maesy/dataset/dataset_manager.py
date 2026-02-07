@@ -4,6 +4,8 @@ import os
 import json
 import shutil
 import zipfile
+from math import ceil
+
 import requests
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -110,14 +112,15 @@ class DatasetManager:
         """
         match cluster_method:
             case "sequential_similarity":
-                from maesy.dataset.clustering_methods.sequential_similarity import cluster
+                from maesy.dataset.clustering_methods.sequential_similarity import cluster_with_faiss as cluster
                 # For sequential similarity, num_clusters parameter is mapped to similarity_threshold
                 # Heuristic mapping: threshold = 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)
                 # - Higher num_clusters (e.g., 400) -> lower threshold (0.20) -> more diverse/dissimilar images kept
                 # - Lower num_clusters (e.g., 50) -> higher threshold (0.90) -> only very dissimilar images kept
                 # MAX_CLUSTERS_REFERENCE = 500 provides a reasonable range: [0.70, 0.95]
+                # TODO: Solve this
                 MAX_CLUSTERS_REFERENCE = 500
-                similarity_threshold = max(0.7, min(0.95, 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)))
+                similarity_threshold = 0.7 #max(0.7, min(0.95, 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)))
                 return cluster(folder_names, similarity_threshold=similarity_threshold, step=step, start_index=start_index)
             case "resnet_kmeans":
                 from maesy.dataset.clustering_methods.resnet_kmeans import cluster
@@ -159,6 +162,7 @@ class DatasetManager:
         if abs(sum(split_percentages) - 100.0) < 1e-6:
             split_percentages = [p/100.0 for p in split_percentages]
 
+
         # path = self.download_data(url, dataset_name, extract, force)
 
         dataset_dir = self.data_root / dataset_name
@@ -166,109 +170,117 @@ class DatasetManager:
         val_path = dataset_dir / "val"
         test_path = dataset_dir / "test"
         os.makedirs(dataset_dir, exist_ok=True)
-        os.makedirs(train_path, exist_ok=True)
-        os.makedirs(val_path, exist_ok=True)
-        os.makedirs(test_path, exist_ok=True)
+        if split_percentages[0]>0: os.makedirs(train_path, exist_ok=True)
+        if split_percentages[1]>0: os.makedirs(val_path, exist_ok=True)
+        if split_percentages[2]>0: os.makedirs(test_path, exist_ok=True)
 
-        if cluster_method is None:
-            # TODO: Make nice (loop over folders and call single method "handle_folder" or so)
-            for folder in folder_names:
-                folder_path = Path(folder)
-                if not folder_path.exists() or not folder_path.is_dir():
-                    print(f"WARNING: Folder {folder} does not exist or is not a directory. Skipping...")
-                    continue
-
-                image_files = [f for f in folder_path.iterdir() if
-                               f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
-                num_images = len(image_files)
-
-                if num_images == 0:
-                    print(f"WARNING: No image files found in folder {folder}. Skipping...")
-                    continue
-
-                # Shuffle images
-                random.shuffle(image_files)
-
-                # Calculate split indices
-                train_end = int(split_percentages[0] * num_images)
-                val_end = train_end + int(split_percentages[1] * num_images)
-
-                # Copy files to respective folders
-                for i, img_file in enumerate(tqdm(image_files, desc="Copying files"), start=start_index):
-                    if i%step != 0: #TODO: Also make this option possible with clustering?
+        def get_paths(): # folder_names, cluster_method, start_index=0, step=1
+            img_paths = []
+            if cluster_method is None:
+                for folder in folder_names:
+                    folder_path = Path(folder)
+                    if not folder_path.exists() or not folder_path.is_dir():
+                        print(f"WARNING: Folder {folder} does not exist or is not a directory. Skipping...")
                         continue
-                    if i < train_end:
-                        dest_path = train_path / img_file.name
-                    elif i < val_end:
-                        dest_path = val_path / img_file.name
+
+                    image_paths = [folder_path/f for f in folder_path.iterdir() if
+                                   f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']][start_index::step]
+                    if len(image_paths) == 0:
+                        print(f"WARNING: No image files found in folder {folder}. Skipping...")
+                        continue
+                    img_paths.extend(image_paths)
+                return img_paths
+            else:
+                folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=100,
+                                                step=step, start_index=start_index)
+
+                image_paths = [f for f in folder_path if
+                               f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
+
+                if len(image_paths) == 0:
+                    raise ValueError(f"WARNING: No image files found after clustering. Exiting...")
+                return image_paths
+
+        image_files = get_paths()
+        num_images = len(image_files)
+
+       # Calculate split indices
+        train_end = int(ceil(split_percentages[0] * num_images))
+        val_end = train_end + int(ceil(split_percentages[1] * num_images))
+        # Shuffle images
+        random.shuffle(image_files)
+
+        # Copy files to respective folders
+        for i, img_file in enumerate(tqdm(image_files, desc="Copying files")):
+            if i < train_end:
+                dest_path = train_path / img_file.name
+            elif i < val_end:
+                dest_path = val_path / img_file.name
+            else:
+                dest_path = test_path / img_file.name
+
+            if resize is None:
+                shutil.copy(img_file, dest_path)
+            else:
+                from PIL import Image
+                with Image.open(img_file) as img:
+                    if len(resize) == 2:
+                        img = img.resize((resize[0], resize[1]))
                     else:
-                        dest_path = test_path / img_file.name
+                        raise ValueError("WARNING: Resize parameter must be a list of two integers. Skipping resizing.")
+                    img.save(dest_path)
 
-                    if resize is None:
-                        # os.rename(img_file, dest_path)
-                        shutil.copy(img_file, dest_path)
-                    else:
-                        from PIL import Image
-                        with Image.open(img_file) as img:
-                            if len(resize) == 2:
-                                img = img.resize((resize[0], resize[1]))
-                            else:
-                                print("WARNING: Resize parameter must be a list of two integers. Skipping resizing.")
-                                shutil.copy(img_file, dest_path)
-                                continue
-                            img.save(dest_path)
-
-                if del_folders:
-                    print("Deleting original folder:", folder_path)
-                    shutil.rmtree(folder_path)
-                    # os.rmdir(folder_path)
-            # TODO: Add support for label files
-            return dataset_dir
-        else:
-            folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=100, step=step, start_index=start_index)
-
-            image_files = [f for f in folder_path if
-                           f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
-            num_images = len(image_files)
-
-            if num_images == 0:
-                print(f"WARNING: No image files found after clustering. Exiting...")
-                return dataset_dir
-
-            # Shuffle images
-            random.shuffle(image_files)
-
-            # Calculate split indices
-            train_end = int(split_percentages[0] * num_images)
-            val_end = train_end + int(split_percentages[1] * num_images)
-
-            # Copy files to respective folders
-            for i, img_file in enumerate(tqdm(image_files, desc="Copying files")):
-                if i < train_end:
-                    dest_path = train_path / img_file.name
-                elif i < val_end:
-                    dest_path = val_path / img_file.name
-                else:
-                    dest_path = test_path / img_file.name
-
-                if resize is None:
-                    shutil.copy(img_file, dest_path)
-                else:
-                    from PIL import Image
-                    with Image.open(img_file) as img:
-                        if len(resize) == 2:
-                            img = img.resize((resize[0], resize[1]))
-                        else:
-                            print("WARNING: Resize parameter must be a list of two integers. Skipping resizing.")
-                            shutil.copy(img_file, dest_path)
-                            continue
-                        img.save(dest_path)
-
-            if del_folders:
-                print("Deleting original folder:", folder_path)
-                shutil.rmtree(folder_path)
+            # if del_folders:
+            #     print("Deleting original folder:", folder_path)
+            #     shutil.rmtree(folder_path)
+                # os.rmdir(folder_path)
         # TODO: Add support for label files
         return dataset_dir
+    # else:
+    #     folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=100, step=step, start_index=start_index)
+    #
+    #     image_files = [f for f in folder_path if
+    #                    f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
+    #     num_images = len(image_files)
+    #
+    #     if num_images == 0:
+    #         print(f"WARNING: No image files found after clustering. Exiting...")
+    #         return dataset_dir
+    #
+    #     # Calculate split indices
+    #     train_end = int(ceil(split_percentages[0] * num_images))
+    #     val_end = train_end + int(ceil(split_percentages[1] * num_images))
+    #
+    #     # Shuffle images
+    #     random.shuffle(image_files)
+    #
+    #     # Copy files to respective folders
+    #     for i, img_file in enumerate(tqdm(image_files, desc="Copying files")):
+    #         if i < train_end:
+    #             dest_path = train_path / img_file.name
+    #         elif i < val_end:
+    #             dest_path = val_path / img_file.name
+    #         else:
+    #             dest_path = test_path / img_file.name
+    #
+    #         if resize is None:
+    #             shutil.copy(img_file, dest_path)
+    #         else:
+    #             from PIL import Image
+    #             with Image.open(img_file) as img:
+    #                 if len(resize) == 2:
+    #                     img = img.resize((resize[0], resize[1]))
+    #                 else:
+    #                     print("WARNING: Resize parameter must be a list of two integers. Skipping resizing.")
+    #                     shutil.copy(img_file, dest_path)
+    #                     continue
+    #                 img.save(dest_path)
+    #
+    #     if del_folders:
+    #         print("Deleting original folder:", folder_path)
+    #         shutil.rmtree(folder_path)
+    #     # TODO: Add support for label files
+    #     return dataset_dir
 
     def load_coco_annotations(self, annotation_file: str) -> Dict[str, Any]:
         """

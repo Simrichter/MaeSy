@@ -27,7 +27,7 @@ from maesy.evaluation.inferer import Inferer
 from maesy.model import ResnetFeatureExtractor, BaseModel
 
 
-def cluster(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, filetype=".jpg", step=1, start_index=0):
+def cluster(paths, similarity_threshold=0.85, batch_size=128, forward_scale=128, filetype=".jpg", step=1, start_index=0):
     """
     Select diverse images using sequential similarity-based filtering.
     
@@ -54,20 +54,22 @@ def cluster(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, 
     
     # Create dataset from all image directories
     multi_dataset = MultiDataset([
-        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype, step=step, start_index=start_index) 
+        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype, step=step, start_index=start_index)
         for path in paths
     ])
+    multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
+                                  drop_last=False)
     
-    # Get all image paths and sort by modification time
-    all_image_paths = [multi_dataset.get_image_path(i) for i in range(len(multi_dataset))]
-    
-    # Sort images by modification time to process in temporal order
-    sorted_indices = sorted(
-        range(len(all_image_paths)),
-        key=lambda i: Path(all_image_paths[i]).stat().st_mtime
-    )
-    
-    print(f"Processing {len(all_image_paths)} images in time order...")
+    # # Get all image paths and sort by modification time
+    # all_image_paths = [multi_dataset.get_image_path(i) for i in range(len(multi_dataset))]
+    #
+    # # Sort images by modification time to process in temporal order
+    # sorted_indices = sorted(
+    #     range(len(all_image_paths)),
+    #     key=lambda i: Path(all_image_paths[i]).stat().st_mtime
+    # )
+    #
+    # print(f"Processing {len(all_image_paths)} images in time order...")
     
     # Setup model for feature extraction
     model: BaseModel = ResnetFeatureExtractor("resnet50")
@@ -81,56 +83,53 @@ def cluster(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, 
     
     # Process images in batches for efficiency
     print("Extracting features and selecting representatives...")
-    for batch_start in tqdm(range(0, len(sorted_indices), batch_size)):
-        batch_indices = sorted_indices[batch_start:batch_start + batch_size]
-        
-        # Load and process batch
-        batch_images = []
-        batch_paths = []
-        for idx in batch_indices:
-            img = multi_dataset[idx]
-            batch_images.append(img)
-            batch_paths.append(all_image_paths[idx])
-        
-        # Stack into batch tensor
-        batch_tensor = torch.stack(batch_images).to(device)
-        
-        # Extract features
-        with torch.no_grad():
-            features = model(batch_tensor)
-            # Normalize features for cosine similarity
-            features = features / (features.norm(dim=1, keepdim=True) + 1e-8)
-        
-        features_cpu = features.cpu().numpy()
-        
-        # Process each image in the batch
-        for i, (feature, img_path) in enumerate(zip(features_cpu, batch_paths)):
-            if len(representative_embeddings) == 0:
-                # First image is always a representative
+    # for batch_start in tqdm(range(0, len(sorted_indices), batch_size)):
+    #     batch_indices = sorted_indices[batch_start:batch_start + batch_size]
+    #
+    #     # Load and process batch
+    #     batch_images = []
+    #     batch_paths = []
+    #     for idx in batch_indices:
+    #         img = multi_dataset[idx]
+    #         batch_images.append(img)
+    #         batch_paths.append(all_image_paths[idx])
+    #
+    #     # Stack into batch tensor
+    #     batch_tensor = torch.stack(batch_images).to(device)
+    inferer = Inferer(model=model, data_loader=multi_dataloader, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    all_predictions, _ = inferer.infer()
+    features = torch.cat(all_predictions)
+    features = features / (features.norm(dim=1, keepdim=True) + 1e-8)
+    features = features.to("cpu").detach().numpy()
+
+    # Process each image in the batch
+    for i, feature in enumerate(tqdm(features)):
+        if len(representative_embeddings) == 0:
+            # First image is always a representative
+            representative_embeddings.append(feature)
+            representative_paths.append(multi_dataset.get_image_path(i))
+        else:
+            # Compute cosine similarity to all existing representatives
+            # Since features are normalized, cosine similarity is just the dot product
+            similarities = np.array([
+                np.dot(feature, rep_emb)
+                for rep_emb in representative_embeddings
+            ])
+
+            max_similarity = similarities.max()
+
+            # Keep image if it's sufficiently different from all representatives
+            if max_similarity < similarity_threshold:
                 representative_embeddings.append(feature)
-                representative_paths.append(img_path)
-            else:
-                # Compute cosine similarity to all existing representatives
-                # Since features are normalized, cosine similarity is just the dot product
-                similarities = np.array([
-                    np.dot(feature, rep_emb) 
-                    for rep_emb in representative_embeddings
-                ])
-                
-                max_similarity = similarities.max()
-                
-                # Keep image if it's sufficiently different from all representatives
-                if max_similarity < similarity_threshold:
-                    representative_embeddings.append(feature)
-                    representative_paths.append(img_path)
+                representative_paths.append(multi_dataset.get_image_path(i))
     
-    print(f"Selected {len(representative_paths)} representative images out of {len(all_image_paths)}")
-    print(f"Reduction: {100 * (1 - len(representative_paths) / len(all_image_paths)):.1f}%")
+    print(f"Selected {len(representative_paths)} representative images out of {features.shape[0]}")
+    print(f"Reduction: {100 * (1 - len(representative_paths) / features.shape[0]):.1f}%")
     
     return representative_paths
 
 
-def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_scale=128, filetype=".jpg", step=1, start_index=0):
+def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward_scale=128, filetype=".jpg", step=1, start_index=0):
     """
     Sequential similarity-based clustering with FAISS for faster similarity search.
     
@@ -160,23 +159,25 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_
         transforms.Resize(size=(forward_scale, forward_scale)),
         transforms.ToTensor(),
     ])
-    
+
     # Create dataset from all image directories
     multi_dataset = MultiDataset([
-        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype, step=step, start_index=start_index) 
+        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype, step=step, start_index=start_index)
         for path in paths
     ])
+    multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
+                                  drop_last=False, in_order=True)
     
-    # Get all image paths and sort by modification time
-    all_image_paths = [multi_dataset.get_image_path(i) for i in range(len(multi_dataset))]
+    # # Get all image paths and sort by modification time
+    # all_image_paths = [multi_dataset.get_image_path(i) for i in range(len(multi_dataset))]
+    #
+    # # Sort images by modification time to process in temporal order
+    # sorted_indices = sorted(
+    #     range(len(all_image_paths)),
+    #     key=lambda i: Path(all_image_paths[i]).stat().st_mtime
+    # )
     
-    # Sort images by modification time to process in temporal order
-    sorted_indices = sorted(
-        range(len(all_image_paths)),
-        key=lambda i: Path(all_image_paths[i]).stat().st_mtime
-    )
-    
-    print(f"Processing {len(all_image_paths)} images in time order with FAISS...")
+    # print(f"Processing {len(all_image_paths)} images in time order with FAISS...")
     
     # Setup model for feature extraction
     model: BaseModel = ResnetFeatureExtractor("resnet50")
@@ -197,20 +198,21 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_
     
     # Process images in batches for efficiency
     print("Extracting features and selecting representatives with FAISS...")
-    for batch_start in tqdm(range(0, len(sorted_indices), batch_size)):
-        batch_indices = sorted_indices[batch_start:batch_start + batch_size]
-        
-        # Load and process batch
-        batch_images = []
-        batch_paths = []
-        for idx in batch_indices:
-            img = multi_dataset[idx]
-            batch_images.append(img)
-            batch_paths.append(all_image_paths[idx])
-        
-        # Stack into batch tensor
-        batch_tensor = torch.stack(batch_images).to(device)
-        
+    # for batch_start in tqdm(range(0, len(sorted_indices), batch_size)):
+    #     batch_indices = sorted_indices[batch_start:batch_start + batch_size]
+    #
+    #     # Load and process batch
+    #     batch_images = []
+    #     batch_paths = []
+    #     for idx in batch_indices:
+    #         img = multi_dataset[idx]
+    #         batch_images.append(img)
+    #         batch_paths.append(all_image_paths[idx])
+    #
+    #     # Stack into batch tensor
+    #     batch_tensor = torch.stack(batch_images).to(device)
+    for i, batch_tensor in enumerate(tqdm(multi_dataloader)):
+        batch_tensor = batch_tensor.to(device)
         # Extract features
         with torch.no_grad():
             features = model(batch_tensor)
@@ -220,10 +222,11 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_
         features_cpu = features.cpu().numpy()
         
         # Process each image in the batch
-        for i, (feature, img_path) in enumerate(zip(features_cpu, batch_paths)):
+        for j, feature in enumerate(features_cpu):
             if index.ntotal == 0:
                 # First image is always a representative
                 index.add(feature.reshape(1, -1).astype(np.float32))
+                img_path = multi_dataset.get_image_path(i*batch_size+j)
                 representative_paths.append(img_path)
             else:
                 # Search for nearest neighbor in FAISS index
@@ -234,9 +237,10 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=64, forward_
                 # Keep image if it's sufficiently different from all representatives
                 if max_similarity < similarity_threshold:
                     index.add(feature_query)
+                    img_path = multi_dataset.get_image_path(i*batch_size+j)
                     representative_paths.append(img_path)
     
-    print(f"Selected {len(representative_paths)} representative images out of {len(all_image_paths)}")
-    print(f"Reduction: {100 * (1 - len(representative_paths) / len(all_image_paths)):.1f}%")
+    # print(f"Selected {len(representative_paths)} representative images out of {len(all_image_paths)}")
+    # print(f"Reduction: {100 * (1 - len(representative_paths) / len(all_image_paths)):.1f}%")
     
     return representative_paths

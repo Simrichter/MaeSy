@@ -18,7 +18,7 @@ def testMAE():
     image_size = 224
     batch_size = 128
     num_epochs = 200
-    mask_ratio = 0.5
+    mask_ratio = 0.5 # TODO: Make scheduled
 
     # Create training config
     mae_config = MAEConfig(
@@ -66,7 +66,7 @@ def testMAE():
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    dataset_path = Path(r"/home/simon/Desktop/maesy-training/data/BeijingDataset")
+    dataset_path = Path(r"/home/simon/Desktop/maesy-training/data/cluster_test")
 
     train_dataset = UnlabeledDataset(
         dataset_path/"train",
@@ -130,7 +130,7 @@ def testMAE():
         config=pretraining_config
     )
 
-    checkpoint = "/home/simon/Desktop/maesy-training/mae_checkpoints/pious-vortex-40/latest_model.pth"
+    checkpoint = "/home/simon/Desktop/maesy-training/mae_checkpoints/super-flower-43/latest_model.pth"
     if Path(checkpoint).exists():
         pretrainer.load_checkpoint(checkpoint)
 

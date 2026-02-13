@@ -71,7 +71,7 @@ def testMAE():
     train_dataset = UnlabeledDataset(
         dataset_path/"train",
         transforms=train_transforms,
-        repeat_factor=2,
+        # repeat_factor=2,
         # use_first_n=384,
         filetype=".jpg"
     )

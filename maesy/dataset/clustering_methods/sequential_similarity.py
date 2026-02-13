@@ -129,7 +129,7 @@ def cluster(paths, similarity_threshold=0.85, batch_size=128, forward_scale=128,
     return representative_paths
 
 
-def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward_scale=128, filetype=".jpg", step=1, start_index=0):
+def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward_scale=224, filetype=".jpg", step=1, start_index=0):
     """
     Sequential similarity-based clustering with FAISS for faster similarity search.
     
@@ -168,49 +168,27 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward
     multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
                                   drop_last=False, in_order=True)
     
-    # # Get all image paths and sort by modification time
-    # all_image_paths = [multi_dataset.get_image_path(i) for i in range(len(multi_dataset))]
-    #
-    # # Sort images by modification time to process in temporal order
-    # sorted_indices = sorted(
-    #     range(len(all_image_paths)),
-    #     key=lambda i: Path(all_image_paths[i]).stat().st_mtime
-    # )
-    
-    # print(f"Processing {len(all_image_paths)} images in time order with FAISS...")
-    
     # Setup model for feature extraction
     model: BaseModel = ResnetFeatureExtractor("resnet50")
     model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     
-    # Get embedding dimension from model
-    with torch.no_grad():
-        dummy_input = torch.zeros(1, 3, forward_scale, forward_scale).to(device)
-        dummy_output = model(dummy_input)
-        embedding_dim = dummy_output.shape[1]
-    
+    # # Get embedding dimension from model
+    # with torch.no_grad():
+    #     dummy_input = torch.zeros(1, 3, forward_scale, forward_scale).to(device)
+    #     dummy_output = model(dummy_input)
+    #     embedding_dim = dummy_output.shape[1]
+
+    feature_dim = 2048  # ResNet50 feature dimension after global average pooling
     # Initialize FAISS index for cosine similarity (inner product with normalized vectors)
-    index = faiss.IndexFlatIP(embedding_dim)
-    
+    index = faiss.IndexFlatIP(feature_dim)
+
     representative_paths = []
     
     # Process images in batches for efficiency
     print("Extracting features and selecting representatives with FAISS...")
-    # for batch_start in tqdm(range(0, len(sorted_indices), batch_size)):
-    #     batch_indices = sorted_indices[batch_start:batch_start + batch_size]
-    #
-    #     # Load and process batch
-    #     batch_images = []
-    #     batch_paths = []
-    #     for idx in batch_indices:
-    #         img = multi_dataset[idx]
-    #         batch_images.append(img)
-    #         batch_paths.append(all_image_paths[idx])
-    #
-    #     # Stack into batch tensor
-    #     batch_tensor = torch.stack(batch_images).to(device)
+
     for i, batch_tensor in enumerate(tqdm(multi_dataloader)):
         batch_tensor = batch_tensor.to(device)
         # Extract features
@@ -244,3 +222,6 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward
     # print(f"Reduction: {100 * (1 - len(representative_paths) / len(all_image_paths)):.1f}%")
     
     return representative_paths
+
+if __name__=="__main__":
+    used_paths = cluster_with_faiss([r"/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out"])

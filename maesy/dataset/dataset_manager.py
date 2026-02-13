@@ -8,7 +8,7 @@ from math import ceil
 
 import requests
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from tqdm import tqdm
 import tarfile
 import random
@@ -113,14 +113,8 @@ class DatasetManager:
         match cluster_method:
             case "sequential_similarity":
                 from maesy.dataset.clustering_methods.sequential_similarity import cluster_with_faiss as cluster
-                # For sequential similarity, num_clusters parameter is mapped to similarity_threshold
-                # Heuristic mapping: threshold = 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)
-                # - Higher num_clusters (e.g., 400) -> lower threshold (0.20) -> more diverse/dissimilar images kept
-                # - Lower num_clusters (e.g., 50) -> higher threshold (0.90) -> only very dissimilar images kept
-                # MAX_CLUSTERS_REFERENCE = 500 provides a reasonable range: [0.70, 0.95]
-                # TODO: Solve this
-                MAX_CLUSTERS_REFERENCE = 500
-                similarity_threshold = 0.7 #max(0.7, min(0.95, 1.0 - (num_clusters / MAX_CLUSTERS_REFERENCE)))
+                # TODO: Make this a parameter?
+                similarity_threshold = 0.7
                 return cluster(folder_names, similarity_threshold=similarity_threshold, step=step, start_index=start_index)
             case "resnet_kmeans":
                 from maesy.dataset.clustering_methods.resnet_kmeans import cluster
@@ -128,12 +122,34 @@ class DatasetManager:
             case _:
                 raise ValueError(f"Unknown clustering method {cluster_method}")
 
+    @staticmethod
+    def _copy_resize(source_paths: List[Path], target_paths: List[Path], resize: int | List[int] | None, label_target_paths: Optional[List[Path]] = None):
+        if len(resize)>2:
+            raise ValueError("Too many values in resize. Resize parameter must either be None or a list of one or two integers: [WIDTH] or [WIDTH HEIGHT]")
+        if resize is not None:
+            from PIL import Image
+            for img_file, target_path in tqdm(zip(source_paths, target_paths), esc=f"Copying and resizing files"):
+                if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                    with Image.open(img_file) as img:
+                        img = img.resize((resize[0], resize[1] if len(resize) == 2 else resize[0]))
+                        img.save(target_path / img_file.name)
+        else:
+            for img_file, target_path in tqdm(zip(source_paths, target_paths), esc=f"Copying files"):
+                shutil.copy(img_file, target_path)
+
+        if label_target_paths is not None:
+            for img_file, target_path in tqdm(zip(source_paths, label_target_paths), esc=f"Copying label files"):
+                label_file = img_file.with_suffix('.txt')  # Assuming label files have the same name but .json extension
+                if label_file.exists():
+                    shutil.copy(label_file, target_path / label_file.name)
+
 
     def create_dataset(self,
                        folder_names: list[str],
                        dataset_name: str,
                        split_percentages: list[float] = None,
                        resize: list[int] = None,
+                       with_labels: bool = True,
                        step: int = 1,
                        start_index: int = 0,
                        del_folders: bool = False,
@@ -147,6 +163,7 @@ class DatasetManager:
             :param dataset_name: Name of the dataset
             :param split_percentages: List of percentages for the data subsets in format [train, val, test]. Defaults to [0.8, 0.1, 0.1] if not/incorrectly specified
             :param resize: Resize images to WIDTH HEIGHT or WIDTH² if HEIGHT not specified
+            :param with_labels: Whether to include label files in coco style (.txt files with same name as images). Default=True
             :param step: Step size for selecting images from folders. Default=1 (use all images)
             :param start_index: Start index for selecting images from folders. Default=0
             :param del_folders: Whether to delete the original folders after use
@@ -162,17 +179,16 @@ class DatasetManager:
         if abs(sum(split_percentages) - 100.0) < 1e-6:
             split_percentages = [p/100.0 for p in split_percentages]
 
-
-        # path = self.download_data(url, dataset_name, extract, force)
-
+        # Set up dataset folder structure
+        # Always assuming YOLO-Style dataset structure (with train/val/test top-level folders and images/labels subfolders)
+        # only creating the split folders that are actually needed based on split_percentages
         dataset_dir = self.data_root / dataset_name
-        train_path = dataset_dir / "train"
-        val_path = dataset_dir / "val"
-        test_path = dataset_dir / "test"
+        split_paths = [dataset_dir / split for i, split in enumerate(["train", "val", "test"]) if split_percentages[i]>0]
         os.makedirs(dataset_dir, exist_ok=True)
-        if split_percentages[0]>0: os.makedirs(train_path, exist_ok=True)
-        if split_percentages[1]>0: os.makedirs(val_path, exist_ok=True)
-        if split_percentages[2]>0: os.makedirs(test_path, exist_ok=True)
+        for split_path in split_paths:
+            os.makedirs(split_path / "images", exist_ok=True)
+            if with_labels:
+                os.makedirs(split_path / "labels", exist_ok=True)
 
         def get_paths(): # folder_names, cluster_method, start_index=0, step=1
             img_paths = []
@@ -191,12 +207,10 @@ class DatasetManager:
                     img_paths.extend(image_paths)
                 return img_paths
             else:
-                folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=100,
+                folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=500,
                                                 step=step, start_index=start_index)
-
                 image_paths = [f for f in folder_path if
                                f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
-
                 if len(image_paths) == 0:
                     raise ValueError(f"WARNING: No image files found after clustering. Exiting...")
                 return image_paths
@@ -207,131 +221,22 @@ class DatasetManager:
        # Calculate split indices
         train_end = int(ceil(split_percentages[0] * num_images))
         val_end = train_end + int(ceil(split_percentages[1] * num_images))
-        # Shuffle images
         random.shuffle(image_files)
 
-        # Copy files to respective folders
-        for i, img_file in enumerate(tqdm(image_files, desc="Copying files")):
-            if i < train_end:
-                dest_path = train_path / img_file.name
-            elif i < val_end:
-                dest_path = val_path / img_file.name
-            else:
-                dest_path = test_path / img_file.name
-
-            if resize is None:
-                shutil.copy(img_file, dest_path)
-            else:
-                from PIL import Image
-                with Image.open(img_file) as img:
-                    if len(resize) == 2:
-                        img = img.resize((resize[0], resize[1]))
-                    else:
-                        raise ValueError("WARNING: Resize parameter must be a list of two integers. Skipping resizing.")
-                    img.save(dest_path)
+        target_paths = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[2])/f"images/{img_file.name}" for i, img_file in enumerate(image_files)]
+        if with_labels:
+            target_paths_lbls = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[2])/f"labels/{img_file.with_suffix(".txt").name}" for i, img_file in enumerate(image_files)]
+        else:
+            target_paths_lbls = None
+        self._copy_resize(image_files, target_paths, resize, target_paths_lbls)
 
             # if del_folders:
             #     print("Deleting original folder:", folder_path)
             #     shutil.rmtree(folder_path)
                 # os.rmdir(folder_path)
+
         # TODO: Add support for label files
         return dataset_dir
-    # else:
-    #     folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=100, step=step, start_index=start_index)
-    #
-    #     image_files = [f for f in folder_path if
-    #                    f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
-    #     num_images = len(image_files)
-    #
-    #     if num_images == 0:
-    #         print(f"WARNING: No image files found after clustering. Exiting...")
-    #         return dataset_dir
-    #
-    #     # Calculate split indices
-    #     train_end = int(ceil(split_percentages[0] * num_images))
-    #     val_end = train_end + int(ceil(split_percentages[1] * num_images))
-    #
-    #     # Shuffle images
-    #     random.shuffle(image_files)
-    #
-    #     # Copy files to respective folders
-    #     for i, img_file in enumerate(tqdm(image_files, desc="Copying files")):
-    #         if i < train_end:
-    #             dest_path = train_path / img_file.name
-    #         elif i < val_end:
-    #             dest_path = val_path / img_file.name
-    #         else:
-    #             dest_path = test_path / img_file.name
-    #
-    #         if resize is None:
-    #             shutil.copy(img_file, dest_path)
-    #         else:
-    #             from PIL import Image
-    #             with Image.open(img_file) as img:
-    #                 if len(resize) == 2:
-    #                     img = img.resize((resize[0], resize[1]))
-    #                 else:
-    #                     print("WARNING: Resize parameter must be a list of two integers. Skipping resizing.")
-    #                     shutil.copy(img_file, dest_path)
-    #                     continue
-    #                 img.save(dest_path)
-    #
-    #     if del_folders:
-    #         print("Deleting original folder:", folder_path)
-    #         shutil.rmtree(folder_path)
-    #     # TODO: Add support for label files
-    #     return dataset_dir
-
-    def load_coco_annotations(self, annotation_file: str) -> Dict[str, Any]:
-        """
-        Load COCO format annotations.
-        
-        Args:
-            annotation_file: Path to COCO annotation JSON file
-            
-        Returns:
-            Dictionary containing COCO annotations
-        """
-        with open(annotation_file, 'r') as f:
-            annotations = json.load(f)
-        return annotations
-
-    def prepare_dataset(
-            self,
-            dataset_name: str,
-            images_dir: str,
-            annotations_file: str,
-            split: str = "train"
-    ) -> Dict[str, Any]:
-        """
-        Prepare dataset for training/evaluation.
-        
-        Args:
-            dataset_name: Name of the dataset
-            images_dir: Directory containing images
-            annotations_file: Path to annotations file
-            split: Dataset split (train/val/test)
-            
-        Returns:
-            Dictionary with dataset information
-        """
-        dataset_info = {
-            "name": dataset_name,
-            "split": split,
-            "images_dir": images_dir,
-            "annotations_file": annotations_file,
-            "num_images": 0,
-            "num_annotations": 0,
-            "categories": []
-        }
-
-        if os.path.exists(annotations_file):
-            annotations = self.load_coco_annotations(annotations_file)
-            dataset_info["num_images"] = len(annotations.get("images", []))
-            dataset_info["num_annotations"] = len(annotations.get("annotations", []))
-            dataset_info["categories"] = annotations.get("categories", [])
-
-        return dataset_info
 
     def list_datasets(self) -> list:
         """

@@ -49,12 +49,14 @@ class UnlabeledDataset(Dataset):
         """Return number of images in dataset."""
         return len(self.images)
     
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
+    def __getitem__(self, idx: int) -> torch.Tensor:
         """
-        Get image and annotations at index.
+        Get image at index.
+        If transforms are provided, they are applied to the image before returning it.
+        Otherwise, the image is returned as a tensor.
         
         Args:
-            idx: Index
+            :param idx: Index
             
         Returns:
             The image as a tensor

@@ -1,36 +1,45 @@
-from typing import Optional
+"""Trainer for Object Detection models."""
+
+from typing import Optional, List, Dict
 
 import torch
 
-from ..model.components import Utils
-
 from maesy.training import BaseTrainer
 
+
 class DetectionTrainer(BaseTrainer):
-    """Trainer for Masked Autoencoder Vision Transformer (MAE ViT) models.
+    """Trainer for Object Detection Vision Transformer models.
 
     This trainer handles the training loop, loss computation, and optimization
-    specific to MAE ViT models.
+    specific to object detection models using the DetectionLoss.
     """
 
-    def forward_model(self, images: torch.Tensor, targets: Optional[torch.Tensor], val: bool) -> dict[str, torch.Tensor]:
+    def forward_model(self, images: torch.Tensor, targets: Optional[List[Dict[str, torch.Tensor]]], val: bool) -> Dict[str, torch.Tensor]:
         """
         Forward pass through the model.
 
         Args:
-            :param images: Input images [B, C, H, W].
-            :param targets: Target images for reconstruction (are not used in MAE training, only there for consistency with superclass).
-            :param val: Whether this is a validation pass
+            images: Input images [B, C, H, W]
+            targets: List of target dictionaries containing 'boxes' and 'labels'
+            val: Whether this is a validation pass
 
         Returns:
-            model_out: The output from the model after postprocessing [B, C, H, W].
+            Dictionary of losses from the loss function
         """
-        out, additional_data = self.model.forward(images, mask_ratio=0)
-        losses = self.loss(out, targets)
-
-        # if val:
-        #     model_out = self.model.reconstruct(out, images, **additional_data)
-        #     img_prediction = model_out[0] # torch.cat((model_out[0], images[0]), dim=-1)
-        #     losses["img_out"] = img_prediction
+        # Get model predictions
+        predictions = self.model.forward(images)
+        
+        # Move targets to device
+        if targets is not None:
+            targets_device = []
+            for target in targets:
+                targets_device.append({
+                    'boxes': target['boxes'].to(self.device, non_blocking=True),
+                    'labels': target['labels'].to(self.device, non_blocking=True)
+                })
+            targets = targets_device
+        
+        # Compute loss
+        losses = self.loss(predictions, targets)
 
         return losses

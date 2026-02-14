@@ -75,7 +75,7 @@ class BoundingBox:
         w = float(splits[3])
         h = float(splits[4])
 
-        return cls(cls_id, cx, cy, w, h, normalized)
+        return cls.from_xywh(cls_id, cx, cy, w, h, normalized)
 
     def cls(self):
         return self.cls_id

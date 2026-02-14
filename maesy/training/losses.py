@@ -171,7 +171,7 @@ class DetectionLoss(BaseLoss):
 
         for i, target in enumerate(targets):
             tgt_ids = target['labels']
-            tgt_bbox = target['boxes'].unsqueeze(0)
+            tgt_bbox = target['boxes']
 
             if len(tgt_ids) == 0:
                 indices.append((torch.tensor([], dtype=torch.int64), torch.tensor([], dtype=torch.int64)))

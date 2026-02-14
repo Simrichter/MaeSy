@@ -251,3 +251,19 @@ class Utils:
         mask = torch.gather(mask, dim=1, index=ids_restore)
 
         return x_masked, mask, ids_shuffle
+
+    @staticmethod
+    def create_sequential_ids(batch_size: int, num_patches: int, device: torch.device = None) -> torch.Tensor:
+        """
+        Create sequential patch IDs for non-masked forward passes.
+        
+        Args:
+            batch_size: Batch size
+            num_patches: Number of patches
+            device: Device to create tensor on (optional)
+            
+        Returns:
+            ids: [B, N] sequential indices
+        """
+        ids = torch.arange(0, num_patches, device=device).unsqueeze(0).expand(batch_size, -1)
+        return ids

@@ -1,30 +1,31 @@
-from dataclasses import dataclass
+"""Vision Transformer for Object Detection using BaseModel framework."""
 
+from dataclasses import dataclass
 import torch
 
-from maesy.model import BaseModel
-from maesy.model.backbones import TransformerBackboneConfig, TransformerBackbone
-from maesy.model.components import Utils
-from maesy.model.heads import DetectionHead, DetectionHeadConfig
+from .base_model import BaseModel
+from .backbones import TransformerBackbone, TransformerBackboneConfig
+from .heads import DetectionHead, DetectionHeadConfig
+from .components import Utils
 
 
 @dataclass
-class TransformerDetectorConfig:
+class ViTDetectorConfig:
     """Configuration for Vision Transformer Detector model."""
-
+    
     # Image parameters
     image_size: int = 224
     patch_size: int = 16
     in_channels: int = 3
-
-    # Transformer parameters
+    
+    # Transformer backbone parameters
     embed_dim: int = 768
     num_layers: int = 12
     num_heads: int = 12
     mlp_ratio: float = 4.0
     dropout: float = 0.1
     attention_dropout: float = 0.1
-
+    
     # Detection head parameters
     num_classes: int = 80
     num_queries: int = 100
@@ -38,29 +39,34 @@ class TransformerDetectorConfig:
     bbox_loss_coef: float = 5.0
     class_loss_coef: float = 1.0
     giou_loss_coef: float = 2.0
-
+    
     def __post_init__(self):
         """Validate configuration."""
         assert self.image_size % self.patch_size == 0, \
             f"Image size {self.image_size} must be divisible by patch size {self.patch_size}"
         self.num_patches = (self.image_size // self.patch_size) ** 2
 
-class TransformerDetectionModel(BaseModel):
-    """Transformer-based Object Detection Model.
+
+class ViTDetector(BaseModel):
+    """Vision Transformer for Object Detection.
     
-    This model can utilize a pretrained MAE TransformerBackbone for object detection.
-    It combines TransformerBackbone with DetectionHead following the BaseModel framework.
+    This model implements a ViT-based object detection architecture following
+    the BaseModel framework by combining:
+    - TransformerBackbone: Encodes image patches into feature representations
+    - DetectionHead: Decodes features into bounding box predictions
     """
-
-    def __init__(self, config: TransformerDetectorConfig):
+    
+    def __init__(self, config: ViTDetectorConfig):
         """
-        Initialize Transformer Detection model.
-
+        Initialize ViT Detector model.
+        
         Args:
             config: Model configuration
         """
         super().__init__()
         self.config = config
+        
+        # Create backbone configuration
         backbone_config = TransformerBackboneConfig(
             image_size=config.image_size,
             patch_size=config.patch_size,
@@ -73,7 +79,8 @@ class TransformerDetectionModel(BaseModel):
             attention_dropout=config.attention_dropout
         )
         self.backbone = TransformerBackbone(backbone_config)
-
+        
+        # Create detection head configuration
         head_config = DetectionHeadConfig(
             embed_dim=config.embed_dim,
             num_classes=config.num_classes,
@@ -85,9 +92,8 @@ class TransformerDetectionModel(BaseModel):
             hidden_dim=config.hidden_dim
         )
         self.head = DetectionHead(head_config)
-
-
-    def forward(self, x, **kwargs):
+    
+    def forward(self, x: torch.Tensor, **kwargs):
         """
         Forward pass through the model.
         
@@ -99,8 +105,13 @@ class TransformerDetectionModel(BaseModel):
                 - pred_logits: Class predictions [B, num_queries, num_classes + 1]
                 - pred_boxes: Bounding box predictions [B, num_queries, 4]
         """
+        # Patchify the input images
         x = Utils.patchify(x, self.config.image_size, self.config.patch_size)
-        # No masking for detection - use sequential ids
+        
+        # Create sequential ids_shuffle (no masking for detection)
         ids_shuffle = Utils.create_sequential_ids(x.shape[0], x.shape[1], device=x.device)
+        
+        # Pass through backbone and head using BaseModel's forward
         out = super().forward(x, ids_shuffle=ids_shuffle)
+        
         return out

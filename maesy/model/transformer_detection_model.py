@@ -101,6 +101,6 @@ class TransformerDetectionModel(BaseModel):
         """
         x = Utils.patchify(x, self.config.image_size, self.config.patch_size)
         # No masking for detection - use sequential ids
-        ids_shuffle = torch.arange(0, x.shape[1], device=x.device).unsqueeze(0).expand(x.shape[0], -1)
+        ids_shuffle = Utils.create_sequential_ids(x.shape[0], x.shape[1], device=x.device)
         out = super().forward(x, ids_shuffle=ids_shuffle)
         return out

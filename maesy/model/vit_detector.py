@@ -109,7 +109,7 @@ class ViTDetector(BaseModel):
         x = Utils.patchify(x, self.config.image_size, self.config.patch_size)
         
         # Create sequential ids_shuffle (no masking for detection)
-        ids_shuffle = torch.arange(0, x.shape[1], device=x.device).unsqueeze(0).expand(x.shape[0], -1)
+        ids_shuffle = Utils.create_sequential_ids(x.shape[0], x.shape[1], device=x.device)
         
         # Pass through backbone and head using BaseModel's forward
         out = super().forward(x, ids_shuffle=ids_shuffle)

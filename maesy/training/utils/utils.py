@@ -1,4 +1,4 @@
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, Tuple
 
 import torch
 from torch.utils.data import Dataset
@@ -27,7 +27,7 @@ def handle_raw_batch(batch: Any, device: torch.device) -> tuple[torch.Tensor, Op
     return images, targets
 
 
-def collate_detection_fn(batch: List[tuple]) -> tuple[torch.Tensor, List[Dict[str, torch.Tensor]]]:
+def collate_detection_fn(batch: List[tuple]) -> Tuple[torch.Tensor, List[Dict[str, torch.Tensor]]]:
     """
     Custom collate function for object detection dataset.
     

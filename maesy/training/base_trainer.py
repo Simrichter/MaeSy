@@ -15,7 +15,7 @@ from wandb import Image
 
 from .config import TrainingConfig
 from .losses import DetectionLoss, MaskedMSE, BaseLoss
-from ..model import VisionTransformerDetector, ModelConfig, BaseModel
+from ..model import ModelConfig, BaseModel
 from .utils import handle_raw_batch
 from ..model_tools.checkpoint_handler import CheckpointHandler
 
@@ -28,7 +28,8 @@ class BaseTrainer(ABC):
             train_loader: DataLoader,
             project_name: str,
             val_loader: Optional[DataLoader] = None,
-            config: Optional[TrainingConfig] = None
+            config: Optional[TrainingConfig] = None,
+            enable_wandb: bool = True
     ):
         """
         Initialize trainer.
@@ -55,16 +56,18 @@ class BaseTrainer(ABC):
         self.scheduler = self._create_scheduler()
 
         self.loss: BaseLoss = self._create_loss()
+        self.enable_wandb = enable_wandb
 
-        # Setup wandb
-        self.wandb_run = wandb.init(
-            entity="simon-richter-tu-dortmund",
-            project=project_name,
-            config=asdict(self.config)
-        )
+        if self.enable_wandb:
+            # Setup wandb
+            self.wandb_run = wandb.init(
+                entity="simon-richter-tu-dortmund",
+                project=project_name,
+                config=asdict(self.config)
+            )
 
         # Setup directories
-        self.save_dir = Path(self.config.save_dir)/self.wandb_run.name
+        self.save_dir = Path(self.config.save_dir)/(self.wandb_run.name if self.enable_wandb else "offline_run")
         self.checkpoint_handler = CheckpointHandler(self.save_dir, self.device)
 
         # Training state
@@ -180,7 +183,7 @@ class BaseTrainer(ABC):
             if self.global_step % self.config.log_frequency == 0:
                 data = {f"train/{k}": v.item() for k, v in losses.items() if not k.startswith('img_')}
                 data['train/lr'] = self.optimizer.param_groups[0]['lr']
-                self.wandb_run.log(data=data, step=self.global_step, commit=True)
+                if self.enable_wandb: self.wandb_run.log(data=data, step=self.global_step, commit=True)
 
             self.global_step += 1
 
@@ -200,14 +203,16 @@ class BaseTrainer(ABC):
 
             losses = self.forward_model(images, targets, val=True)
 
-        imgs_to_log: dict[str, Image] = {k: wandb.Image(v * 255) for k, v in losses.items() if k.startswith('img_')}
+
         save_path = self.save_dir / "images"
         save_path.mkdir(parents=True, exist_ok=True)
         for name, img in losses.items():
             if name.startswith('img_'):
                 save_image(img, f"{save_path}/predicted_image{self.global_step}_{name}.png")
         metrics = self.loss.get_metrics()
-        metrics.update(imgs_to_log)
+        if self.enable_wandb:
+            imgs_to_log: dict[str, Image] = {k: wandb.Image(v * 255) for k, v in losses.items() if k.startswith('img_')}
+            metrics.update(imgs_to_log)
 
         return metrics
 
@@ -224,11 +229,14 @@ class BaseTrainer(ABC):
 
             # Train
             train_metrics = self.train_epoch()
+            # Step scheduler
+            if self.scheduler is not None:
+                self.scheduler.step()
 
             # Validate
             if self.val_loader is not None:
                 val_metrics = {f"val/{k}": v for k, v in self.validate().items()}  # Preparations for logging
-                self.wandb_run.log(data=val_metrics, step=self.global_step)
+                if self.enable_wandb: self.wandb_run.log(data=val_metrics, step=self.global_step)
 
                 print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
                       f"Train Loss: {train_metrics['total_loss']:.4f}, "
@@ -242,10 +250,6 @@ class BaseTrainer(ABC):
                 print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
                       f"Train Loss: {train_metrics['total_loss']:.4f}")
 
-            # Step scheduler
-            if self.scheduler is not None:
-                self.scheduler.step()
-
             # Save most recent epoch
             self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, 'latest_model.pth', self.scheduler)
 
@@ -257,10 +261,18 @@ class BaseTrainer(ABC):
         self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer,
                                                 self.best_val_loss, self.config,
                                                 'final_model.pth', self.scheduler)
-        self.wandb_run.finish()
+        if self. enable_wandb: self.wandb_run.finish()
         print("Training completed!")
 
 
-    def load_checkpoint(self, filepath: str) -> None:
-        """Load training checkpoint."""
-        self.current_epoch, self.global_step, self.best_val_loss = self.checkpoint_handler.load_checkpoint(filepath, self.model, self.optimizer, self.scheduler)
+    def load_checkpoint(self, filepath: str, model_only=False) -> None:
+        """
+        Load training checkpoint.
+        Args:
+            :param filepath: Path to checkpoint file
+            :param model_only: If True, only load model weights (ignore optimizer, scheduler, epoch, etc.)
+        """
+        if model_only:
+            _, _, _ = self.checkpoint_handler.load_checkpoint(filepath, self.model)
+        else:
+            self.current_epoch, self.global_step, self.best_val_loss = self.checkpoint_handler.load_checkpoint(filepath, self.model, self.optimizer, self.scheduler)

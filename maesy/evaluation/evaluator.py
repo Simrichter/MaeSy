@@ -10,7 +10,7 @@ import matplotlib.patches as patches
 from PIL import Image
 import numpy as np
 
-from ..model import VisionTransformerDetector, BaseModel
+from ..model import BaseModel, ViTDetector
 from .metrics import compute_map, compute_precision_recall
 from maesy.evaluation.inferer import Inferer
 
@@ -197,7 +197,7 @@ class Evaluator:
 
 
 def evaluate_model(
-    model: VisionTransformerDetector,
+    model: ViTDetector,
     data_loader: DataLoader,
     device: str = "cuda",
     confidence_threshold: float = 0.5,

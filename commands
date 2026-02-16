@@ -1,5 +1,14 @@
 Test Clustering:
     maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" cluster_test -r 224 224 -c resnet_kmeans -s 90 10 0
     maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" cluster_test -r 224 224 -c sequential_similarity -s 90 10 0
-    FULL:
-        maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" "/media/simon/42A099D63E90C520/Raw Training Data/BlazeMexico/temp/GP2_Blaze_Mexiko_2025-08-15-11-43-35_out" "/media/simon/42A099D63E90C520/Raw Training Data/RoboErectusBangkok/temp/GP1_RoboErectus_Bangkok_2025-08-15-08-54-14_out" "/media/simon/42A099D63E90C520/Raw Training Data/HephaestusMontreal/temp/GP4_Hephaestus_Montreal_2025-08-15-16-54-11_out" "/media/simon/42A099D63E90C520/Raw Training Data/NuBotsBordeaux/temp/GP6_NuBots_Bordeaux_2025-08-16-11-33-17_out" cluster_test -r 224 224 -c sequential_similarity -s 90 10 0
+FULL:
+    maesy dataset create "/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out" "/media/simon/42A099D63E90C520/Raw Training Data/BlazeMexico/temp/GP2_Blaze_Mexiko_2025-08-15-11-43-35_out" "/media/simon/42A099D63E90C520/Raw Training Data/RoboErectusBangkok/temp/GP1_RoboErectus_Bangkok_2025-08-15-08-54-14_out" "/media/simon/42A099D63E90C520/Raw Training Data/HephaestusMontreal/temp/GP4_Hephaestus_Montreal_2025-08-15-16-54-11_out" "/media/simon/42A099D63E90C520/Raw Training Data/NuBotsBordeaux/temp/GP6_NuBots_Bordeaux_2025-08-16-11-33-17_out" cluster_test -r 224 224 -c sequential_similarity -s 90 10 0
+
+
+maesy train mae --dataset "/home/simon/Desktop/maesy-training/data/cluster_test"
+
+
+maesy train od --dataset "/home/simon/Desktop/maesy-training/data/DetectionDummyData/" --checkpoint "/home/simon/Desktop/maesy-training/mae_checkpoints/super-flower-43/latest_model.pth"
+maesy train od --dataset "/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)" --checkpoint "/home/simon/Desktop/maesy-training/mae_checkpoints/super-flower-43/latest_model.pth" --wandb
+
+maesy train od --dataset "/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)" --checkpoint "/home/simon/Desktop/maesy-training/od_checkpoints/offline_run/latest_model.pth" --resume

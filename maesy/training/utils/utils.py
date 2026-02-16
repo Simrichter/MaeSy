@@ -23,7 +23,21 @@ def handle_raw_batch(batch: Any, device: torch.device) -> tuple[torch.Tensor, Op
 
     images = images.to(device, non_blocking=True)
     if targets is not None:
-        targets = batch['targets'].to(device, non_blocking=True)
+        if isinstance(targets, torch.Tensor):
+            targets = targets.to(device, non_blocking=True)
+        elif isinstance(targets, list):
+            if len(targets)>0 and isinstance(targets[0], dict):
+                # Move targets to device
+                targets_device = []
+                for target in targets:
+                    targets_device.append({
+                        'boxes': target['boxes'].to(device, non_blocking=True),
+                        'labels': target['labels'].to(device, non_blocking=True)
+                    })
+                targets = targets_device
+            elif len(targets)>0 and isinstance(targets[0], torch.Tensor):
+                targets = [t.to(device, non_blocking=True) for t in targets]
+
     return images, targets
 
 
@@ -37,10 +51,9 @@ def collate_detection_fn(batch: List[tuple]) -> Tuple[torch.Tensor, List[Dict[st
     Returns:
         Tuple of:
             - images: Stacked images tensor [B, C, H, W]
-            - targets: List of target dictionaries with 'boxes' and 'labels'
+            - targets: List of target dictionaries with 'boxes' [N X  and 'labels'
     """
     from maesy.dataset.bounding_box import BoundingBox
-    
     images = []
     targets = []
     

@@ -56,7 +56,7 @@ class CheckpointHandler:
     def _check_head_configs(checkpoint, model):
         if checkpoint['headconfig'] != model.head.config.__dict__:
             raise ValueError(
-                f"Failed to load head due to incompatible configuration. Checkpoint head config: {checkpoint['headconfig']}, actual head config: {model.head.config.__dict__}")
+                f"Failed to load head due to incompatible configuration.\n \n Checkpoint head config:\n{checkpoint['headconfig']}\n \n actual head config:\n{model.head.config.__dict__}")
 
     @staticmethod
     def _check_bb_configs(checkpoint, model):
@@ -69,7 +69,7 @@ class CheckpointHandler:
             raise ValueError(
                 f"Incompatible model architecture. Checkpoint backbone type: {checkpoint['backbonetype']}, actual backbone type: {model.backbone.type}. Checkpoint head type: {checkpoint['headtype']}, actual head type: {model.head.type}.")
         if (model.backbone.type != checkpoint['backbonetype']) or (model.head.type != checkpoint['headtype']):
-            if model.backbonetype != checkpoint['backbonetype']:
+            if model.backbone.type != checkpoint['backbonetype']:
                 print(f"Warning: Loading only head of type {model.head.type}, NOT backbone!")
                 self._check_head_configs(checkpoint, model)
                 model.head.load_state_dict(checkpoint['head'])
@@ -83,7 +83,7 @@ class CheckpointHandler:
             model.backbone.load_state_dict(checkpoint['backbone'])
             model.head.load_state_dict(checkpoint['head'])
 
-    def load_checkpoint(self, filepath: str, model, optimizer, scheduler=None) -> tuple[Any, Any, Any]:
+    def load_checkpoint(self, filepath: str, model, optimizer=None, scheduler=None) -> tuple[Any, Any, Any]:
         """
         Load model checkpoint.
         Args:
@@ -103,14 +103,21 @@ class CheckpointHandler:
             print("Legacy checkpoint format detected. Attempting to load...")
             self._legacy_load_model(checkpoint, model)
 
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        current_epoch = checkpoint['epoch']
-        global_step = checkpoint['global_step']
-        best_val_loss = checkpoint['best_val_loss']
+        if optimizer is not None and 'optimizer_state_dict' in checkpoint:
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            current_epoch = checkpoint['epoch']
+            global_step = checkpoint['global_step']
+            best_val_loss = checkpoint['best_val_loss']
+            # print(f"Loaded optimizer state dict. Resuming from epoch {current_epoch}, global step {global_step}, best validation loss {best_val_loss:.4f}")
+        else:
+            # print(f"Loaded only Model, training starts from epoch 0")
+            current_epoch = 0
+            global_step = 0
+            best_val_loss = float('inf')
 
         if 'scheduler_state_dict' in checkpoint and scheduler is not None:
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
-        print(f"Checkpoint loaded from {filepath}")
+        print(f"Checkpoint loaded from {filepath}. Starting training from epoch {current_epoch}, global step {global_step}, best validation loss {best_val_loss:.4f}")
 
         return current_epoch, global_step, best_val_loss

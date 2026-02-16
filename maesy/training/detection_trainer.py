@@ -28,17 +28,7 @@ class DetectionTrainer(BaseTrainer):
         """
         # Get model predictions
         predictions = self.model.forward(images)
-        
-        # Move targets to device
-        if targets is not None:
-            targets_device = []
-            for target in targets:
-                targets_device.append({
-                    'boxes': target['boxes'].to(self.device, non_blocking=True),
-                    'labels': target['labels'].to(self.device, non_blocking=True)
-                })
-            targets = targets_device
-        
+
         # Compute loss
         losses = self.loss(predictions, targets)
 

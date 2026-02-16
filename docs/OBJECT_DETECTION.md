@@ -7,7 +7,6 @@ This document describes how to use the Vision Transformer architecture for objec
 The implementation provides two approaches for object detection:
 
 1. **ViTDetector** - Train a Vision Transformer for object detection from scratch
-2. **TransformerDetectionModel** - Use MAE pretrained backbones for object detection (transfer learning)
 
 Both models follow the MaeSy framework structure with separate backbone and head components.
 
@@ -94,16 +93,15 @@ trainer.train()
 ### 3. Use MAE Pretrained Backbone
 
 ```python
-from maesy.model import MaskedAutoencoderViT, MAEConfig
-from maesy.model import TransformerDetectionModel, TransformerDetectorConfig
-
+from maesy.model import MaskedAutoencoderViT, MAEConfig, ViTDetector, ViTDetectorConfig
+import torch
 # Load pretrained MAE model
 mae_model = MaskedAutoencoderViT(MAEConfig())
 checkpoint = torch.load("mae_pretrained.pth")
 mae_model.load_state_dict(checkpoint['model_state_dict'])
 
 # Create detection model
-det_model = TransformerDetectionModel(TransformerDetectorConfig())
+det_model = ViTDetector(ViTDetectorConfig())
 
 # Transfer backbone weights
 det_model.backbone.load_state_dict(mae_model.backbone.state_dict())
@@ -271,20 +269,20 @@ See `examples/object_detection_training.py` for complete examples:
 
 ```bash
 # Train from scratch
-python examples/object_detection_training.py \
+python examples/train_object_detection.py \
     --mode scratch \
     --dataset /path/to/dataset \
     --output ./checkpoints
 
 # Train with MAE pretrained backbone
-python examples/object_detection_training.py \
+python examples/train_object_detection.py \
     --mode mae_pretrained \
     --mae_checkpoint mae_pretrained.pth \
     --dataset /path/to/dataset \
     --freeze_backbone
 
 # Run inference
-python examples/object_detection_training.py \
+python examples/train_object_detection.py \
     --mode inference \
     --checkpoint checkpoint.pth \
     --image test_image.jpg

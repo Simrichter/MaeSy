@@ -61,10 +61,11 @@ class DetectionLoss(BaseLoss):
 
         self.reset_metrics()
 
-        # Adjust weights for class imbalance
-        empty_weight = torch.ones(num_classes + 1)
-        empty_weight[-1] = eos_coef
-        self.register_buffer('empty_weight', empty_weight)
+        # # Adjust weights for class imbalance
+        # empty_weight = torch.ones(num_classes + 1)
+        # empty_weight[-1] = eos_coef
+        # empty_weight = empty_weight.to(self.device)
+        # self.register_buffer('empty_weight', empty_weight)
 
     def reset_metrics(self):
         self.total_loss = 0.0
@@ -109,14 +110,13 @@ class DetectionLoss(BaseLoss):
         loss_ce = F.cross_entropy(
             pred_logits.transpose(1, 2),
             target_classes,
-            self.empty_weight
+            # self.empty_weight
         )
 
         # Compute bbox losses
         idx = self._get_src_permutation_idx(indices)
         src_boxes = pred_boxes[idx]
-        target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)],
-                                 dim=0)  # Expecting the target boxes to be 0-1 normalized
+        target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)  # Expecting the target boxes to be 0-1 normalized
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
         loss_bbox = loss_bbox.sum() / max(target_classes_o.shape[0], 1)
@@ -146,10 +146,10 @@ class DetectionLoss(BaseLoss):
         return losses
 
     def get_metrics(self) -> dict[str, float]:
-        return {"avg_loss": self.total_loss / self.batch_count,
-                "avg_loss_ce": self.total_loss_ce / self.batch_count,
-                "avg_loss_bbox": self.total_loss_bbox / self.batch_count,
-                "avg_loss_giou": self.total_loss_giou / self.batch_count}
+        return {"total_loss": self.total_loss / self.batch_count,
+                "total_loss_ce": self.total_loss_ce / self.batch_count,
+                "total_loss_bbox": self.total_loss_bbox / self.batch_count,
+                "total_loss_giou": self.total_loss_giou / self.batch_count}
 
     @torch.no_grad()
     def match_predictions_to_targets(
@@ -157,6 +157,7 @@ class DetectionLoss(BaseLoss):
             predictions: Dict[str, torch.Tensor],
             targets: List[Dict[str, torch.Tensor]]
     ) -> List[tuple]:
+
         """Perform Hungarian matching between predictions and targets."""
         pred_logits = predictions['pred_logits']  # [B, num_queries, num_classes + 1]
         pred_boxes = predictions['pred_boxes']  # [B, num_queries, 4]
@@ -170,8 +171,8 @@ class DetectionLoss(BaseLoss):
         indices = []
 
         for i, target in enumerate(targets):
-            tgt_ids = target['labels']
-            tgt_bbox = target['boxes']
+            tgt_ids = target['labels'] # [B, num_target_boxes]
+            tgt_bbox = target['boxes'] # [B, num_target_boxes, 4]
 
             if len(tgt_ids) == 0:
                 indices.append((torch.tensor([], dtype=torch.int64), torch.tensor([], dtype=torch.int64)))
@@ -205,6 +206,7 @@ class DetectionLoss(BaseLoss):
         src_idx = torch.cat([src for (src, _) in indices])
         return batch_idx, src_idx
 
+# TODO: Move this util stuff to bounding_box.py
     def _box_cxcywh_to_xyxy(self, boxes: torch.Tensor) -> torch.Tensor:
         """Convert boxes from [cx, cy, w, h] to [x1, y1, x2, y2]."""
         cx, cy, w, h = boxes.unbind(-1)

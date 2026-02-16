@@ -1,4 +1,5 @@
 """Example script for MAE (Masked Autoencoder) pretraining."""
+
 from pathlib import Path
 
 import torch
@@ -7,18 +8,23 @@ from torchvision import transforms
 
 from maesy.model import MAEConfig, MaskedAutoencoderViT
 from maesy.dataset import UnlabeledDataset
+from maesy.model_tools.model_factory import create_model
 
 from maesy.training import MaeTrainer, MAEPretrainingConfig
 
 
-def testMAE():
+def train_mae(
+    dataset_path,
+    image_size = 224,
+    batch_size = 128,
+    num_epochs = 200,
+    mask_ratio = 0.5,
+    checkpoint = "",
+    enable_wandb = True
+):
     """Main MAE pretraining function."""
-
     # Configuration
-    image_size = 224
-    batch_size = 128
-    num_epochs = 200
-    mask_ratio = 0.5 # TODO: Make scheduled
+      # TODO: Make mask_ratio scheduled
 
     # Create training config
     mae_config = MAEConfig(
@@ -36,40 +42,22 @@ def testMAE():
 
     # Create MAE model
     print("Creating MAE model...")
-    model = MaskedAutoencoderViT(
-        config=mae_config
-    )
-
-    # Print model info
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Total parameters: {total_params:,}")
-    print(f"Trainable parameters: {trainable_params:,}")
+    model = create_model("mae", mae_config)
 
     # Prepare dataset
-    # Adjust these paths to your dataset
     print("Loading datasets...")
-
     # Data transforms
     train_transforms = transforms.Compose([
-        # transforms.Resize(size=(image_size, image_size)),
-        # transforms.RandomResizedCrop(image_size, scale=(0.2, 1.0)),
-        # transforms.RandomHorizontalFlip(),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2),
         transforms.ToTensor(),
-        # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # Standard ImageNet Mean and Std values, recompute for other datasets!
     ])
 
     val_transforms = transforms.Compose([
-        # transforms.Resize(size=(image_size, image_size)),
-        # transforms.CenterCrop(image_size),
         transforms.ToTensor(),
-        # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    dataset_path = Path(r"/home/simon/Desktop/maesy-training/data/cluster_test")
-
     train_dataset = UnlabeledDataset(
-        dataset_path/"train",
+        Path(dataset_path) / "train",
         transforms=train_transforms,
         # repeat_factor=2,
         # use_first_n=384,
@@ -77,7 +65,7 @@ def testMAE():
     )
 
     val_dataset = UnlabeledDataset(
-        dataset_path/"val",
+        Path(dataset_path) / "val",
         transforms=val_transforms,
         # use_first_n=640, # 5 batches
         filetype=".jpg"
@@ -110,7 +98,7 @@ def testMAE():
         num_epochs=num_epochs,
         batch_size=batch_size,
         learning_rate=1e-3,
-        weight_decay=0.01,
+        weight_decay=0.001,
         warmup_epochs=5,
         mask_ratio=mask_ratio,
         save_dir="./mae_checkpoints",
@@ -127,11 +115,12 @@ def testMAE():
         project_name="maesy-MAE_Pretraining",
         train_loader=train_loader,
         val_loader=val_loader,
-        config=pretraining_config
+        config=pretraining_config,
+        enable_wandb=enable_wandb
     )
 
-    checkpoint = "/home/simon/Desktop/maesy-training/mae_checkpoints/super-flower-43/latest_model.pth"
-    if Path(checkpoint).exists():
+
+    if checkpoint != "" and Path(checkpoint).exists():
         pretrainer.load_checkpoint(checkpoint)
 
     # Start pretraining
@@ -141,11 +130,3 @@ def testMAE():
     print("\nMAE pretraining completed!")
     print(f"Best validation loss: {pretrainer.best_val_loss:.4f}")
     print(f"Checkpoints saved to: {pretraining_config.save_dir}")
-    # print("\nTo use the pretrained weights for object detection:")
-    # print("  from maesy.pretraining import load_mae_pretrained_weights")
-    # print("  detector = VisionTransformerDetector(config)")
-    # print(f"  detector = load_mae_pretrained_weights(detector, '{pretraining_config.save_dir}/mae_best_model.pth')")
-
-
-if __name__ == "__main__":
-    testMAE()

@@ -22,7 +22,24 @@ def main():
     data.add_argument("-p", "--path", type=str, help="Path to the data root dir (default: ./data)", default="./data")
 
     # Command: maesy train
-    # TODO
+    # TODO: Currently only supports object detection training
+    train_parser = train.add_subparsers(dest='mode')
+    # scratch_parser = train_parser.add_parser("scratch", help="Train from scratch")
+    # scratch_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
+    # scratch_parser.add_argument("--output", type=str, default="./od_checkpoints", help="Output directory for checkpoints")
+
+    od_parser = train_parser.add_parser("od", help="Train with MAE pretrained backbone")
+    od_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
+    od_parser.add_argument("--freeze_backbone", action="store_true", help="Freeze backbone when using MAE pretrained (for mae_pretrained mode)")
+    od_parser.add_argument("--checkpoint", type=str, help="Path to trained checkpoint (MAE checkpoint for fresh training, or OD checkpoint if --resume flag is set", default="")
+    od_parser.add_argument("--output", type=str, default="./od_checkpoints", help="Output directory for checkpoints")
+    od_parser.add_argument("--resume", action="store_true", help="Whether to resume training from an existing OD checkpoint (instead of starting from a pretrained MAE checkpoint)")
+    od_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
+
+    mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")
+    mae_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
+    mae_parser.add_argument("--checkpoint", type=str, default="", help="Path to checkpoint to continue training from (default: none)")
+    mae_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
 
     # Comand: maesy debug
     # TODO

@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 
 from maesy.dataset import ObjectDetectionDataset, get_val_transforms
 from maesy.dataset.transforms import collate_fn
-from maesy.model import VisionTransformerDetector, ModelConfig
+from maesy.model import ModelConfig
 from maesy.evaluation import evaluate_model
 
 

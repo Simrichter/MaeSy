@@ -19,7 +19,11 @@ class ObjectDetectionDataset(Dataset):
     def __init__(
         self,
         dataset_dir: str,
-        transforms: Optional[Callable] = None
+        transforms: Optional[Callable] = None,
+        repeat_factor: int = 1,
+        step: int = 1,
+        start_index: int = 0,
+        use_first_n: int = None
     ):
         """
         Initialize ObjectDetectionDataset.
@@ -32,8 +36,11 @@ class ObjectDetectionDataset(Dataset):
         self.annotations_dir = Path(dataset_dir) / "labels"
         self.transforms = transforms
 
-        self.images: List[Path] = [Path(img) for img in os.listdir(self.images_dir) if img.endswith((".jpg", ".jpeg", ".png"))]
-        self.annotations: List[Path] = [Path(ann) for ann in os.listdir(self.annotations_dir) if ann.endswith(".txt")]
+        self.images: List[Path] = [Path(img) for img in os.listdir(self.images_dir) if img.endswith((".jpg", ".jpeg", ".png"))][start_index::step]*repeat_factor
+        self.annotations: List[Path] = [Path(ann) for ann in os.listdir(self.annotations_dir) if ann.endswith(".txt")][start_index::step]*repeat_factor
+        if use_first_n is not None:
+            self.images = self.images[:use_first_n]
+            self.annotations = self.annotations[:use_first_n]
 
     def __len__(self) -> int:
         """Return number of images in dataset."""

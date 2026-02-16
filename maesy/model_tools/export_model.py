@@ -2,7 +2,6 @@ from pathlib import Path
 import torch
 
 from maesy.model import MAEConfig, MaskedAutoencoderViT
-from maesy.model.transformer_detection_model import TransformerDetectionModel
 from maesy.model_tools.model_factory import create_model
 
 def export_model():
@@ -21,7 +20,7 @@ def export_model():
 
         # Create MAE model
         print("Creating model...")
-        model = create_model("transformer_detector", mae_config)# TransformerDetectionModel(mae_config)
+        model = create_model("ViTDetector", mae_config)# TransformerDetectionModel(mae_config)
         model.eval()
 
         # Create example inputs for exporting the model. The inputs should be a tuple of tensors.

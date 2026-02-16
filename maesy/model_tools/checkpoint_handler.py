@@ -1,13 +1,14 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import torch
 
 class CheckpointHandler:
 
-    def __init__(self, save_dir: str | Path, device: torch.device):
-        self.save_dir = save_dir
-        self.save_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, device: torch.device, save_dir: Optional[str | Path]=None):
+        if save_dir:
+            self.save_dir = Path(save_dir)
+            self.save_dir.mkdir(parents=True, exist_ok=True)
         self.device = device
 
     def save_checkpoint(self, current_epoch, global_step, model, optimizer, best_val_loss, config, filename: str, scheduler = None) -> None:
@@ -108,7 +109,6 @@ class CheckpointHandler:
             current_epoch = checkpoint['epoch']
             global_step = checkpoint['global_step']
             best_val_loss = checkpoint['best_val_loss']
-            # print(f"Loaded optimizer state dict. Resuming from epoch {current_epoch}, global step {global_step}, best validation loss {best_val_loss:.4f}")
         else:
             # print(f"Loaded only Model, training starts from epoch 0")
             current_epoch = 0
@@ -118,6 +118,5 @@ class CheckpointHandler:
         if 'scheduler_state_dict' in checkpoint and scheduler is not None:
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
-        print(f"Checkpoint loaded from {filepath}. Starting training from epoch {current_epoch}, global step {global_step}, best validation loss {best_val_loss:.4f}")
-
+        # print(f"Checkpoint loaded from {filepath}")
         return current_epoch, global_step, best_val_loss

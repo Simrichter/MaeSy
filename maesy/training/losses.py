@@ -41,17 +41,19 @@ class DetectionLoss(BaseLoss):
             bbox_loss_coef: float = 5.0,
             class_loss_coef: float = 1.0,
             giou_loss_coef: float = 2.0,
-            eos_coef: float = 0.1  # Weight for no-object class
+            eos_coef: float = 0.1, # Weight for no-object class
+            device: torch.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu') # TODO: Make this follow commandline-input device
     ):
         """
         Initialize detection loss.
         
         Args:
-            num_classes: Number of object classes
-            bbox_loss_coef: Coefficient for bbox loss
-            class_loss_coef: Coefficient for classification loss
-            giou_loss_coef: Coefficient for GIoU loss
-            eos_coef: Coefficient for no-object class
+            :param num_classes: Number of object classes
+            :param bbox_loss_coef: Coefficient for bbox loss
+            :param class_loss_coef: Coefficient for classification loss
+            :param giou_loss_coef: Coefficient for GIoU loss
+            :param eos_coef: Coefficient for no-object class
+            :param device: Device to run loss computation on
         """
         super().__init__()
         self.num_classes = num_classes
@@ -59,13 +61,15 @@ class DetectionLoss(BaseLoss):
         self.class_loss_coef = class_loss_coef
         self.giou_loss_coef = giou_loss_coef
 
+        self.device = device
+
         self.reset_metrics()
 
-        # # Adjust weights for class imbalance
-        # empty_weight = torch.ones(num_classes + 1)
-        # empty_weight[-1] = eos_coef
-        # empty_weight = empty_weight.to(self.device)
-        # self.register_buffer('empty_weight', empty_weight)
+        # Adjust weights for class imbalance
+        empty_weight = torch.ones(num_classes + 1)
+        empty_weight[-1] = eos_coef
+        empty_weight = empty_weight.to(self.device)
+        self.register_buffer('empty_weight', empty_weight)
 
     def reset_metrics(self):
         self.total_loss = 0.0

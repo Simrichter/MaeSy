@@ -50,8 +50,8 @@ def main():
     infer = eval_parser.add_parser("infer", help="Run inference on a folder of images")
     infer.add_argument("imgpath", help="Path to folder of images for inference")
     infer.add_argument("checkpoint", help="Path to model checkpoint file")
-    infer.add_argument("-o", "--output_path", type=str, default="./inference_results", help="Folder to save inference results")
-
+    infer.add_argument("-o", "--out", type=str, default="./inference_results", help="Folder to save inference results")
+    infer.add_argument("--device", type=str, default="", help="Device to run inference on (default: auto-detect CUDA if available, otherwise CPU)")
 
     # Command: maesy predict
     # TODO

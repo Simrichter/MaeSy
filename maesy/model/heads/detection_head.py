@@ -57,7 +57,8 @@ class DetectionHead(nn.Module):
             nn.ReLU(),
             nn.Linear(config.hidden_dim, config.hidden_dim),
             nn.ReLU(),
-            nn.Linear(config.hidden_dim, 4)  # [cx, cy, w, h]
+            nn.Linear(config.hidden_dim, 4), # [cx, cy, w, h]
+            nn.Sigmoid()
         )
         
     def forward(self, features: torch.Tensor, **kwargs) -> Dict[str, torch.Tensor]:

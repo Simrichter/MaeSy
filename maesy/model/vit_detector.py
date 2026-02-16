@@ -115,3 +115,9 @@ class ViTDetector(BaseModel):
         out = super().forward(x, ids_shuffle=ids_shuffle)
         
         return out
+
+    def infer(self, images, targets, **kwargs):
+        out = self.forward(images, **kwargs)
+        out['pred_logits'] = out['pred_logits'].softmax(-1)[..., :-1].detach()
+        out['pred_boxes'] = out['pred_boxes'].detach()
+        return out, targets

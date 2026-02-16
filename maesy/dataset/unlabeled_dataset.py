@@ -16,7 +16,7 @@ class UnlabeledDataset(Dataset):
     def __init__(
         self,
         images_dir: str | Path,
-        filetype: str = ".png",
+        # filetype: str = ".png",
         transforms: Optional[Callable] = None,
         repeat_factor: int = 1,
         step: int = 1,
@@ -28,22 +28,23 @@ class UnlabeledDataset(Dataset):
         
         Args:
             images_dir: Directory containing images
-            filetype: File extension
+            # filetype: File extension
             transforms: Optional transforms to apply
             repeat_factor: Specifies, how many times the same image is repeated in the dataset (mostly for debugging)
             step: Step size for selecting images from the directory
             start_index: Starting index for selecting images from the directory
             use_first_n: Only use the first n images found in the images_dir (mostly for debugging)
         """
-        self.images_dir = images_dir
+        filetypes = (".png", ".jpg", ".jpeg")
+        self.images_dir = Path(images_dir)
         self.transforms = transforms
 
-        self.images = [f for f in sorted(os.listdir(self.images_dir)) if f.endswith(filetype)][start_index::step]*repeat_factor
+        self.images = [f for f in sorted(os.listdir(self.images_dir)) if f.endswith(filetypes)][start_index::step]*repeat_factor
         if use_first_n is not None:
             self.images = self.images[:use_first_n]
 
         if len(self.images) == 0:
-            print(f"Warning: No images of type {filetype} found in this directory: {self.images_dir}")
+            print(f"Warning: No images of type {filetypes} found in this directory: {self.images_dir}")
             
     def __len__(self) -> int:
         """Return number of images in dataset."""

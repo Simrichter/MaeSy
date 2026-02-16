@@ -68,7 +68,7 @@ class BaseTrainer(ABC):
 
         # Setup directories
         self.save_dir = Path(self.config.save_dir)/(self.wandb_run.name if self.enable_wandb else "offline_run")
-        self.checkpoint_handler = CheckpointHandler(self.save_dir, self.device)
+        self.checkpoint_handler = CheckpointHandler(self.device, self.save_dir)
 
         # Training state
         self.current_epoch = 0

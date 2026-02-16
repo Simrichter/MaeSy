@@ -112,4 +112,4 @@ class MaskedAutoencoderViT(BaseModel):
         #                                self.model.config.image_size, self.model.config.patch_size)
         img_preds = torch.cat((images, img_preds), dim=-1)
 
-        return img_preds, targets
+        return img_preds.detach(), targets

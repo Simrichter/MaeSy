@@ -4,13 +4,17 @@ Example: Training a Vision Transformer for Object Detection
 This script demonstrates how to train both ViTDetector
 for object detection using the MaeSy framework.
 """
+import os
+import shutil
 
 import torch
 from torch.utils.data import DataLoader
 from pathlib import Path
 
 from torchvision import transforms
+from tqdm import tqdm
 
+from maesy.evaluation.inferer import Inferer
 # Import models
 from maesy.model import ViTDetector, ViTDetectorConfig
 from maesy.model import MaskedAutoencoderViT, MAEConfig
@@ -20,34 +24,9 @@ from maesy.training import DetectionTrainer, TrainingConfig
 from maesy.training.utils import collate_detection_fn
 
 # Import dataset
-from maesy.dataset import ObjectDetectionDataset
+from maesy.dataset import ObjectDetectionDataset, UnlabeledDataset
 
-
-def train_vit_detector(
-    checkpoint_path: str,
-    dataset_path: str,
-    output_dir: str,
-    freeze_backbone: bool,
-    continue_from_checkpoint: bool,
-    enable_wandb: bool
-):
-    """
-    Train an object detection model using MAE pretrained backbone.
-
-    Args:
-        checkpoint_path: Path to pretrained MAE checkpoint
-        dataset_path: Path to object detection dataset
-        output_dir: Directory to save checkpoints
-        freeze_backbone: Whether to freeze the backbone during training
-        continue_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
-        enable_wandb: Whether to enable Weights & Biases logging
-    """
-    print("=" * 60)
-    print("Training with MAE Pretrained Backbone")
-    print("=" * 60)
-
-    # Create detection model with same backbone configuration
-    det_config = ViTDetectorConfig(
+det_config = ViTDetectorConfig(
         image_size=224,
         patch_size=16,
         in_channels=3,
@@ -73,7 +52,32 @@ def train_vit_detector(
         giou_loss_coef=2.0
     )
 
+def train_vit_detector(
+    checkpoint_path: str,
+    dataset_path: str,
+    output_dir: str,
+    freeze_backbone: bool,
+    continue_from_checkpoint: bool,
+    enable_wandb: bool
+):
+    """
+    Train an object detection model using MAE pretrained backbone.
+
+    Args:
+        checkpoint_path: Path to pretrained MAE checkpoint
+        dataset_path: Path to object detection dataset
+        output_dir: Directory to save checkpoints
+        freeze_backbone: Whether to freeze the backbone during training
+        continue_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
+        enable_wandb: Whether to enable Weights & Biases logging
+    """
+    print("=" * 60)
+    print("Training with MAE Pretrained Backbone")
+    print("=" * 60)
+
+    # Create detection model
     model = ViTDetector(det_config)
+
     # Optionally freeze backbone
     if freeze_backbone:
         for param in model.backbone.parameters():
@@ -133,7 +137,7 @@ def train_vit_detector(
         train_loader=train_loader,
         val_loader=val_loader,
         config=training_config,
-        project_name="mae_pretrained_detection",
+        project_name="maesy-object-detection",
         enable_wandb=enable_wandb
     )
 
@@ -144,77 +148,52 @@ def train_vit_detector(
     # Train
     trainer.train()
 
-def inference_example(checkpoint_path: str, image_path: str):
+def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, device: torch.device) -> None:
+    from maesy.model_tools import CheckpointHandler
     """
-    Example of using trained model for inference.
-    
+    Run inference with a trained object detection model.
+
     Args:
-        checkpoint_path: Path to trained model checkpoint
-        image_path: Path to input image
+        :param checkpoint_path: Path to trained model checkpoint
+        :param images_path: Path to input image for inference
+        :param out_path: Path to save inference results (predicted bounding boxes and labels)
+        :param device: Device to run inference on (e.g., "cuda" or "cpu")
     """
     print("=" * 60)
-    print("Inference Example")
+    print("Running Inference")
     print("=" * 60)
-    
+
     # Load model
-    config = ViTDetectorConfig(num_classes=80)
-    model = ViTDetector(config)
-    
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model = ViTDetector(det_config)
+
+    CheckpointHandler(device=device).load_checkpoint(checkpoint_path, model=model)
     model.eval()
-    
-    # Load and preprocess image
-    from PIL import Image
-    from torchvision import transforms
-    
-    image = Image.open(image_path).convert('RGB')
-    transform = transforms.Compose([
+
+    dataset = UnlabeledDataset(Path(images_path), transforms=transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-    ])
-    image_tensor = transform(image).unsqueeze(0)
-    
-    # Run inference
-    with torch.no_grad():
-        predictions = model(image_tensor)
-    
-    # Post-process predictions
-    pred_logits = predictions['pred_logits']  # [1, num_queries, num_classes+1]
-    pred_boxes = predictions['pred_boxes']    # [1, num_queries, 4]
-    
-    # Get class probabilities and filter by confidence
-    probs = torch.softmax(pred_logits, dim=-1)
-    scores, labels = probs[0, :, :-1].max(dim=-1)  # Exclude no-object class
-    
-    confidence_threshold = 0.5
-    keep = scores > confidence_threshold
-    
-    # Get filtered detections
-    detected_boxes = pred_boxes[0][keep]
-    detected_labels = labels[keep]
-    detected_scores = scores[keep]
-    
-    print(f"Detected {keep.sum().item()} objects:")
-    for i, (box, label, score) in enumerate(zip(detected_boxes, detected_labels, detected_scores)):
-        cx, cy, w, h = box
-        print(f"  Object {i+1}: class={label.item()}, score={score.item():.3f}, "
-              f"bbox=({cx.item():.3f}, {cy.item():.3f}, {w.item():.3f}, {h.item():.3f})")
+    ]), use_first_n=10)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
+    inferer = Inferer(model=model, data_loader=dataloader, device=device)
+    preds, _ = inferer.infer() # List[Dict] with keys "pred_boxes" (B X num_querys X 4) and "pred_logits" (B X num_queries)]
 
+    print("=" * 60)
+    print(f"Saving inference results to {out_path}...")
+    print("=" * 60)
 
-# if __name__ == "__main__":
-#     args = None
-#
-#     if args.mode == "scratch":
-#         train_vit_detector(args.dataset, args.output)
-#     elif args.mode == "mae_pretrained":
-#         train_with_mae_pretrained(
-#             args.mae_checkpoint,
-#             args.dataset,
-#             args.output,
-#             args.freeze_backbone
-#         )
-#     elif args.mode == "inference":
-#         inference_example(args.checkpoint, args.image)
-#     else:
-#         parser.print_help()
+    # torch.cat(preds, dim=0) # Total number of images X num_queries X (4 or num_classes)
+
+    images_dir = dataset.images_dir
+    out_path = Path(out_path)
+    out_path.mkdir(parents=True, exist_ok=True)
+    for p in tqdm(zip(dataset.images, preds)):
+        img_path = images_dir/p[0]
+        shutil.copy(img_path, out_path/p[0])
+        with open(out_path/Path(p[0]).with_suffix(".txt"), "w") as f:
+            boxes = torch.unbind(p[1]["pred_boxes"].squeeze(0), dim=0)
+            labels = torch.unbind(p[1]["pred_logits"].squeeze(0), dim=0)
+            for box, label in zip(boxes, labels):
+                cx, cy, w, h = box
+                score, l = label.max(-1)
+                if l != 3 and score>=0.8:
+                    f.write(f"{l} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")

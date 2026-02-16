@@ -17,4 +17,4 @@ class BaseModel(ABC, nn.Module):
         return out
 
     def infer(self, images, targets, **kwargs):
-        return self.forward(images, **kwargs), targets
+        return self.forward(images, **kwargs).detach(), targets

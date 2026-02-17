@@ -111,34 +111,35 @@ class DatasetManager:
             :return: A list of paths to the selected images
         """
         match cluster_method:
-            case "sequential_similarity":
-                from maesy.dataset.clustering_methods.sequential_similarity import cluster_with_faiss as cluster
+            case "resnet_faiss":
+                from maesy.dataset.clustering_methods.resnet_FAISS import cluster_with_faiss as cluster
                 # TODO: Make this a parameter?
-                similarity_threshold = 0.7
+                similarity_threshold = 0.75
                 return cluster(folder_names, similarity_threshold=similarity_threshold, step=step, start_index=start_index)
             case "resnet_kmeans":
                 from maesy.dataset.clustering_methods.resnet_kmeans import cluster
-                return cluster(folder_names, n_C=num_clusters, step=step, start_index=start_index)
+                return cluster(folder_names, n_c=num_clusters, step=step, start_index=start_index)
             case _:
                 raise ValueError(f"Unknown clustering method {cluster_method}")
 
     @staticmethod
     def _copy_resize(source_paths: List[Path], target_paths: List[Path], resize: int | List[int] | None, label_target_paths: Optional[List[Path]] = None):
-        if len(resize)>2:
-            raise ValueError("Too many values in resize. Resize parameter must either be None or a list of one or two integers: [WIDTH] or [WIDTH HEIGHT]")
         if resize is not None:
+            if len(resize) > 2:
+                raise ValueError(
+                    "Too many values in resize. Resize parameter must either be None or a list of one or two integers: [WIDTH] or [WIDTH HEIGHT]")
             from PIL import Image
-            for img_file, target_path in tqdm(zip(source_paths, target_paths), esc=f"Copying and resizing files"):
+            for img_file, target_path in tqdm(zip(source_paths, target_paths), desc=f"Copying and resizing {len(source_paths)} files"):
                 if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
                     with Image.open(img_file) as img:
                         img = img.resize((resize[0], resize[1] if len(resize) == 2 else resize[0]))
                         img.save(target_path / img_file.name)
         else:
-            for img_file, target_path in tqdm(zip(source_paths, target_paths), esc=f"Copying files"):
+            for img_file, target_path in tqdm(zip(source_paths, target_paths), desc=f"Copying {len(source_paths)} files"):
                 shutil.copy(img_file, target_path)
 
         if label_target_paths is not None:
-            for img_file, target_path in tqdm(zip(source_paths, label_target_paths), esc=f"Copying label files"):
+            for img_file, target_path in tqdm(zip(source_paths, label_target_paths), desc=f"Copying label files"):
                 label_file = img_file.with_suffix('.txt')  # Assuming label files have the same name but .json extension
                 if label_file.exists():
                     shutil.copy(label_file, target_path / label_file.name)
@@ -147,13 +148,13 @@ class DatasetManager:
     def create_dataset(self,
                        folder_names: list[str],
                        dataset_name: str,
-                       split_percentages: list[float] = None,
-                       resize: list[int] = None,
-                       with_labels: bool = True,
-                       step: int = 1,
-                       start_index: int = 0,
-                       del_folders: bool = False,
-                       cluster_method = None
+                       split_percentages: list[float],
+                       resize: list[int],
+                       with_labels: bool,
+                       step: int,
+                       start_index: int,
+                       del_folders: bool, # TODO: Add functionality
+                       cluster_method
                        ) -> Path:
         """
         Combines multiple folders with images into a single dataset
@@ -225,7 +226,7 @@ class DatasetManager:
 
         target_paths = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[2])/f"images/{img_file.name}" for i, img_file in enumerate(image_files)]
         if with_labels:
-            target_paths_lbls = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[2])/f"labels/{img_file.with_suffix(".txt").name}" for i, img_file in enumerate(image_files)]
+            target_paths_lbls = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[2])/f"labels/{img_file.with_suffix('.txt').name}" for i, img_file in enumerate(image_files)]
         else:
             target_paths_lbls = None
         self._copy_resize(image_files, target_paths, resize, target_paths_lbls)

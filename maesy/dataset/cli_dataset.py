@@ -10,6 +10,9 @@ def main(args):
         case "download_data":
             dm.download_data(args.url, args.dataset_name, args.extract, args.force, args.keep_temp)
         case "create":
-            dm.create_dataset(args.data_paths, args.dataset_name, args.split, args.resize, args.step, args.start_index, args.delete, args.cluster_method)
+            dm.create_dataset(args.data_paths, args.dataset_name, args.split, args.resize, args.labels, args.step, args.start_index, args.delete, args.cluster_method)
+        case "extract_log":
+            from .extract_from_log import extract_mcap
+            extract_mcap(args.bag_path, args.topic_name, args.output_dir, args.exact)
         case _:
             print(f"Command '{args.command}' not recognized.")

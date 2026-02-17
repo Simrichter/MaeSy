@@ -20,7 +20,6 @@ import torch
 import numpy as np
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from pathlib import Path
 from tqdm import tqdm
 from maesy.dataset import UnlabeledDataset, MultiDataset
 from maesy.evaluation.inferer import Inferer
@@ -47,29 +46,18 @@ def cluster(paths, similarity_threshold=0.85, batch_size=128, forward_scale=128,
     """
     
     # Setup transforms for feature extraction
-    transfs = transforms.Compose([
+    img_transforms = transforms.Compose([
         transforms.Resize(size=(forward_scale, forward_scale)),
         transforms.ToTensor(),
     ])
     
     # Create dataset from all image directories
     multi_dataset = MultiDataset([
-        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype, step=step, start_index=start_index)
+        UnlabeledDataset(images_dir=path, transforms=img_transforms, step=step, start_index=start_index)
         for path in paths
     ])
     multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
                                   drop_last=False)
-    
-    # # Get all image paths and sort by modification time
-    # all_image_paths = [multi_dataset.get_image_path(i) for i in range(len(multi_dataset))]
-    #
-    # # Sort images by modification time to process in temporal order
-    # sorted_indices = sorted(
-    #     range(len(all_image_paths)),
-    #     key=lambda i: Path(all_image_paths[i]).stat().st_mtime
-    # )
-    #
-    # print(f"Processing {len(all_image_paths)} images in time order...")
     
     # Setup model for feature extraction
     model: BaseModel = ResnetFeatureExtractor("resnet50")
@@ -83,19 +71,6 @@ def cluster(paths, similarity_threshold=0.85, batch_size=128, forward_scale=128,
     
     # Process images in batches for efficiency
     print("Extracting features and selecting representatives...")
-    # for batch_start in tqdm(range(0, len(sorted_indices), batch_size)):
-    #     batch_indices = sorted_indices[batch_start:batch_start + batch_size]
-    #
-    #     # Load and process batch
-    #     batch_images = []
-    #     batch_paths = []
-    #     for idx in batch_indices:
-    #         img = multi_dataset[idx]
-    #         batch_images.append(img)
-    #         batch_paths.append(all_image_paths[idx])
-    #
-    #     # Stack into batch tensor
-    #     batch_tensor = torch.stack(batch_images).to(device)
     inferer = Inferer(model=model, data_loader=multi_dataloader, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     all_predictions, _ = inferer.infer()
     features = torch.cat(all_predictions)
@@ -115,7 +90,7 @@ def cluster(paths, similarity_threshold=0.85, batch_size=128, forward_scale=128,
                 np.dot(feature, rep_emb)
                 for rep_emb in representative_embeddings
             ])
-
+# TODO: Optimize similarity computation with sklearn.neighbors NearestNeighbors
             max_similarity = similarities.max()
 
             # Keep image if it's sufficiently different from all representatives
@@ -155,14 +130,14 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward
         return cluster(paths, similarity_threshold, batch_size, forward_scale, filetype, step, start_index)
     
     # Setup transforms for feature extraction
-    transfs = transforms.Compose([
+    img_transforms = transforms.Compose([
         transforms.Resize(size=(forward_scale, forward_scale)),
         transforms.ToTensor(),
     ])
 
     # Create dataset from all image directories
     multi_dataset = MultiDataset([
-        UnlabeledDataset(images_dir=path, transforms=transfs, filetype=filetype, step=step, start_index=start_index)
+        UnlabeledDataset(images_dir=path, transforms=img_transforms, step=step, start_index=start_index)
         for path in paths
     ])
     multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
@@ -218,10 +193,7 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward
                     img_path = multi_dataset.get_image_path(i*batch_size+j)
                     representative_paths.append(img_path)
     
-    # print(f"Selected {len(representative_paths)} representative images out of {len(all_image_paths)}")
-    # print(f"Reduction: {100 * (1 - len(representative_paths) / len(all_image_paths)):.1f}%")
-    
     return representative_paths
 
-if __name__=="__main__":
-    used_paths = cluster_with_faiss([r"/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out"])
+# if __name__=="__main__":
+#     used_paths = cluster_with_faiss([r"/media/simon/42A099D63E90C520/Raw Training Data/DutchSalvador/temp/GP3_DutchNaoTeam_Salvador_2025-08-15-14-57-23_out"])

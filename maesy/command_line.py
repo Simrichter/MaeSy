@@ -1,14 +1,13 @@
-import sys
 import argparse
 
-def print_help():
-    # print("Tutorial for MaeSy framework.")
-    print("Usage: maesy <module> <command> [options]")
-    print("Available modules: ")
-    print("  train       Train a model")
-    print("  evaluate    Evaluate a model")
-    # print("  predict     Make predictions with a model")
-    print("  dataset     Manage datasets")
+# def print_help():
+#     # print("Tutorial for MaeSy framework.")
+#     print("Usage: maesy <module> <command> [options]")
+#     print("Available modules: ")
+#     print("  train       Train a model")
+#     print("  evaluate    Evaluate a model")
+#     # print("  predict     Make predictions with a model")
+#     print("  dataset     Manage datasets")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -59,6 +58,13 @@ def main():
     # Command: maesy dataset
     data_subs = data.add_subparsers(dest='command')
 
+    # Command: maesy dataset extract_log
+    log_extract_parser = data_subs.add_parser('extract_log', help="Extract images from log files (e.g. ROS bag or MCAP)")
+    log_extract_parser.add_argument("bag_path", help="Path to the log file (e.g. ROS bag or MCAP)")
+    log_extract_parser.add_argument("--topic_name", help="Space-separated list of topics to extract images from (default [/image_left_raw])", nargs="+", default=["/image_left_raw"])
+    log_extract_parser.add_argument("--output_dir", help="Directory to save the extracted images", default="./extracted_images")
+    log_extract_parser.add_argument("--exact", action="store_true", help="Match topic names exactly (e.g. '/camera/image_left_raw' wont match '/image_left_raw'. If not set, will match by last part of topic name")
+
     # Command: maesy dataset download_data
     data_download_parser = data_subs.add_parser('download_data', help="Required arguments for downloading data")
     data_download_parser.add_argument("url", help="URL to the data to download")
@@ -75,9 +81,10 @@ def main():
     dataset_creator_parser.add_argument("-s", "--split", type=float, nargs=3, metavar=('TRAIN', 'VAL', 'TEST'), default=None)
     dataset_creator_parser.add_argument("-d", "--delete", action="store_true", help="Delete original folders after creating dataset")
     dataset_creator_parser.add_argument("-r", "--resize", type=int, nargs=2, metavar=('WIDTH', 'HEIGHT'), default=None, help="Resize images to WIDTH HEIGHT")
+    dataset_creator_parser.add_argument("--labels", "-l", action="store_true", help="Whether to include labels in the created dataset (default: False)")
     dataset_creator_parser.add_argument("-t", "--step", type=int, default=1, help="Step size for sampling images from folders")
     dataset_creator_parser.add_argument("-i", "--start-index", type=int, default=0, help="Start index for sampling images from folders")
-    dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "sequential_similarity"], default=None, help="Clustering method to use for dataset creation")
+    dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "resnet_faiss"], default=None, help="Clustering method to use for dataset creation")
 
 
 
@@ -87,8 +94,8 @@ def main():
     args = parser.parse_args()
     # args = sys.argv[1:]
     match args.module:
-        case "-h" | "--help":
-            print_help()
+        # case "-h" | "--help":
+        #     print_help()
         case "train":
             from .training.cli_train import main
         case "debug":
@@ -101,6 +108,6 @@ def main():
             from .dataset.cli_dataset import main
         case _:
             print(f"Module '{args.module}' not recognized.")
-            print_help()
+            # print_help()
             return
     main(args)

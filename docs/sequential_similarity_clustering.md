@@ -34,14 +34,14 @@ python -m maesy dataset \
 ### Python API
 
 ```python
-from maesy.dataset.clustering_methods.sequential_similarity import cluster
+from maesy.dataset.clustering_methods.resnet_FAISS import cluster
 
 # Select diverse images with default threshold (0.85)
 selected_paths = cluster(
     paths=['/path/to/images'],
     similarity_threshold=0.85,  # Keep images with <85% similarity
-    batch_size=64,              # Batch size for inference
-    forward_scale=128           # Image resize for feature extraction
+    batch_size=64,  # Batch size for inference
+    forward_scale=128  # Image resize for feature extraction
 )
 
 print(f"Selected {len(selected_paths)} images")
@@ -52,7 +52,7 @@ print(f"Selected {len(selected_paths)} images")
 For faster processing with large datasets, use the FAISS-accelerated version:
 
 ```python
-from maesy.dataset.clustering_methods.sequential_similarity import cluster_with_faiss
+from maesy.dataset.clustering_methods.resnet_FAISS import cluster_with_faiss
 
 selected_paths = cluster_with_faiss(
     paths=['/path/to/images'],

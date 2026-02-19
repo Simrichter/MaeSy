@@ -5,7 +5,7 @@ import torch
 
 from .base_model import BaseModel
 from .backbones import TransformerBackbone, TransformerBackboneConfig
-from .heads import DetectionHead, DetectionHeadConfig
+from .heads import ViTDetectionHead, DetectionHeadConfig
 from .components import Utils
 
 
@@ -91,7 +91,7 @@ class ViTDetector(BaseModel):
             dropout=config.decoder_dropout,
             hidden_dim=config.hidden_dim
         )
-        self.head = DetectionHead(head_config)
+        self.head = ViTDetectionHead(head_config)
     
     def forward(self, x: torch.Tensor, **kwargs):
         """

@@ -19,7 +19,7 @@ class DetectionHeadConfig:
     hidden_dim: int = 256
 
 
-class DetectionHead(nn.Module):
+class ViTDetectionHead(nn.Module):
     """Detection head for object detection using transformer decoder.
     
     This head takes encoded features from a backbone and produces

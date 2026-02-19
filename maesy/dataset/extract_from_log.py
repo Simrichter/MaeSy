@@ -6,9 +6,13 @@ import cv2
 import yaml
 from sensor_msgs.msg import Image
 
-# Ignore Unresolved Reference Errors, as this only works if Ros2 is sourced in executing terminal
-from rclpy.serialization import deserialize_message
-from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions
+try:
+    # Ignore Unresolved Reference Errors, as this only works if Ros2 is sourced in executing terminal
+    from rclpy.serialization import deserialize_message
+    from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions
+except ModuleNotFoundError:
+    print("_"*60)
+    print(f"Warning: ROS2 Python libraries not found. If you need rosbag log functionality, source your ROS2 workspace")
 from tqdm import tqdm
 
 

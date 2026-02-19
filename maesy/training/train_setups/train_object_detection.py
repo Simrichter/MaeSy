@@ -18,6 +18,7 @@ from maesy.evaluation.inferer import Inferer
 # Import models
 from maesy.model import ViTDetector, ViTDetectorConfig
 from maesy.model import MaskedAutoencoderViT, MAEConfig
+from maesy.model.yolo_v2_model import YoloV2Model
 
 # Import training components
 from maesy.training import DetectionTrainer, TrainingConfig
@@ -76,7 +77,8 @@ def train_vit_detector(
     print("=" * 60)
 
     # Create detection model
-    model = ViTDetector(det_config)
+    # model = ViTDetector(det_config)
+    model = YoloV2Model()
 
     # Optionally freeze backbone
     if freeze_backbone:
@@ -149,7 +151,6 @@ def train_vit_detector(
     trainer.train()
 
 def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, device: torch.device) -> None:
-    from maesy.model_tools import CheckpointHandler
     """
     Run inference with a trained object detection model.
 
@@ -159,6 +160,7 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, d
         :param out_path: Path to save inference results (predicted bounding boxes and labels)
         :param device: Device to run inference on (e.g., "cuda" or "cpu")
     """
+    from maesy.model_tools import CheckpointHandler
     print("=" * 60)
     print("Running Inference")
     print("=" * 60)
@@ -197,3 +199,15 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, d
                 score, l = label.max(-1)
                 if l != 3 and score>=0.8:
                     f.write(f"{l} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
+
+if __name__ == "__main__":
+    #argparse:
+    import argparse
+    parser = argparse.ArgumentParser(description="Train a ViTDetector for object detection")
+    parser.add_argument("--checkpoint", type=str, default="", help="Path to pretrained MAE checkpoint (or OD checkpoint if --continue_from_checkpoint is set)")
+    parser.add_argument("--dataset", type=str, default="/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)", help="Path to object detection dataset")
+    parser.add_argument("--output", type=str, default="./od_checkpoints", help="Directory to save checkpoints")
+    parser.add_argument("--device", type=str, default="cuda:0", help="Device to run inference on")
+
+    args = parser.parse_args()
+    train_vit_detector(args.checkpoint, args.dataset, args.output, False, False, False)

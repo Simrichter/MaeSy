@@ -114,7 +114,7 @@ class DatasetManager:
             case "resnet_faiss":
                 from maesy.dataset.clustering_methods.resnet_FAISS import cluster_with_faiss as cluster
                 # TODO: Make this a parameter?
-                similarity_threshold = 0.835
+                similarity_threshold = 0.842
                 return cluster(folder_names, similarity_threshold=similarity_threshold, step=step, start_index=start_index)
             case "resnet_kmeans":
                 from maesy.dataset.clustering_methods.resnet_kmeans import cluster

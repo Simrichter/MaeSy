@@ -27,9 +27,9 @@ class YoloV2Head(nn.Module):
     def forward(self, x):
         print(x.shape)
         out = self.det(self.neck(x))
-        B, out.shape # [B, num_anchors * (4 + num_classes), 14, 14]
+        B, _, w,h = out.shape # [B, num_anchors * (4 + num_classes), 14, 14]
         out_dict = {
-            'pred_logits': out[:, :self.num_anchors * self.num_classes, :, :],  # Class predictions
-            'pred_boxes': out[:, self.num_anchors*self.num_classes:, :, :]
+            'pred_logits': out[:, :self.num_anchors * self.num_classes, :, :].reshape(B, -1, w*h).permute(0, 2, 1), # reshape(B, 14*14, -1),  # Class predictions
+            'pred_boxes': out[:, self.num_anchors*self.num_classes:, :, :].reshape(B, -1, w*h).permute(0, 2, 1)
         }
         return out_dict

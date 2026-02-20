@@ -59,7 +59,8 @@ def train_vit_detector(
     output_dir: str,
     freeze_backbone: bool,
     continue_from_checkpoint: bool,
-    enable_wandb: bool
+    enable_wandb: bool,
+    seed: int = 42
 ):
     """
     Train an object detection model using MAE pretrained backbone.
@@ -71,14 +72,17 @@ def train_vit_detector(
         freeze_backbone: Whether to freeze the backbone during training
         continue_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
         enable_wandb: Whether to enable Weights & Biases logging
+        seed: Random seed for reproducibility (default: 42)
     """
     print("=" * 60)
     print("Training with MAE Pretrained Backbone")
     print("=" * 60)
 
+    torch.manual_seed(seed)
+
     # Create detection model
-    # model = ViTDetector(det_config)
-    model = YoloV2Model()
+    model = ViTDetector(det_config)
+    # model = YoloV2Model()
 
     # Optionally freeze backbone
     if freeze_backbone:
@@ -105,9 +109,9 @@ def train_vit_detector(
     # Create dataloaders with custom collate function
     train_loader = DataLoader(
         train_dataset,
-        batch_size=128,
-        shuffle=True,
-        num_workers=4,
+        batch_size=1,#28,
+        shuffle=False, #True,
+        num_workers=0,#4,
         collate_fn=collate_detection_fn,
         pin_memory=True
     )
@@ -128,6 +132,7 @@ def train_vit_detector(
         optimizer="adamw",
         lr_scheduler="cosine",
         warmup_epochs=5,
+        save_frequency=20,
         save_dir=output_dir,
         criterion="DetectionLoss",
         use_amp=True
@@ -150,7 +155,7 @@ def train_vit_detector(
     # Train
     trainer.train()
 
-def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, device: torch.device) -> None:
+def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, visualize: bool, device: torch.device) -> None:
     """
     Run inference with a trained object detection model.
 
@@ -158,6 +163,7 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, d
         :param checkpoint_path: Path to trained model checkpoint
         :param images_path: Path to input image for inference
         :param out_path: Path to save inference results (predicted bounding boxes and labels)
+        :param visualize: Whether to save visualizations of predictions (e.g., images with predicted boxes drawn)
         :param device: Device to run inference on (e.g., "cuda" or "cpu")
     """
     from maesy.model_tools import CheckpointHandler
@@ -174,7 +180,7 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, d
     dataset = UnlabeledDataset(Path(images_path), transforms=transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-    ]), use_first_n=10)
+    ]), step=50, use_first_n=30)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
     inferer = Inferer(model=model, data_loader=dataloader, device=device)
     preds, _ = inferer.infer() # List[Dict] with keys "pred_boxes" (B X num_querys X 4) and "pred_logits" (B X num_queries)]
@@ -199,6 +205,9 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, d
                 score, l = label.max(-1)
                 if l != 3 and score>=0.8:
                     f.write(f"{l} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
+    if visualize:
+        from maesy.evaluation import visualize_annotations
+        visualize_annotations(out_path, "")
 
 if __name__ == "__main__":
     #argparse:

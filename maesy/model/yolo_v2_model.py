@@ -9,7 +9,7 @@ class YoloV2Config:
     backbone: str = "YoloV2Backbone"
     head: str = "YoloV2Head"
     num_classes: int = 4
-    num_anchors: int = 3
+    num_anchors: int = 1
     bbox_loss_coef: float = 5.0
     class_loss_coef: float = 1.0
     giou_loss_coef: float = 2.0

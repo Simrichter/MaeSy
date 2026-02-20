@@ -51,6 +51,11 @@ def main():
     infer.add_argument("checkpoint", help="Path to model checkpoint file")
     infer.add_argument("-o", "--out", type=str, default="./inference_results", help="Folder to save inference results")
     infer.add_argument("--device", type=str, default="", help="Device to run inference on (default: auto-detect CUDA if available, otherwise CPU)")
+    infer.add_argument("-v", "--visualize", action="store_true", help="Whether to save visualizations of predictions in a subfolder (default: False)")
+
+    vis = eval_parser.add_parser("visualize", help="Visualize predictions on a folder of images")
+    vis.add_argument("imgpath", help="Path to folder of images for visualization")
+    vis.add_argument("-o", "--out", type=str, default="", help="Folder to save visualizations (default: subfolder in input folder)")
 
     # Command: maesy predict
     # TODO

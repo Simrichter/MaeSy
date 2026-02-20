@@ -130,7 +130,8 @@ class BaseTrainer(ABC):
                 num_classes=self.model.config.num_classes,
                 bbox_loss_coef=self.model.config.bbox_loss_coef,
                 class_loss_coef=self.model.config.class_loss_coef,
-                giou_loss_coef=self.model.config.giou_loss_coef
+                giou_loss_coef=self.model.config.giou_loss_coef,
+                device=self.device
             )
             return loss
         elif self.config.criterion == "MaskedMSE":

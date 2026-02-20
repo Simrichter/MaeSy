@@ -110,20 +110,22 @@ class DetectionLoss(BaseLoss):
 
         idx = self._get_src_permutation_idx(indices)
         target_classes[idx] = target_classes_o
+        # Now, target_classes has shape [B, num_queries], where all non-used entries get class "None" and the matched entries get their correct class.
 
         loss_ce = F.cross_entropy(
             pred_logits.transpose(1, 2),
             target_classes,
-            # self.empty_weight
+            self.empty_weight
         )
 
         # Compute bbox losses
-        idx = self._get_src_permutation_idx(indices)
-        src_boxes = pred_boxes[idx]
+        idx = self._get_src_permutation_idx(indices) # TODO: Recomputation unnecessary??
+        src_boxes = pred_boxes[idx] # Selecting the boxes selected by the hungarian matching
         target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)  # Expecting the target boxes to be 0-1 normalized
+        # This selected the two chosen target boxes in correct order
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
-        loss_bbox = loss_bbox.sum() / max(target_classes_o.shape[0], 1)
+        loss_bbox = loss_bbox.sum() / max(target_classes_o.shape[0], 1) # Averaging by number of target boxes
 
         # Compute GIoU loss
         loss_giou = 1 - torch.diag(self._generalized_box_iou(
@@ -167,7 +169,6 @@ class DetectionLoss(BaseLoss):
         pred_boxes = predictions['pred_boxes']  # [B, num_queries, 4]
 
         batch_size, num_queries = pred_logits.shape[:2]
-
         # Flatten to compute cost matrices
         out_prob = pred_logits.flatten(0, 1).softmax(-1)  # [B*num_queries, num_classes + 1]
         out_bbox = pred_boxes.flatten(0, 1)  # [B*num_queries, 4]

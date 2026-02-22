@@ -133,6 +133,7 @@ def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_siz
     # Setup transforms for feature extraction
     img_transforms = transforms.Compose([
         transforms.Resize(size=(forward_scale, forward_scale)),
+        transforms.normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Standard ImageNet normalization
         transforms.ToTensor(),
     ])
 
@@ -141,7 +142,7 @@ def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_siz
         UnlabeledDataset(images_dir=path, transforms=img_transforms, step=step, start_index=start_index)
         for path in paths
     ])
-    multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
+    multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
                                   drop_last=False)
     
     # Setup model for feature extraction

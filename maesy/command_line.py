@@ -1,5 +1,6 @@
 import argparse
 
+
 # def print_help():
 #     # print("Tutorial for MaeSy framework.")
 #     print("Usage: maesy <module> <command> [options]")
@@ -29,15 +30,20 @@ def main():
 
     od_parser = train_parser.add_parser("od", help="Train with MAE pretrained backbone")
     od_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
-    od_parser.add_argument("--freeze_backbone", action="store_true", help="Freeze backbone when using MAE pretrained (for mae_pretrained mode)")
-    od_parser.add_argument("--checkpoint", type=str, help="Path to trained checkpoint (MAE checkpoint for fresh training, or OD checkpoint if --resume flag is set", default="")
+    od_parser.add_argument("--freeze_backbone", action="store_true",
+                           help="Freeze backbone when using MAE pretrained (for mae_pretrained mode)")
+    od_parser.add_argument("--checkpoint", type=str,
+                           help="Path to trained checkpoint (MAE checkpoint for fresh training, or OD checkpoint if --resume flag is set",
+                           default="")
     od_parser.add_argument("--output", type=str, default="./od_checkpoints", help="Output directory for checkpoints")
-    od_parser.add_argument("--resume", action="store_true", help="Whether to resume training from an existing OD checkpoint (instead of starting from a pretrained MAE checkpoint)")
+    od_parser.add_argument("--resume", action="store_true",
+                           help="Whether to resume training from an existing OD checkpoint (instead of starting from a pretrained MAE checkpoint)")
     od_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
 
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")
     mae_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
-    mae_parser.add_argument("--checkpoint", type=str, default="", help="Path to checkpoint to continue training from (default: none)")
+    mae_parser.add_argument("--checkpoint", type=str, default="",
+                            help="Path to checkpoint to continue training from (default: none)")
     mae_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
 
     # Comand: maesy debug
@@ -50,12 +56,15 @@ def main():
     infer.add_argument("imgpath", help="Path to folder of images for inference")
     infer.add_argument("checkpoint", help="Path to model checkpoint file")
     infer.add_argument("-o", "--out", type=str, default="./inference_results", help="Folder to save inference results")
-    infer.add_argument("--device", type=str, default="", help="Device to run inference on (default: auto-detect CUDA if available, otherwise CPU)")
-    infer.add_argument("-v", "--visualize", action="store_true", help="Whether to save visualizations of predictions in a subfolder (default: False)")
+    infer.add_argument("--device", type=str, default="",
+                       help="Device to run inference on (default: auto-detect CUDA if available, otherwise CPU)")
+    infer.add_argument("-v", "--visualize", action="store_true",
+                       help="Whether to save visualizations of predictions in a subfolder (default: False)")
 
     vis = eval_parser.add_parser("visualize", help="Visualize predictions on a folder of images")
     vis.add_argument("imgpath", help="Path to folder of images for visualization")
-    vis.add_argument("-o", "--out", type=str, default="", help="Folder to save visualizations (default: subfolder in input folder)")
+    vis.add_argument("-o", "--out", type=str, default="",
+                     help="Folder to save visualizations (default: subfolder in input folder)")
 
     # Command: maesy predict
     # TODO
@@ -64,11 +73,16 @@ def main():
     data_subs = data.add_subparsers(dest='command')
 
     # Command: maesy dataset extract_log
-    log_extract_parser = data_subs.add_parser('extract_log', help="Extract images from log files (e.g. ROS bag or MCAP)")
+    log_extract_parser = data_subs.add_parser('extract_log',
+                                              help="Extract images from log files (e.g. ROS bag or MCAP)")
     log_extract_parser.add_argument("bag_path", help="Path to the log file (e.g. ROS bag or MCAP)")
-    log_extract_parser.add_argument("--topic_name", help="Space-separated list of topics to extract images from (default [/image_left_raw])", nargs="+", default=["/image_left_raw"])
-    log_extract_parser.add_argument("--output_dir", help="Directory to save the extracted images", default="./extracted_images")
-    log_extract_parser.add_argument("--exact", action="store_true", help="Match topic names exactly (e.g. '/camera/image_left_raw' wont match '/image_left_raw'. If not set, will match by last part of topic name")
+    log_extract_parser.add_argument("--topic_name",
+                                    help="Space-separated list of topics to extract images from (default [/image_left_raw])",
+                                    nargs="+", default=["/image_left_raw"])
+    log_extract_parser.add_argument("--output_dir", help="Directory to save the extracted images",
+                                    default="./extracted_images")
+    log_extract_parser.add_argument("--exact", action="store_true",
+                                    help="Match topic names exactly (e.g. '/camera/image_left_raw' wont match '/image_left_raw'. If not set, will match by last part of topic name")
 
     # Command: maesy dataset download_data
     data_download_parser = data_subs.add_parser('download_data', help="Required arguments for downloading data")
@@ -83,18 +97,23 @@ def main():
     dataset_creator_parser = data_subs.add_parser('create', help="Create dataset from local folders")
     dataset_creator_parser.add_argument("data_paths", help="Space-separated list of paths to data folders", nargs='+')
     dataset_creator_parser.add_argument("dataset_name", help="Name of the dataset to create")
-    dataset_creator_parser.add_argument("-s", "--split", type=float, nargs=3, metavar=('TRAIN', 'VAL', 'TEST'), default=None)
-    dataset_creator_parser.add_argument("-d", "--delete", action="store_true", help="Delete original folders after creating dataset")
-    dataset_creator_parser.add_argument("-r", "--resize", type=int, nargs=2, metavar=('WIDTH', 'HEIGHT'), default=None, help="Resize images to WIDTH HEIGHT")
-    dataset_creator_parser.add_argument("--labels", "-l", action="store_true", help="Whether to include labels in the created dataset (default: False)")
-    dataset_creator_parser.add_argument("-t", "--step", type=int, default=1, help="Step size for sampling images from folders")
-    dataset_creator_parser.add_argument("-i", "--start-index", type=int, default=0, help="Start index for sampling images from folders")
-    dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "resnet_faiss"], default=None, help="Clustering method to use for dataset creation")
-
-
-
-
-    # parser.add_argument("module", choices=["train", "evaluate", "dataset"])
+    dataset_creator_parser.add_argument("--already-used", "-a",
+                                        help="Space-separated list of paths to image folders that were already chosen as part of the dataset (new data is compared against it)",
+                                        nargs='+')
+    dataset_creator_parser.add_argument("-s", "--split", type=float, nargs=3, metavar=('TRAIN', 'VAL', 'TEST'),
+                                        default=None)
+    dataset_creator_parser.add_argument("-d", "--delete", action="store_true",
+                                        help="Delete original folders after creating dataset")
+    dataset_creator_parser.add_argument("-r", "--resize", type=int, nargs=2, metavar=('WIDTH', 'HEIGHT'), default=None,
+                                        help="Resize images to WIDTH HEIGHT")
+    dataset_creator_parser.add_argument("--labels", "-l", action="store_true",
+                                        help="Whether to include labels in the created dataset (default: False)")
+    dataset_creator_parser.add_argument("-t", "--step", type=int, default=1,
+                                        help="Step size for sampling images from folders")
+    dataset_creator_parser.add_argument("-i", "--start-index", type=int, default=0,
+                                        help="Start index for sampling images from folders")
+    dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "resnet_faiss"],
+                                        default=None, help="Clustering method to use for dataset creation")
 
     args = parser.parse_args()
     # args = sys.argv[1:]
@@ -103,8 +122,8 @@ def main():
         #     print_help()
         case "train":
             from .training.cli_train import main
-        case "debug":
-            from .debug.cli_debug import main
+        # case "debug":
+        #     from .debug.cli_debug import main
         case "evaluate":
             from .evaluation.cli_evaluate import main
         # case "predict":

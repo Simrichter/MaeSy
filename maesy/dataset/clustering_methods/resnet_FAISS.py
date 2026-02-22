@@ -31,15 +31,15 @@ def cluster(paths, similarity_threshold=0.85, batch_size=128, forward_scale=128,
     Select diverse images using sequential similarity-based filtering.
     
     Args:
-        paths: List of paths to image directories
-        similarity_threshold: Maximum cosine similarity threshold (0-1). 
+        :param paths: List of paths to image directories
+        :param similarity_threshold: Maximum cosine similarity threshold (0-1).
                             Images with similarity >= threshold to any representative are discarded.
                             Default: 0.85 (keeps only images with <85% similarity)
-        batch_size: Batch size for neural network inference
-        forward_scale: Size to resize images to before feature extraction (default: 128)
-        filetype: File extension to filter for (default: ".jpg")
-        step: Step size for selecting images from directories (default: 1)
-        start_index: Starting index for selecting images from directories (default: 0)
+        :param batch_size: Batch size for neural network inference
+        :param forward_scale: Size to resize images to before feature extraction (default: 128)
+        :param filetype: File extension to filter for (default: ".jpg")
+        :param step: Step size for selecting images from directories (default: 1)
+        :param start_index: Starting index for selecting images from directories (default: 0)
     
     Returns:
         List of Path objects pointing to selected representative images
@@ -104,7 +104,7 @@ def cluster(paths, similarity_threshold=0.85, batch_size=128, forward_scale=128,
     return representative_paths
 
 
-def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward_scale=224, filetype=".jpg", step=1, start_index=0):
+def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_size=256, forward_scale=224, filetype=".jpg", step=1, start_index=0):
     """
     Sequential similarity-based clustering with FAISS for faster similarity search.
     
@@ -112,13 +112,14 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward
     Falls back to the standard implementation if FAISS is not available.
     
     Args:
-        paths: List of paths to image directories
-        similarity_threshold: Maximum cosine similarity threshold (0-1)
-        batch_size: Batch size for neural network inference
-        forward_scale: Size to resize images to before feature extraction
-        filetype: File extension to filter for (default: ".jpg")
-        step: Step size for selecting images from directories (default: 1)
-        start_index: Starting index for selecting images from directories (default: 0)
+        :param paths: List of paths to image directories
+        :param chosen_paths: List of already chosen image paths to include as initial representatives (pass None if not wanted)
+        :param similarity_threshold: Maximum cosine similarity threshold (0-1)
+        :param batch_size: Batch size for neural network inference
+        :param forward_scale: Size to resize images to before feature extraction
+        :param filetype: File extension to filter for (default: ".jpg")
+        :param step: Step size for selecting images from directories (default: 1)
+        :param start_index: Starting index for selecting images from directories (default: 0)
     
     Returns:
         List of Path objects pointing to selected representative images
@@ -140,24 +141,39 @@ def cluster_with_faiss(paths, similarity_threshold=0.85, batch_size=256, forward
         UnlabeledDataset(images_dir=path, transforms=img_transforms, step=step, start_index=start_index)
         for path in paths
     ])
-    multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
-                                  drop_last=False, in_order=True)
+    multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
+                                  drop_last=False)
     
     # Setup model for feature extraction
     model: BaseModel = ResnetFeatureExtractor("resnet50")
     model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    
-    # # Get embedding dimension from model
-    # with torch.no_grad():
-    #     dummy_input = torch.zeros(1, 3, forward_scale, forward_scale).to(device)
-    #     dummy_output = model(dummy_input)
-    #     embedding_dim = dummy_output.shape[1]
 
     feature_dim = 2048  # ResNet50 feature dimension after global average pooling
     # Initialize FAISS index for cosine similarity (inner product with normalized vectors)
     index = faiss.IndexFlatIP(feature_dim)
+
+    if chosen_paths is not None:
+        print(f"Adding pre-chosen images to FAISS index...")
+        # Create dataset from all image directories
+        chosen_multi = MultiDataset([
+            UnlabeledDataset(images_dir=path, transforms=img_transforms, step=step, start_index=start_index)
+            for path in chosen_paths
+        ])
+        multi_dataloader = DataLoader(chosen_multi, batch_size=batch_size, shuffle=True, num_workers=4,
+                                      pin_memory=True,
+                                      drop_last=False)
+        for batch_tensor in tqdm(multi_dataloader):
+            batch_tensor = batch_tensor.to(device)
+            # Extract features
+            with torch.no_grad():
+                features = model(batch_tensor)
+                # Normalize features for cosine similarity
+                features = features / (features.norm(dim=1, keepdim=True) + 1e-8)
+
+            features_cpu = features.cpu().numpy()
+            index.add(features_cpu.reshape(1,-1).astype(np.float32))
 
     representative_paths = []
     

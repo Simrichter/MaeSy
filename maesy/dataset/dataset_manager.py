@@ -95,13 +95,15 @@ class DatasetManager:
 
         return dataset_dir
 
-    def cluster_data(self, folder_names: list[str], num_clusters: int, cluster_method: str = "resnet_kmeans", step: int = 1, start_index: int = 0) -> List[Path]:
+    def cluster_data(self, folder_names: list[str], chosen_paths: list[str], num_clusters: int,
+                     cluster_method: str = "resnet_kmeans", step: int = 1, start_index: int = 0) -> List[Path]:
         """
             Clusters all images in the given folders into num_clusters clusters using the specified method.
             The paths of the images to be used are returned as a list
 
         Arguments:
             :param folder_names: A list of paths to image data folders
+            :param chosen_paths: List of already chosen image paths to include as initial representatives (pass None if not wanted)
             :param num_clusters: The number of clusters to create (for resnet_kmeans)
                                 or a proxy for similarity threshold (for sequential_similarity)
             :param cluster_method: A string specifying the clustering method to use. Default is resnet_kmeans
@@ -115,7 +117,7 @@ class DatasetManager:
                 from maesy.dataset.clustering_methods.resnet_FAISS import cluster_with_faiss as cluster
                 # TODO: Make this a parameter?
                 similarity_threshold = 0.842
-                return cluster(folder_names, similarity_threshold=similarity_threshold, step=step, start_index=start_index)
+                return cluster(folder_names, chosen_paths, similarity_threshold, step=step, start_index=start_index)
             case "resnet_kmeans":
                 from maesy.dataset.clustering_methods.resnet_kmeans import cluster
                 return cluster(folder_names, n_c=num_clusters, step=step, start_index=start_index)
@@ -123,19 +125,22 @@ class DatasetManager:
                 raise ValueError(f"Unknown clustering method {cluster_method}")
 
     @staticmethod
-    def _copy_resize(source_paths: List[Path], target_paths: List[Path], resize: int | List[int] | None, label_target_paths: Optional[List[Path]] = None):
+    def _copy_resize(source_paths: List[Path], target_paths: List[Path], resize: int | List[int] | None,
+                     label_target_paths: Optional[List[Path]] = None):
         if resize is not None:
             if len(resize) > 2:
                 raise ValueError(
                     "Too many values in resize. Resize parameter must either be None or a list of one or two integers: [WIDTH] or [WIDTH HEIGHT]")
             from PIL import Image
-            for img_file, target_path in tqdm(zip(source_paths, target_paths), desc=f"Copying and resizing {len(source_paths)} files"):
+            for img_file, target_path in tqdm(zip(source_paths, target_paths),
+                                              desc=f"Copying and resizing {len(source_paths)} files"):
                 if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
                     with Image.open(img_file) as img:
                         img = img.resize((resize[0], resize[1] if len(resize) == 2 else resize[0]))
                         img.save(target_path / img_file.name)
         else:
-            for img_file, target_path in tqdm(zip(source_paths, target_paths), desc=f"Copying {len(source_paths)} files"):
+            for img_file, target_path in tqdm(zip(source_paths, target_paths),
+                                              desc=f"Copying {len(source_paths)} files"):
                 shutil.copy(img_file, target_path)
 
         if label_target_paths is not None:
@@ -144,16 +149,16 @@ class DatasetManager:
                 if label_file.exists():
                     shutil.copy(label_file, target_path / label_file.name)
 
-
     def create_dataset(self,
                        folder_names: list[str],
+                       chosen_paths: list[str],
                        dataset_name: str,
                        split_percentages: list[float],
                        resize: list[int],
                        with_labels: bool,
                        step: int,
                        start_index: int,
-                       del_folders: bool, # TODO: Add functionality
+                       del_folders: bool,  # TODO: Add functionality
                        cluster_method
                        ) -> Path:
         """
@@ -161,6 +166,7 @@ class DatasetManager:
 
         Arguments:
             :param folder_names: List of folders that contain images
+            :param chosen_paths: List of already chosen image paths to include as initial representatives (pass None if not wanted)
             :param dataset_name: Name of the dataset
             :param split_percentages: List of percentages for the data subsets in format [train, val, test]. Defaults to [0.8, 0.1, 0.1] if not/incorrectly specified
             :param resize: Resize images to WIDTH HEIGHT or WIDTH² if HEIGHT not specified
@@ -174,24 +180,26 @@ class DatasetManager:
             Path to final dataset
         """
 
-        if split_percentages is None or type(split_percentages) is not list or len(split_percentages)!=3 or not (abs(sum(split_percentages) - 1.0) < 1e-6 or abs(sum(split_percentages) - 100.0) < 1e-6):
+        if split_percentages is None or type(split_percentages) is not list or len(split_percentages) != 3 or not (
+                abs(sum(split_percentages) - 1.0) < 1e-6 or abs(sum(split_percentages) - 100.0) < 1e-6):
             print("WARNING: Using default split_percentages [0.8, 0.1, 0.1]")
             split_percentages = [0.8, 0.1, 0.1]
         if abs(sum(split_percentages) - 100.0) < 1e-6:
-            split_percentages = [p/100.0 for p in split_percentages]
+            split_percentages = [p / 100.0 for p in split_percentages]
 
         # Set up dataset folder structure
         # Always assuming YOLO-Style dataset structure (with train/val/test top-level folders and images/labels subfolders)
         # only creating the split folders that are actually needed based on split_percentages
         dataset_dir = self.data_root / dataset_name
-        split_paths = [dataset_dir / split for i, split in enumerate(["train", "val", "test"]) if split_percentages[i]>0]
+        split_paths = [dataset_dir / split for i, split in enumerate(["train", "val", "test"]) if
+                       split_percentages[i] > 0]
         os.makedirs(dataset_dir, exist_ok=True)
         for split_path in split_paths:
             os.makedirs(split_path / "images", exist_ok=True)
             if with_labels:
                 os.makedirs(split_path / "labels", exist_ok=True)
 
-        def get_paths(): # folder_names, cluster_method, start_index=0, step=1
+        def get_paths():  # folder_names, cluster_method, start_index=0, step=1
             img_paths = []
             if cluster_method is None:
                 for folder in folder_names:
@@ -200,7 +208,7 @@ class DatasetManager:
                         print(f"WARNING: Folder {folder} does not exist or is not a directory. Skipping...")
                         continue
 
-                    image_paths = [folder_path/f for f in folder_path.iterdir() if
+                    image_paths = [folder_path / f for f in folder_path.iterdir() if
                                    f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']][start_index::step]
                     if len(image_paths) == 0:
                         print(f"WARNING: No image files found in folder {folder}. Skipping...")
@@ -208,7 +216,8 @@ class DatasetManager:
                     img_paths.extend(image_paths)
                 return img_paths
             else:
-                folder_path = self.cluster_data(folder_names, cluster_method=cluster_method, num_clusters=500,
+                folder_path = self.cluster_data(folder_names, chosen_paths, cluster_method=cluster_method,
+                                                num_clusters=500,
                                                 step=step, start_index=start_index)
                 image_paths = [f for f in folder_path if
                                f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
@@ -219,22 +228,24 @@ class DatasetManager:
         image_files = get_paths()
         num_images = len(image_files)
 
-       # Calculate split indices
+        # Calculate split indices
         train_end = int(ceil(split_percentages[0] * num_images))
         val_end = train_end + int(ceil(split_percentages[1] * num_images))
         random.shuffle(image_files)
 
-        target_paths = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[2])/f"images/{img_file.name}" for i, img_file in enumerate(image_files)]
+        target_paths = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
+            2]) / f"images/{img_file.name}" for i, img_file in enumerate(image_files)]
         if with_labels:
-            target_paths_lbls = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[2])/f"labels/{img_file.with_suffix('.txt').name}" for i, img_file in enumerate(image_files)]
+            target_paths_lbls = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
+                2]) / f"labels/{img_file.with_suffix('.txt').name}" for i, img_file in enumerate(image_files)]
         else:
             target_paths_lbls = None
         self._copy_resize(image_files, target_paths, resize, target_paths_lbls)
 
-            # if del_folders:
-            #     print("Deleting original folder:", folder_path)
-            #     shutil.rmtree(folder_path)
-                # os.rmdir(folder_path)
+        # if del_folders:
+        #     print("Deleting original folder:", folder_path)
+        #     shutil.rmtree(folder_path)
+        # os.rmdir(folder_path)
 
         # TODO: Add support for label files
         return dataset_dir

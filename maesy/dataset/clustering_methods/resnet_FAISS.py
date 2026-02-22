@@ -161,10 +161,10 @@ def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_siz
             UnlabeledDataset(images_dir=path, transforms=img_transforms, step=step, start_index=start_index)
             for path in chosen_paths
         ])
-        multi_dataloader = DataLoader(chosen_multi, batch_size=batch_size, shuffle=True, num_workers=4,
+        chosen_multi_dataloader = DataLoader(chosen_multi, batch_size=batch_size, shuffle=True, num_workers=4,
                                       pin_memory=True,
                                       drop_last=False)
-        for batch_tensor in tqdm(multi_dataloader):
+        for batch_tensor in tqdm(chosen_multi_dataloader):
             batch_tensor = batch_tensor.to(device)
             # Extract features
             with torch.no_grad():

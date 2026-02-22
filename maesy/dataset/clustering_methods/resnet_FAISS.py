@@ -171,9 +171,9 @@ def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_siz
                 features = model(batch_tensor)
                 # Normalize features for cosine similarity
                 features = features / (features.norm(dim=1, keepdim=True) + 1e-8)
-
             features_cpu = features.cpu().numpy()
-            index.add(features_cpu.reshape(1,-1).astype(np.float32))
+            for feature in features_cpu:
+                index.add(feature.reshape(1, -1).astype(np.float32))
 
     representative_paths = []
     

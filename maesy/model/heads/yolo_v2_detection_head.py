@@ -1,10 +1,22 @@
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
+
+
+@dataclass
+class YoloV2HeadConfig:
+    num_classes: int
+    num_anchors: int
 
 class YoloV2Head(nn.Module):
     def __init__(self, num_classes: int, num_anchors: int):
         super(YoloV2Head, self).__init__()
         self.type = "yolo_v2_head"
+        self.config = YoloV2HeadConfig(
+            num_classes=num_classes,
+            num_anchors=num_anchors
+        )
         self.num_classes = num_classes
         self.num_anchors = num_anchors
 
@@ -25,7 +37,6 @@ class YoloV2Head(nn.Module):
         self.det = nn.Conv2d(1024, num_anchors * (4 + num_classes), kernel_size=1)
 
     def forward(self, x):
-        print(x.shape)
         out = self.det(self.neck(x))
         B, _, w,h = out.shape # [B, num_anchors * (4 + num_classes), 14, 14]
         out_dict = {

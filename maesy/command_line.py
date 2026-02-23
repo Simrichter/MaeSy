@@ -40,11 +40,17 @@ def main():
                            help="Whether to resume training from an existing OD checkpoint (instead of starting from a pretrained MAE checkpoint)")
     od_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
 
+
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")
     mae_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
     mae_parser.add_argument("--checkpoint", type=str, default="",
                             help="Path to checkpoint to continue training from (default: none)")
     mae_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
+
+    cl_parser = train_parser.add_parser("cl", help="Train a backbone with Classification")
+    cl_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
+    # cl_parser.add_argument("--checkpoint", type=str, default="", help="Path to checkpoint to continue training from (default: none)")
+    cl_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
 
     # Comand: maesy debug
     # TODO

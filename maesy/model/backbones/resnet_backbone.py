@@ -36,7 +36,6 @@ class ResNetBackbone(nn.Module):
                 model = resnet152(weights=ResNet152_Weights.DEFAULT)
             case _:
                 raise ValueError(f"Unsupported ResNet version: {version}")
-
         modules = list(model.children())[:-1] # Remove the last classification layer
         self.model = torch.nn.Sequential(*modules)
 

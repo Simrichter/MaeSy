@@ -1,10 +1,17 @@
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
+
+@dataclass
+class YoloV2BackboneConfig:
+    dummyValue: int = 0
 
 class YoloV2Backbone(nn.Module):
     def __init__(self):
         super(YoloV2Backbone, self).__init__()
         self.type = "yolo_v2_backbone"
+        self.config=YoloV2BackboneConfig()
         # Define the layers of the YOLOv2 backbone (Darknet-19)
         self.features = nn.Sequential(
             # Layer 1

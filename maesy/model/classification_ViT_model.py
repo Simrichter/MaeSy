@@ -1,8 +1,32 @@
 """Classification Vision Transformer for pretraining."""
+from dataclasses import dataclass
+
 from maesy.model.config import ModelConfig
 from .base_model import BaseModel
 from .heads import LinearHead, LinearHeadConfig
 from .backbones import TransformerBackbone, TransformerBackboneConfig
+@dataclass
+class ClassificationViTConfig(ModelConfig):
+    """
+    Configuration for Vision Transformer Detector model.
+    """
+
+    # Image parameters
+    image_size: int = 224
+    patch_size: int = 16
+    in_channels: int = 3
+
+    # Transformer parameters
+    embed_dim: int = 768
+    num_layers: int = 12
+    num_heads: int = 12
+    mlp_ratio: float = 4.0
+    dropout: float = 0.1
+    attention_dropout: float = 0.1
+
+    # Classification head parameters
+    hidden_dim: int = 256
+    num_classes: int = 3
 
 
 class ClassificationViT(BaseModel):
@@ -12,7 +36,7 @@ class ClassificationViT(BaseModel):
     using the ViT architecture.
     """
     
-    def __init__(self, config: ModelConfig):
+    def __init__(self, config: ClassificationViTConfig):
         """
         Initialize classification model.
         

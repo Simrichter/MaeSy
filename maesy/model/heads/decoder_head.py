@@ -3,6 +3,7 @@ from dataclasses import dataclass, asdict
 import torch
 from ..components import TransformerBlock, Utils
 
+
 @dataclass
 class DecoderHeadConfig:
     embed_dim: int
@@ -14,6 +15,7 @@ class DecoderHeadConfig:
     attention_dropout: float
     num_layers: int
     in_channels: int
+
 
 class DecoderHead(nn.Module):
     def __init__(self, config: DecoderHeadConfig):

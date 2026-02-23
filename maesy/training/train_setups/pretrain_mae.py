@@ -58,17 +58,12 @@ def train_mae(
 
     train_dataset = UnlabeledDataset(
         Path(dataset_path) / "train",
-        transforms=train_transforms,
-        # repeat_factor=2,
-        # use_first_n=384,
-        filetype=".jpg"
+        transforms=train_transforms
     )
 
     val_dataset = UnlabeledDataset(
         Path(dataset_path) / "val",
-        transforms=val_transforms,
-        # use_first_n=640, # 5 batches
-        filetype=".jpg"
+        transforms=val_transforms
     )
 
     # Create data loaders

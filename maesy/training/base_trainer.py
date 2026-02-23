@@ -136,6 +136,15 @@ class BaseTrainer(ABC):
             return loss
         elif self.config.criterion == "MaskedMSE":
             return MaskedMSE()
+        elif self.config.criterion == "YOLOv8Loss":
+            from .losses import YOLOv8Loss
+            return YOLOv8Loss(
+                num_classes=self.model.config.num_classes,
+                device=self.device
+            )
+        elif self.config.criterion == "ClassificationLoss":
+            from .losses import ClassificationLoss
+            return ClassificationLoss()
         else:
             print(f"Warning: Unknown loss '{self.config.criterion}'")
             return None

@@ -5,6 +5,7 @@ from .base_model import BaseModel
 from .resnet_featureextractor import ResnetFeatureExtractor
 from maesy.model.mae_model import MaskedAutoencoderViT, MAEConfig
 from maesy.model.vit_detector import ViTDetector, ViTDetectorConfig
+from maesy.model.classification_CNN_model import ClassificationCNN, ClassificationCNNConfig
 
 __all__ = [
     "ModelConfig",
@@ -13,5 +14,7 @@ __all__ = [
     "MAEConfig",
     "ResnetFeatureExtractor",
     "ViTDetector",
-    "ViTDetectorConfig"
+    "ViTDetectorConfig",
+    "ClassificationCNN",
+    "ClassificationCNNConfig",
 ]

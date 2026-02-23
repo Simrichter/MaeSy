@@ -90,10 +90,10 @@ def train_vit_detector(
             param.requires_grad = False
         print("Froze backbone parameters - only training detection head")
     else:
-        print("Fine-tuning entire model (backbone + head)")
+        print("No freeze: Fine-tuning entire model (backbone + head)")
 
     train_transforms = transforms.Compose([
-        transforms.ColorJitter(brightness=0.2, contrast=0.2),
+        # transforms.ColorJitter(brightness=0.2, contrast=0.2),
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
     ])
@@ -109,9 +109,9 @@ def train_vit_detector(
     # Create dataloaders with custom collate function
     train_loader = DataLoader(
         train_dataset,
-        batch_size=1,#28,
-        shuffle=False, #True,
-        num_workers=0,#4,
+        batch_size=64,
+        shuffle=True,
+        num_workers=8,
         collate_fn=collate_detection_fn,
         pin_memory=True
     )
@@ -119,7 +119,7 @@ def train_vit_detector(
     val_loader = DataLoader(
         val_dataset,
         batch_size=64,
-        num_workers=4,
+        num_workers=8,
         collate_fn=collate_detection_fn,
         pin_memory=True
     )
@@ -134,7 +134,7 @@ def train_vit_detector(
         warmup_epochs=5,
         save_frequency=20,
         save_dir=output_dir,
-        criterion="DetectionLoss",
+        criterion= "DetectionLoss", #"YOLOv8Loss",
         use_amp=True
     )
 

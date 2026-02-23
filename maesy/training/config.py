@@ -56,3 +56,11 @@ class MAEPretrainingConfig(TrainingConfig):
     # Checkpoint and logging
     save_dir: str = "./MAEpretrain_checkpoints"
     output_predicted_images: bool = False # Whether to save predicted images during validation
+
+@dataclass
+class ClassificationPretrainingConfig(TrainingConfig):
+    """Configuration for Classification pretraining."""
+    criterion: str = "ClassificationLoss"
+
+    # Checkpoint and logging
+    save_dir: str = "./classification_pretrain_checkpoints"

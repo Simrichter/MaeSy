@@ -9,7 +9,7 @@ from typing import Dict
 @dataclass
 class DetectionHeadConfig:
     """Configuration for Detection Head."""
-    embed_dim: int = 768
+    embed_dim: int = 128
     num_classes: int = 80
     num_queries: int = 100
     num_decoder_layers: int = 6

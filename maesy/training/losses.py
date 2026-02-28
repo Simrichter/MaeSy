@@ -68,6 +68,7 @@ class DetectionLoss(BaseLoss):
         # Adjust weights for class imbalance
         empty_weight = torch.ones(num_classes + 1)
         empty_weight[-1] = eos_coef
+        empty_weight = torch.softmax(empty_weight, dim=-1) # Normalize to sum to 1 (experimental??)
         empty_weight = empty_weight.to(self.device)
         self.register_buffer('empty_weight', empty_weight)
 

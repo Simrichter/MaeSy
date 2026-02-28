@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from maesy.evaluation.inferer import Inferer
 # Import models
-from maesy.model import ViTDetector, ViTDetectorConfig
+from maesy.model import ViTDetector, ViTDetectorConfig, DETR, DETRConfig
 from maesy.model import MaskedAutoencoderViT, MAEConfig
 from maesy.model.yolo_v2_model import YoloV2Model
 
@@ -42,7 +42,7 @@ det_config = ViTDetectorConfig(
 
         # Detection head parameters
         num_classes=3,
-        num_queries=100,
+        num_queries=40, # 100
         num_decoder_layers=3,
         decoder_num_heads=4,
         hidden_dim=256,
@@ -50,7 +50,35 @@ det_config = ViTDetectorConfig(
         # Loss weights
         bbox_loss_coef=5.0,
         class_loss_coef=1.0,
-        giou_loss_coef=2.0
+        giou_loss_coef=2.0,
+        eos_coef=2 #TODO: Move these to training config? Maybe add scheduling?
+    )
+
+detr_config = DETRConfig(
+        image_size=224,
+        patch_size=16,
+        in_channels=3,
+
+        # Backbone parameters
+        embed_dim=128,
+        num_layers=2,
+        num_heads=4,
+        mlp_ratio=4.0,
+        dropout=0.1,
+        attention_dropout=0.1,
+
+        # Detection head parameters
+        num_classes=3,
+        num_queries=40, # 100
+        num_decoder_layers=2,
+        decoder_num_heads=4,
+        hidden_dim=128,
+
+        # Loss weights
+        bbox_loss_coef=5.0,
+        class_loss_coef=1.0,
+        giou_loss_coef=2.0,
+        eos_coef=0.1 #TODO: Move these to training config? Maybe add scheduling?
     )
 
 def train_vit_detector(
@@ -81,8 +109,9 @@ def train_vit_detector(
     torch.manual_seed(seed)
 
     # Create detection model
-    model = ViTDetector(det_config)
+    # model = ViTDetector(det_config)
     # model = YoloV2Model()
+    model = DETR(detr_config)
 
     # Optionally freeze backbone
     if freeze_backbone:
@@ -109,18 +138,19 @@ def train_vit_detector(
     # Create dataloaders with custom collate function
     train_loader = DataLoader(
         train_dataset,
-        batch_size=64,
+        batch_size=128,
         shuffle=True,
-        num_workers=8,
+        num_workers=4,
         collate_fn=collate_detection_fn,
         pin_memory=True
     )
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=64,
-        num_workers=8,
+        batch_size=128,
+        num_workers=4,
         collate_fn=collate_detection_fn,
+        shuffle=True,
         pin_memory=True
     )
 
@@ -134,8 +164,9 @@ def train_vit_detector(
         warmup_epochs=5,
         save_frequency=20,
         save_dir=output_dir,
-        criterion= "DetectionLoss", #"YOLOv8Loss",
-        use_amp=True
+        criterion= "DetectionLoss", #"YOLOv8Loss", #
+        use_amp=True,
+        # device=torch.device("cpu")
     )
 
     # Create trainer
@@ -172,7 +203,8 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, v
     print("=" * 60)
 
     # Load model
-    model = ViTDetector(det_config)
+    # model = ViTDetector(det_config)
+    model = YoloV2Model()
 
     CheckpointHandler(device=device).load_checkpoint(checkpoint_path, model=model)
     model.eval()
@@ -219,4 +251,4 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cuda:0", help="Device to run inference on")
 
     args = parser.parse_args()
-    train_vit_detector(args.checkpoint, args.dataset, args.output, False, False, False)
+    train_vit_detector(args.checkpoint, args.dataset, args.output, False, False, True)

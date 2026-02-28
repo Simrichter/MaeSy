@@ -1,5 +1,7 @@
 from typing import Tuple, Optional
 
+import torch
+
 
 class BoundingBox:
     """Bounding Box representation stored internally as [x_min, y_min, x_max, y_max].
@@ -21,7 +23,11 @@ class BoundingBox:
             :param normalized: Whether the coordinates are already normalized to [0,1] (default False)
         """
         if x_max < x_min or y_max < y_min:
-            raise ValueError("x_max must be >= x_min and y_max must be >= y_min")
+            print ("ValueError in BoundingBox init: x_max must be >= x_min and y_max must be >= y_min\nattempting fix by swapping values")
+            if x_max < x_min:
+                x_min, x_max = x_max, x_min
+            if y_max < y_min:
+                y_min, y_max = y_max, y_min
 
         self.cls_id = cls_id
         self.x_min = float(x_min)
@@ -77,12 +83,52 @@ class BoundingBox:
 
         return cls.from_xywh(cls_id, cx, cy, w, h, normalized)
 
+    def normalize(self, image_width: float, image_height: float) -> None:
+        """
+        Normalize bounding box coordinates to [0,1] by image size in-place.
+        If the bounding box is already normalized, this will do nothing.
+        """
+        if self.normalized:
+            return
+        self.x_min /= image_width
+        self.y_min /= image_height
+        self.x_max /= image_width
+        self.y_max /= image_height
+        self.normalized = True
+
+    def scale_to_size(self, image_width: float, image_height: float) -> None:
+        """
+        Scale bounding box coordinates from normalized [0,1] to pixel coordinates by image size in-place.
+        If the bounding box is not normalized, this will do nothing.
+        """
+        if not self.normalized:
+            return
+        self.x_min = round(self.x_min*image_width)
+        self.y_min = round(self.y_min*image_height)
+        self.x_max = round(self.x_max*image_width)
+        self.y_max = round(self.y_max*image_height)
+        self.normalized = False
+
     def cls(self):
+        """
+        Return class ID of the bounding box.
+        """
         return self.cls_id
 
     def as_xyxy(self) -> Tuple[float, float, float, float]:
         """Return bounding box in [x_min, y_min, x_max, y_max] format."""
         return self.x_min, self.y_min, self.x_max, self.y_max
+
+    # @staticmethod
+    # def xywh_to_xyxy(center_x: float, center_y: float, width: float, height: float) -> Tuple[float, float, float, float]:
+    #     """Convert bounding box from [center_x, center_y, width, height] to [x_min, y_min, x_max, y_max] format."""
+    #     half_w = width / 2.0
+    #     half_h = height / 2.0
+    #     x_min = center_x - half_w
+    #     y_min = center_y - half_h
+    #     x_max = center_x + half_w
+    #     y_max = center_y + half_h
+    #     return x_min, y_min, x_max, y_max
 
     def as_xywh(self) -> Tuple[float, float, float, float]:
         """Return bounding box in [center_x, center_y, width, height] format."""
@@ -92,9 +138,17 @@ class BoundingBox:
         height = self.y_max - self.y_min
         return center_x, center_y, width, height
 
+    def coordinates_as_tensor(self):
+        """
+        Return bounding box coordinates as PyTorch tensor. This is useful for torchvision.utils.draw_bounding_boxes
+         - Bounding box coordinates are returned as a 1-dim tensor of shape [4] in [x_min, y_min, x_max, y_max] format
+         Note: The bounding box coordinates are returned in the internal representation regardless of whether they are normalized or not. Use .as_xyxy_normalized() if you want normalized coordinates.
+        """
+        return torch.tensor([self.x_min, self.y_min, self.x_max, self.y_max]),
+
     def as_xyxy_normalized(self, image_width: float, image_height: float) -> Tuple[float, float, float, float]:
         """
-        Return xyxy coordinates normalized to [0,1] by image size.
+        Return xyxy coordinates normalized to [0,1] by image size, without altering the bounding box object.
         If the bounding box is already normalized, this will just return .as_xyxy()
         """
         if self.normalized:
@@ -103,7 +157,7 @@ class BoundingBox:
 
     def as_xywh_normalized(self, image_width: float, image_height: float) -> Tuple[float, float, float, float]:
         """
-        Return xywh (center) coordinates normalized to [0,1] by image size.
+        Return xywh (center) coordinates normalized to [0,1] by image size, without altering the bounding box object.
         If the bounding box is already normalized, this will just return .as_xywh()
         """
         cx, cy, w, h = self.as_xywh()

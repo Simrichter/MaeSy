@@ -33,8 +33,8 @@ class TrainingConfig:
     log_frequency: int = 10 # Log every n global steps
     
     # Device
-    device: str = "cuda" if torch.cuda.is_available() else 'cpu'
-    num_workers: int = 4
+    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
+    # num_workers: int = 4
     
     # Gradient clipping
     max_grad_norm: float = 1.0

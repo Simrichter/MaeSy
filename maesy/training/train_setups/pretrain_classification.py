@@ -78,7 +78,6 @@ def train_classification(dataset_path, enable_wandb, batch_size=64, num_epochs=5
         warmup_epochs=5,
         save_dir="./classification_checkpoints",
         device="cuda" if torch.cuda.is_available() else "cpu",
-        num_workers=4,
         use_amp=True
     )
     

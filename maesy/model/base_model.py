@@ -17,4 +17,13 @@ class BaseModel(ABC, nn.Module):
         return out
 
     def infer(self, images, targets, **kwargs):
-        return self.forward(images, **kwargs).detach(), targets
+        """
+        Inference method for the model. By default, it just runs a forward pass and returns the raw outputs and targets.
+        This can be overridden in specific model implementations to include post-processing steps (e.g., applying softmax, non-max suppression, etc.) before returning the results.
+
+        Args:
+            :param images: Input images [B, C, H, W]
+            :param targets: Ground truth targets (format depends on the task)
+            :param kwargs: Additional arguments for inference (e.g., confidence thresholds, etc.)
+        """
+        return self.forward(images, **kwargs), targets

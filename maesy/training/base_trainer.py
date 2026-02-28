@@ -46,7 +46,10 @@ class BaseTrainer(ABC):
         self.config = config or TrainingConfig()
 
         # Setup device
-        self.device = torch.device(self.config.device if torch.cuda.is_available() else "cpu")
+        self.device = self.config.device
+        if not torch.cuda.is_available() and self.device != torch.device("cpu"):
+            print(f"Warning: CUDA is not available, switching to CPU!")
+            self.device = torch.device("cpu")
         self.model.to(self.device)
 
         # Setup optimizer
@@ -131,6 +134,7 @@ class BaseTrainer(ABC):
                 bbox_loss_coef=self.model.config.bbox_loss_coef,
                 class_loss_coef=self.model.config.class_loss_coef,
                 giou_loss_coef=self.model.config.giou_loss_coef,
+                eos_coef=self.model.config.eos_coef,
                 device=self.device
             )
             return loss

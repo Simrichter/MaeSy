@@ -136,7 +136,12 @@ class Utils:
     def get_sinusoidal_encoding(context_length: int, embedding_dimension: int, ) -> torch.Tensor:
         """
         This function creates a positional embedding using sinusoidal encoding matrix
-        :returns Tensor of shape [context_length, embed_dim]
+
+        Arguments:
+            :param context_length: int - length of the input sequence (number of patches)
+            :param embedding_dimension: int - dimension of the embedding space
+
+        :returns: Tensor of shape [context_length, embed_dim]
         """
 
         def get_single_encoding(embed_dim, pos):

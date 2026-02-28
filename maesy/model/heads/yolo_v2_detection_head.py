@@ -14,7 +14,7 @@ class YoloV2Head(nn.Module):
         super(YoloV2Head, self).__init__()
         self.type = "yolo_v2_head"
         self.config = YoloV2HeadConfig(
-            num_classes=num_classes,
+            num_classes=num_classes+1, # TODO: add one for background class (only necessary if using DETR loss)
             num_anchors=num_anchors
         )
         self.num_classes = num_classes

@@ -19,7 +19,7 @@ This approach is useful for selecting diverse training samples from a large imag
 import torch
 import numpy as np
 from torchvision import transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from maesy.dataset import UnlabeledDataset, MultiDataset
 from maesy.evaluation.inferer import Inferer
@@ -137,11 +137,15 @@ def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_siz
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Standard ImageNet normalization
     ])
 
-    # Create dataset from all image directories
-    multi_dataset = MultiDataset([
-        UnlabeledDataset(images_dir=path, transforms=img_transforms, step=step, start_index=start_index)
-        for path in paths
-    ])
+    if len(paths)>1:
+        # Create dataset from all image directories
+        multi_dataset = MultiDataset([
+            UnlabeledDataset(images_dir=path, transforms=img_transforms, step=step, start_index=start_index)
+            for path in paths
+        ])
+    else:
+        multi_dataset = UnlabeledDataset(images_dir=paths[0], transforms=img_transforms, step=step, start_index=start_index)
+
     multi_dataloader = DataLoader(multi_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
                                   drop_last=False, in_order=True)
     

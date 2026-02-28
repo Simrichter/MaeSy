@@ -11,7 +11,7 @@ class ResNetBackboneConfig:
 class ResNetBackbone(nn.Module):
     """ResNet Backbone for feature extraction."""
 
-    def __init__(self, version: str = 'resnet50'):
+    def __init__(self, version: str = 'resnet50', remove_layers: int = 1):
         """
         Initialize ResNet backbone.
 
@@ -36,7 +36,7 @@ class ResNetBackbone(nn.Module):
                 model = resnet152(weights=ResNet152_Weights.DEFAULT)
             case _:
                 raise ValueError(f"Unsupported ResNet version: {version}")
-        modules = list(model.children())[:-1] # Remove the last classification layer
+        modules = list(model.children())[:-remove_layers] # Remove the last classification layer
         self.model = torch.nn.Sequential(*modules)
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:

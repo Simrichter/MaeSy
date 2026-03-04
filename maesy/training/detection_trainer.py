@@ -46,13 +46,16 @@ class DetectionTrainer(BaseTrainer):
             pred_logits = predictions['pred_logits'][0]
             pred_boxes = predictions['pred_boxes'][0]
             mask = pred_logits.argmax(dim=-1) != 3
-            filtered_logits = pred_logits[mask]
-            filtered_boxes = box_convert(pred_boxes[mask], "cxcywh", "xyxy") * images[0].shape[-1] # Assuming square images and normalized box coordinates
+            filtered_logits = pred_logits#[mask] TODO
+            filtered_boxes = box_convert(pred_boxes, "cxcywh", "xyxy") * images[0].shape[-1] # TODO [mask], Assuming square images and normalized box coordinates
 
             labels = [name_coding[l] for l in filtered_logits.argmax(dim=-1).cpu().tolist()]
             # print(f"Predicted labels: {labels}")
             # print(f"Predicted boxes: {filtered_boxes.cpu().tolist()}")
-            img_prediction = draw_boxes_in_image(images[0].cpu(), filtered_boxes, labels)
+            img = images[0].cpu()
+            # undo this transform: transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            img = img * torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1) + torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+            img_prediction = draw_boxes_in_image(img, filtered_boxes, labels)
             losses["img_out"] = img_prediction
 
         return losses

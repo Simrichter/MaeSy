@@ -86,6 +86,9 @@ class BaseTrainer(ABC):
     def _create_optimizer(self) -> torch.optim.Optimizer:
         """Create optimizer."""
         if self.config.optimizer.lower() == "adamw":
+            params = [{"params": self.model.backbone.parameters(), "lr": self.config.backbone_learning_rate},
+                      {"params": self.model.projection.parameters(), "lr": self.config.learning_rate},# TODO Enforce projection in head!!
+                      {"params": self.model.head.parameters(), "lr": self.config.learning_rate}]
             return torch.optim.AdamW(
                 self.model.parameters(),
                 lr=self.config.learning_rate,
@@ -131,9 +134,9 @@ class BaseTrainer(ABC):
         if self.config.criterion == "DetectionLoss":
             loss = DetectionLoss(
                 num_classes=self.model.config.num_classes,
-                bbox_loss_coef=self.model.config.bbox_loss_coef,
-                class_loss_coef=self.model.config.class_loss_coef,
-                giou_loss_coef=self.model.config.giou_loss_coef,
+                bbox_loss_coef= 1.0, #self.model.config.bbox_loss_coef,
+                class_loss_coef= 2.0, #self.model.config.class_loss_coef,
+                giou_loss_coef= 1.0, #self.model.config.giou_loss_coef,
                 eos_coef=self.model.config.eos_coef,
                 device=self.device
             )

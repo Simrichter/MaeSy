@@ -14,6 +14,7 @@ class TrainingConfig:
     num_epochs: int = 100
     batch_size: int = 16
     learning_rate: float = 1e-4
+    backbone_learning_rate: float = learning_rate
     weight_decay: float = 1e-4
     warmup_epochs: int = 5
     criterion: str = "None"  # e.g., DetectionLoss, MaskedMSE, etc.

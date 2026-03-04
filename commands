@@ -17,7 +17,8 @@ maesy train od --dataset "/home/simon/Desktop/maesy-training/data/AllData (Objec
 Inference:
 maesy evaluate infer "/home/simon/Desktop/maesy-training/data/cluster_PCA/train" "/home/simon/Desktop/maesy-training/od_checkpoints/offline_run/best_model.pth"
 maesy evaluate infer "/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)/val/images" "/home/simon/Desktop/maesy-training/od_checkpoints/offline_run/best_model.pth"
-with vis: maesy evaluate infer "/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)/val/images" "/home/simon/Desktop/maesy-training/od_checkpoints/olive-hill-3/final_model.pth" --visualize
+with vis: maesy evaluate infer <ImageFolder> <CheckpointPath> --visualize
+
 
 VISUALIZATIONS:
 maesy evaluate visualize "/home/simon/Desktop/maesy-training/inference_results"

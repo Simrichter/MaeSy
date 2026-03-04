@@ -69,18 +69,18 @@ class ObjectDetectionDataset(Dataset):
         """
         image_path = os.path.join(self.images_dir, self.images[idx])
         # Load image
-        image = Image.open(image_path).convert('RGB')
+        with Image.open(image_path).convert('RGB') as image:
 
-        # Apply transforms
-        if self.transforms is not None:
-            image = self.transforms(image)
-        else:
-            # Default: convert image to tensor
-            image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
+            # Apply transforms
+            if self.transforms is not None:
+                image = self.transforms(image)
+            else:
+                # Default: convert image to tensor
+                image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
 
-        annotation_path = os.path.join(self.annotations_dir, self.annotations[idx])
-        if(annotation_path.split("/")[-1].split(".")[0] != image_path.split("/")[-1].split(".")[0]):
-            print("\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(annotation_path, image_path))
-        with open(annotation_path, "r") as f:
-            boxes = [BoundingBox.from_str(line) for line in f.readlines()]
-        return image, boxes
+            annotation_path = os.path.join(self.annotations_dir, self.annotations[idx])
+            if annotation_path.split("/")[-1].split(".")[0] != image_path.split("/")[-1].split(".")[0]:
+                print("\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(annotation_path, image_path))
+            with open(annotation_path, "r") as f:
+                boxes = [BoundingBox.from_str(line) for line in f.readlines()]
+            return image, boxes

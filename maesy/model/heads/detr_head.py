@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dataclasses import dataclass, asdict
-from typing import Dict
+from typing import Dict, Tuple
 
 from maesy.model.components import Utils, TransformerBlock
 
@@ -11,11 +11,11 @@ from maesy.model.components import Utils, TransformerBlock
 class DETRHeadConfig:
     """Configuration for Detection Head."""
     embed_dim: int = 128
-    num_patches: int = 49
+    spatial_feature_size: Tuple[int] = (7,7)
     num_classes: int = 80
     mlp_ratio: float = 4.0
     dropout: float = 0.1
-    hidden_dim: int = 256
+    hidden_dim_out_layers: int = 256
 
     # Encoder parameters
     num_heads_encoder: int = 8
@@ -25,6 +25,9 @@ class DETRHeadConfig:
     num_queries: int = 100
     num_decoder_layers: int = 6
     num_heads_decoder: int = 8
+
+    # def __post_init__(self):
+    #     self.num_patches = self.spatial_feature_size[0] * self.spatial_feature_size[1]
 
 
 class DETRHead(nn.Module):
@@ -40,23 +43,25 @@ class DETRHead(nn.Module):
         self.type = "DETRHead"
         self.config = config
 
-        self.register_buffer('pos_embed', Utils.get_sinusoidal_encoding(config.num_patches, config.embed_dim))
+        # self.register_buffer('pos_embed', )
+        pos_embed = Utils.get_2d_sinusoidal_encoding(*self.config.spatial_feature_size, self.config.embed_dim) # Utils.get_sinusoidal_encoding(config.num_patches, config.embed_dim)
 
-        self.encoder = DetrEncoder(self.pos_embed, config.embed_dim, config.num_heads_encoder, config.num_encoder_layers, config.mlp_ratio, config.dropout)
-        self.decoder = DetrDecoder(self.pos_embed, config.embed_dim, config.num_queries, config.num_heads_decoder, config.num_decoder_layers, config.mlp_ratio, config.dropout)
+        self.encoder = DetrEncoder(pos_embed, config.embed_dim, config.num_heads_encoder, config.num_encoder_layers, config.mlp_ratio, config.dropout)
+        self.decoder = DetrDecoder(pos_embed, config.embed_dim, config.num_queries, config.num_heads_decoder, config.num_decoder_layers, config.mlp_ratio, config.dropout)
 
         # Classification head
-        self.class_embed = nn.Linear(config.embed_dim, config.num_classes + 1)  # +1 for no-object
+        self.class_embed = MLP(config.embed_dim, config.hidden_dim_out_layers, config.num_classes + 1, config.dropout) #nn.Linear(config.embed_dim, config.num_classes + 1)  # +1 for no-object
 
         # Bounding box regression head
-        self.bbox_embed = nn.Sequential(
-            nn.Linear(config.embed_dim, config.hidden_dim),
-            nn.ReLU(),
-            nn.Linear(config.hidden_dim, config.hidden_dim),
-            nn.ReLU(),
-            nn.Linear(config.hidden_dim, 4),  # [cx, cy, w, h]
-            nn.Sigmoid()
-        )
+        self.bbox_embed = MLP(config.embed_dim, config.hidden_dim_out_layers, 4, config.dropout)
+        #     nn.Sequential(
+        #     nn.Linear(config.embed_dim, config.hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(config.hidden_dim, config.hidden_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(config.hidden_dim, 4),  # [cx, cy, w, h]
+        #     nn.Sigmoid()
+        # )
 
     def forward(self, features: torch.Tensor, **kwargs) -> Dict[str, torch.Tensor]:
         """
@@ -75,7 +80,7 @@ class DETRHead(nn.Module):
 
         # Predict classes and bounding boxes
         pred_logits = self.class_embed(decoder_out)  # [B, num_queries, num_classes + 1]
-        pred_boxes = self.bbox_embed(decoder_out)  # [B, num_queries, 4] normalized to [0, 1]
+        pred_boxes = self.bbox_embed(decoder_out).sigmoid()  # [B, num_queries, 4] normalized to [0, 1]
 
         return {
             'pred_logits': pred_logits,
@@ -87,7 +92,7 @@ class DetrEncoder(nn.Module):
     def __init__(self, pos_embed, embed_dim, num_heads, num_encoder_layers, mlp_ratio: float = 4.0, dropout: float = 0.1):
         super().__init__()
 
-        self.pos_embed = pos_embed
+        self.register_buffer('pos_embed', pos_embed)
 
         self.encoder_blocks = nn.ModuleList([
             DetrEncoderLayer(embed_dim, num_heads, mlp_ratio, dropout) for _ in range(num_encoder_layers)
@@ -96,7 +101,7 @@ class DetrEncoder(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
         for block in self.encoder_blocks:
-            x = block(x, self.pos_embed)
+            x = block(x, self.pos_embed.expand(x.shape[0], -1, -1))
         return x
 
 class DetrDecoder(nn.Module):
@@ -105,7 +110,7 @@ class DetrDecoder(nn.Module):
         super().__init__()
 
         self.query_embed = nn.Embedding(num_queries, embed_dim)
-        self.pos_embed = pos_embed
+        self.register_buffer('pos_embed', pos_embed)
 
         self.decoder_blocks = nn.ModuleList([
             DetrDecoderLayer(embed_dim, num_heads, mlp_ratio, dropout) for _ in range(num_decoder_layers)
@@ -113,9 +118,11 @@ class DetrDecoder(nn.Module):
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
-        queries = torch.zeros_like(self.query_embed.weight)
+        query_pos_enc = self.query_embed.weight.unsqueeze(0)
+        # queries = torch.zeros_like(query_pos_enc).repeat(features.shape[0], 1, 1) # [B, num_queries, embed_dim]
+        queries = self.query_embed.weight.unsqueeze(0).repeat(features.shape[0], 1, 1)
         for block in self.decoder_blocks:
-            queries = block(queries, features, self.query_embed, self.pos_embed)
+            queries = block(queries, features, query_pos_enc, self.pos_embed.expand(features.shape[0], -1, -1))
         return queries
 
 class DetrEncoderLayer(nn.Module):
@@ -179,9 +186,9 @@ class DetrSelfAttention(nn.Module):
 
         self.qk = nn.Linear(embed_dim, embed_dim * 2)
         self.v = nn.Linear(embed_dim, embed_dim)
-        self.attention = Attention(embed_dim, dropout)
+        self.attention = Attention(embed_dim, self.scale, dropout)
 
-    def forward(self, x: torch.Tensor, pos_enc) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, pos_enc: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
         B, N, C = x.shape
 
@@ -210,16 +217,16 @@ class DetrCrossAttention(nn.Module):
         self.k = nn.Linear(embed_dim, embed_dim)
         self.v = nn.Linear(embed_dim, embed_dim)
 
-        self.attention = Attention(embed_dim, dropout)
+        self.attention = Attention(embed_dim, self.scale, dropout)
 
     def forward(self, queries: torch.Tensor, enc_features: torch.Tensor, pos_enc_query: torch.Tensor, pos_enc_feature: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
         B, N, C = queries.shape
 
         # Compute Q, K, V
-        q = self.q(queries + pos_enc_query).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # [2, B, num_heads, N, head_dim]
-        k = self.k(enc_features + pos_enc_feature).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # [B, num_heads, N, head_dim]
-        v = self.v(queries).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # [B, num_heads, N, head_dim]
+        q = self.q(queries + pos_enc_query).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # [B, num_heads, nq, head_dim]
+        k = self.k(enc_features + pos_enc_feature).reshape(B, enc_features.shape[1], self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # [B, num_heads, np, head_dim]
+        v = self.v(enc_features).reshape(B, enc_features.shape[1], self.num_heads, self.head_dim).permute(0, 2, 1, 3)  # [B, num_heads, N, head_dim]
 
         x = self.attention(q, k, v)
 
@@ -227,10 +234,10 @@ class DetrCrossAttention(nn.Module):
 
 class Attention(nn.Module):
     """Multi-head attention layer."""
-    def __init__(self, embed_dim, dropout: float = 0.1):
+    def __init__(self, embed_dim, scale, dropout: float = 0.1):
         super().__init__()
 
-        self.scale = self.head_dim ** -0.5
+        self.scale = scale
 
         self.attn_dropout = nn.Dropout(dropout)
         self.proj = nn.Linear(embed_dim, embed_dim)
@@ -238,14 +245,14 @@ class Attention(nn.Module):
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
-        B, N, C = q.shape
+        B, nh, N, C = q.shape
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = F.softmax(attn, dim=-1)
         attn = self.attn_dropout(attn)
 
         # Combine heads
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = (attn @ v).transpose(1, 2).reshape(B, N, nh*C)
         x = self.proj(x)
         x = self.proj_dropout(x)
 

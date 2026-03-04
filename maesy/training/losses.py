@@ -68,7 +68,7 @@ class DetectionLoss(BaseLoss):
         # Adjust weights for class imbalance
         empty_weight = torch.ones(num_classes + 1)
         empty_weight[-1] = eos_coef
-        empty_weight = torch.softmax(empty_weight, dim=-1) # Normalize to sum to 1 (experimental??)
+        # empty_weight = torch.softmax(empty_weight, dim=-1) # Normalize to sum to 1 (experimental??)
         empty_weight = empty_weight.to(self.device)
         self.register_buffer('empty_weight', empty_weight)
 
@@ -103,7 +103,7 @@ class DetectionLoss(BaseLoss):
         # Compute classification loss
         target_classes_o = torch.cat([t['labels'][J] for t, (_, J) in zip(targets, indices)])
         target_classes = torch.full(
-            pred_logits.shape[:2],
+            pred_logits.shape[:2], # No-Object class
             self.num_classes,
             dtype=torch.int64,
             device=pred_logits.device
@@ -116,7 +116,8 @@ class DetectionLoss(BaseLoss):
         loss_ce = F.cross_entropy(
             pred_logits.transpose(1, 2),
             target_classes,
-            weight=self.empty_weight
+            weight=self.empty_weight,
+            label_smoothing=0.1 #TODO Experimental
         )
 
         # Compute bbox losses
@@ -177,8 +178,8 @@ class DetectionLoss(BaseLoss):
 
 
         for i, target in enumerate(targets):
-            tgt_ids = target['labels'] # [B, num_target_boxes]
-            tgt_bbox = target['boxes'] # [B, num_target_boxes, 4]
+            tgt_ids = target['labels'] # [num_target_boxes,]
+            tgt_bbox = target['boxes'] # [num_target_boxes, 4]
 
             if len(tgt_ids) == 0:
                 indices.append((torch.tensor([], dtype=torch.int64), torch.tensor([], dtype=torch.int64)))
@@ -197,10 +198,17 @@ class DetectionLoss(BaseLoss):
                 # self._box_cxcywh_to_xyxy(tgt_bbox),
                 self._box_cxcywh_to_xyxy(tgt_bbox)
             )
+            if cost_giou.shape[1] > cost_giou.shape[0]:
+                raise ValueError(f"Hungarian matching failed, more target boxes than predictions. Cost GIoU shape: {cost_giou.shape}")
+
+            # print(f"Cost matrices for batch item {i}:")
+            # print(cost_class.mean())
+            # print(cost_bbox.mean())
+            # print(cost_giou.mean())
 
             # Final cost matrix
             C = self.bbox_loss_coef * cost_bbox + self.class_loss_coef * cost_class + self.giou_loss_coef * cost_giou
-            C = C.cpu()
+            C = C.cpu().numpy()
 
             # Hungarian algorithm
             src_idx, tgt_idx = linear_sum_assignment(C)
@@ -243,18 +251,18 @@ class DetectionLoss(BaseLoss):
         inter = wh[:, :, 0] * wh[:, :, 1]  # [N, M]
 
         # Compute union
-        area1 = (boxes1[:, 2] - boxes1[:, 0]) * (boxes1[:, 3] - boxes1[:, 1])
-        area2 = (boxes2[:, 2] - boxes2[:, 0]) * (boxes2[:, 3] - boxes2[:, 1])
+        area1 = (boxes1[:, 2] - boxes1[:, 0]).clamp(min=0) * (boxes1[:, 3] - boxes1[:, 1]).clamp(min=0)
+        area2 = (boxes2[:, 2] - boxes2[:, 0]).clamp(min=0) * (boxes2[:, 3] - boxes2[:, 1]).clamp(min=0)
         union = area1[:, None] + area2 - inter
 
-        iou = inter / union
+        iou = inter / (union+1e-7)
 
         # Compute enclosing box
         lt_enclosing = torch.min(boxes1[:, None, :2], boxes2[:, :2])
         rb_enclosing = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
 
         wh_enclosing = (rb_enclosing - lt_enclosing).clamp(min=0)
-        area_enclosing = wh_enclosing[:, :, 0] * wh_enclosing[:, :, 1]
+        area_enclosing = wh_enclosing[:, :, 0] * wh_enclosing[:, :, 1] + 1e-7
 
         giou = iou - (area_enclosing - union) / area_enclosing
 

@@ -64,6 +64,8 @@ def visualize_annotations(input_dir, output_dir):
 
             # Bild laden
             boxes = [BoundingBox.from_str(l) for l in open(txt_path, "r").readlines()] if os.path.exists(txt_path) else []
+            if len(boxes) == 0:
+                continue
             img = draw_boxes_in_image(img_path, boxes).float() / 255.0
             # Annotiertes Bild speichern
             out_path = os.path.join(output_dir, file)
@@ -83,7 +85,8 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
     name_coding = {
         0: "Ball",  # TODO: Get this stuff from model config?
         1: "Robot",
-        2: "PenaltyCross"  # (Keine 27 Beschriftungen erwünscht), alternativ: LineCrossing
+        2: "PenaltyCross",  # (Keine 27 Beschriftungen erwünscht), alternativ: LineCrossing
+        3: "No-Object"
     }
 
     if type(img) is str:
@@ -96,6 +99,8 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
 
     # Convert BoundingBox objects to tensor format if needed
     if type(boxes) is list:
+        if len(boxes) == 0:
+            return img
         boxes = torch.stack([box.coordinates_as_tensor()[0] for box in boxes])
 
     # Assuming normalized boxes:
@@ -106,6 +111,6 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
         out = draw_bounding_boxes(img, boxes, labels=labels) #, colors=[*color_coding.values()]
     except ValueError as e:
         out = img
-        print(f"Failed to draw boxes for image {img} with boxes {boxes} and labels {labels}\n\nError: {e}")
+        # print(f"Failed to draw boxes for image {img} with boxes {boxes} and labels {labels}\n\nError: {e}")
 
     return out

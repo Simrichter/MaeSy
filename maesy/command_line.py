@@ -30,8 +30,8 @@ def main():
 
     od_parser = train_parser.add_parser("od", help="Train with MAE pretrained backbone")
     od_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
-    od_parser.add_argument("--freeze_backbone", action="store_true",
-                           help="Freeze backbone when using MAE pretrained (for mae_pretrained mode)")
+    od_parser.add_argument("--no-freeze", action="store_true",
+                           help="Do not freeze backbone during training (default: False, i.e. backbone is frozen)")
     od_parser.add_argument("--checkpoint", type=str,
                            help="Path to trained checkpoint (MAE checkpoint for fresh training, or OD checkpoint if --resume flag is set",
                            default="")

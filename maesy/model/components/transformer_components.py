@@ -156,6 +156,45 @@ class Utils:
             [get_single_encoding(embedding_dimension, i) for i in range(context_length)]).unsqueeze(0)
 
     @staticmethod
+    def get_2d_sinusoidal_encoding(H, W, embed_dim, device=None):
+        """
+        Returns positional encoding of shape:
+        [1, H*W, embed_dim]
+        """
+
+        if embed_dim % 4 != 0:
+            raise ValueError("Embedding dimension must be divisible by 4 for 2D sin encoding")
+
+        if device is None:
+            device = torch.device("cpu")
+
+        # Each axis gets half the embedding
+        dim_each = embed_dim // 2
+        dim_freq = dim_each // 2  # because sin+cos doubles it
+
+        y_embed = torch.arange(H, device=device).unsqueeze(1).repeat(1, W)
+        x_embed = torch.arange(W, device=device).unsqueeze(0).repeat(H, 1)
+
+        # Optional normalization
+        y_embed = y_embed / (H - 1)
+        x_embed = x_embed / (W - 1)
+
+        dim_t = torch.arange(dim_freq, device=device)
+        dim_t = 10000 ** (2 * dim_t / dim_freq)
+
+        pos_x = x_embed[..., None] / dim_t
+        pos_y = y_embed[..., None] / dim_t
+
+        pos_x = torch.stack((pos_x.sin(), pos_x.cos()), dim=-1).flatten(-2)
+        pos_y = torch.stack((pos_y.sin(), pos_y.cos()), dim=-1).flatten(-2)
+
+        pos = torch.cat((pos_y, pos_x), dim=-1)  # [H, W, embed_dim]
+
+        pos = pos.view(H * W, embed_dim)
+
+        return pos.unsqueeze(0)  # [1, H*W, embed_dim]
+
+    @staticmethod
     def init_weights(module: nn.Module):
         """Initialize weights."""
         # Initialize patch embedding projection

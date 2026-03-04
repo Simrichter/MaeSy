@@ -26,66 +26,65 @@ from maesy.training.utils import collate_detection_fn
 
 # Import dataset
 from maesy.dataset import ObjectDetectionDataset, UnlabeledDataset
+import torch.multiprocessing as mp
 
-det_config = ViTDetectorConfig(
-        image_size=224,
-        patch_size=16,
-        in_channels=3,
-
-        # Backbone parameters
-        embed_dim=384,
-        num_layers=8,
-        num_heads=6,
-        mlp_ratio=4.0,
-        dropout=0.1,
-        attention_dropout=0.1,
-
-        # Detection head parameters
-        num_classes=3,
-        num_queries=40, # 100
-        num_decoder_layers=3,
-        decoder_num_heads=4,
-        hidden_dim=256,
-
-        # Loss weights
-        bbox_loss_coef=5.0,
-        class_loss_coef=1.0,
-        giou_loss_coef=2.0,
-        eos_coef=2 #TODO: Move these to training config? Maybe add scheduling?
-    )
+# det_config = ViTDetectorConfig(
+#         image_size=224,
+#         patch_size=16,
+#         in_channels=3,
+#
+#         # Backbone parameters
+#         embed_dim=384,
+#         num_layers=8,
+#         num_heads=6,
+#         mlp_ratio=4.0,
+#         dropout=0.1,
+#         attention_dropout=0.1,
+#
+#         # Detection head parameters
+#         num_classes=3,
+#         num_queries=15, # 100
+#         num_decoder_layers=3,
+#         decoder_num_heads=4,
+#         hidden_dim=256,
+#
+#         # Loss weights
+#         bbox_loss_coef=5.0,
+#         class_loss_coef=1.0,
+#         giou_loss_coef=2.0,
+#         eos_coef=2 #TODO: Move these to training config? Maybe add scheduling?
+#     )
 
 detr_config = DETRConfig(
+
         image_size=224,
-        patch_size=16,
-        in_channels=3,
 
         # Backbone parameters
-        embed_dim=128,
-        num_layers=2,
-        num_heads=4,
-        mlp_ratio=4.0,
-        dropout=0.1,
-        attention_dropout=0.1,
+        embed_dim=256,
+        resnet_version="resnet50",
+        # freeze_backbone=True,
 
         # Detection head parameters
         num_classes=3,
-        num_queries=40, # 100
-        num_decoder_layers=2,
-        decoder_num_heads=4,
-        hidden_dim=128,
+        num_queries=15, # 100
+        num_encoder_layers=6,
+        num_decoder_layers=6,
+        encoder_num_heads=8,
+        decoder_num_heads=8,
+        hidden_dim_out_layers=256,
 
         # Loss weights
         bbox_loss_coef=5.0,
         class_loss_coef=1.0,
         giou_loss_coef=2.0,
-        eos_coef=0.1 #TODO: Move these to training config? Maybe add scheduling?
+        eos_coef=0.05 #TODO: Move these to training config? Maybe add scheduling?
     )
 
 def train_vit_detector(
     checkpoint_path: str,
     dataset_path: str,
     output_dir: str,
-    freeze_backbone: bool,
+    no_freeze: bool,
     continue_from_checkpoint: bool,
     enable_wandb: bool,
     seed: int = 42
@@ -97,7 +96,7 @@ def train_vit_detector(
         checkpoint_path: Path to pretrained MAE checkpoint
         dataset_path: Path to object detection dataset
         output_dir: Directory to save checkpoints
-        freeze_backbone: Whether to freeze the backbone during training
+        no_freeze: Whether to continue training the backbone
         continue_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
         enable_wandb: Whether to enable Weights & Biases logging
         seed: Random seed for reproducibility (default: 42)
@@ -114,10 +113,10 @@ def train_vit_detector(
     model = DETR(detr_config)
 
     # Optionally freeze backbone
-    if freeze_backbone:
+    if not no_freeze:
         for param in model.backbone.parameters():
             param.requires_grad = False
-        print("Froze backbone parameters - only training detection head")
+        # print("Froze backbone parameters - only training detection head")
     else:
         print("No freeze: Fine-tuning entire model (backbone + head)")
 
@@ -125,30 +124,35 @@ def train_vit_detector(
         # transforms.ColorJitter(brightness=0.2, contrast=0.2),
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
     val_transforms = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     # Create datasets and dataloaders
     train_dataset = ObjectDetectionDataset(f"{dataset_path}/train", transforms=train_transforms)
     val_dataset = ObjectDetectionDataset(f"{dataset_path}/val", transforms=val_transforms)
-    
+
+    # mp.set_sharing_strategy("file_system")
     # Create dataloaders with custom collate function
     train_loader = DataLoader(
         train_dataset,
-        batch_size=128,
+        batch_size=64,
         shuffle=True,
         num_workers=4,
+        persistent_workers=True,
         collate_fn=collate_detection_fn,
         pin_memory=True
     )
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=128,
+        batch_size=64,
         num_workers=4,
+        persistent_workers=True,
         collate_fn=collate_detection_fn,
         shuffle=True,
         pin_memory=True
@@ -156,9 +160,10 @@ def train_vit_detector(
 
     # Create training configuration
     training_config = TrainingConfig(
-        num_epochs=100,
-        learning_rate=1e-4 if not freeze_backbone else 1e-3,  # Higher LR when only training head
-        weight_decay=1e-4,
+        num_epochs=600,
+        learning_rate=1e-4 if no_freeze else 1e-4,  # Higher LR when only training head
+        backbone_learning_rate=1e-5 if no_freeze else 0.0,  # Very low LR for backbone if fine-tuning, otherwise 0
+        weight_decay=5e-4,
         optimizer="adamw",
         lr_scheduler="cosine",
         warmup_epochs=5,
@@ -186,7 +191,7 @@ def train_vit_detector(
     # Train
     trainer.train()
 
-def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, visualize: bool, device: torch.device) -> None:
+def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: str, visualize: bool, device: torch.device) -> None:
     """
     Run inference with a trained object detection model.
 
@@ -204,7 +209,8 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, v
 
     # Load model
     # model = ViTDetector(det_config)
-    model = YoloV2Model()
+    # model = YoloV2Model()
+    model = DETR(detr_config)
 
     CheckpointHandler(device=device).load_checkpoint(checkpoint_path, model=model)
     model.eval()
@@ -212,10 +218,11 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, v
     dataset = UnlabeledDataset(Path(images_path), transforms=transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-    ]), step=50, use_first_n=30)
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ]), step=50) #, use_first_n=30
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
     inferer = Inferer(model=model, data_loader=dataloader, device=device)
-    preds, _ = inferer.infer() # List[Dict] with keys "pred_boxes" (B X num_querys X 4) and "pred_logits" (B X num_queries)]
+    preds, _ = inferer.infer() # List[Dict] with keys "pred_boxes" (B X num_querys X 4) and "pred_logits" (B X num_queries)
 
     print("=" * 60)
     print(f"Saving inference results to {out_path}...")
@@ -235,8 +242,8 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: Path, v
             for box, label in zip(boxes, labels):
                 cx, cy, w, h = box
                 score, l = label.max(-1)
-                if l != 3 and score>=0.8:
-                    f.write(f"{l} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
+                if True or (l != 3 and score>=0.1): # TODO
+                    f.write(f"{l.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
     if visualize:
         from maesy.evaluation import visualize_annotations
         visualize_annotations(out_path, "")
@@ -251,4 +258,9 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cuda:0", help="Device to run inference on")
 
     args = parser.parse_args()
-    train_vit_detector(args.checkpoint, args.dataset, args.output, False, False, True)
+    train_vit_detector(args.checkpoint, args.dataset, args.output, False, False, False)
+
+    # checkpoint = r"/home/simon/Desktop/maesy-training/od_checkpoints/leafy-music-38/best_model.pth"
+    # images = r"/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)/train/images"
+    # out = r"/home/simon/Desktop/maesy-training/inference_results"
+    # infer_vit_detector(checkpoint, images, out, True, torch.device("cuda"))

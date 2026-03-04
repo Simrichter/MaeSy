@@ -117,7 +117,8 @@ class BaseTrainer(ABC):
                 (step + 1) / self.config.warmup_epochs, 1.0))
             cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
-                T_max=self.config.num_epochs - self.config.warmup_epochs
+                T_max=self.config.num_epochs - self.config.warmup_epochs,
+                eta_min=1e-6
             )
             return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, cosine],  milestones=[self.config.warmup_epochs])
         elif self.config.lr_scheduler.lower() == "step":

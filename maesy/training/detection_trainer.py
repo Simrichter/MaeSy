@@ -40,7 +40,8 @@ class DetectionTrainer(BaseTrainer):
             name_coding = {
                 0: "Ball",  # TODO: Get this stuff from model config?
                 1: "Robot",
-                2: "PenaltyCross"  # (Keine 27 Beschriftungen erwünscht), alternativ: LineCrossing
+                2: "PenaltyCross",  # (Keine 27 Beschriftungen erwünscht), alternativ: LineCrossing
+                3: "No-Object"
             }
 
             pred_logits = predictions['pred_logits'][0]

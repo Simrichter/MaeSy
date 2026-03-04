@@ -123,6 +123,7 @@ def train_vit_detector(
     train_transforms = transforms.Compose([
         # transforms.ColorJitter(brightness=0.2, contrast=0.2),
         transforms.Resize((224, 224)),
+        # transforms. TODO
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
@@ -160,7 +161,7 @@ def train_vit_detector(
 
     # Create training configuration
     training_config = TrainingConfig(
-        num_epochs=600,
+        num_epochs=500,
         learning_rate=1e-4 if no_freeze else 1e-4,  # Higher LR when only training head
         backbone_learning_rate=1e-5 if no_freeze else 0.0,  # Very low LR for backbone if fine-tuning, otherwise 0
         weight_decay=5e-4,

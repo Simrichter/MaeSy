@@ -118,7 +118,7 @@ class BaseTrainer(ABC):
             cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
                 T_max=self.config.num_epochs - self.config.warmup_epochs,
-                eta_min=1e-6
+                eta_min=1e-6 # TODO: Make this configurable?
             )
             return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, cosine],  milestones=[self.config.warmup_epochs])
         elif self.config.lr_scheduler.lower() == "step":
@@ -214,7 +214,8 @@ class BaseTrainer(ABC):
             return {}
 
         self.loss.reset_metrics()
-        self.model.eval()
+        # self.model.eval()
+        self.model.train()
         losses: dict[str, Any] = {}
         for batch in tqdm(self.val_loader, desc="Validation"):
             images, targets = handle_raw_batch(batch, self.device)

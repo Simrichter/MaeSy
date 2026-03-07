@@ -58,13 +58,15 @@ def visualize_annotations(input_dir, output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
     for file in os.listdir(input_dir):
-        if file.endswith(".png"):
+        suffix = "."+file.split(".")[-1]
+        if suffix in (".png", ".jpg", ".jpeg"):
             img_path = os.path.join(input_dir, file)
-            txt_path = os.path.join(input_dir, file.replace(".png", ".txt"))
+            txt_path = os.path.join(input_dir, file.replace(suffix, ".txt"))
 
             # Bild laden
             boxes = [BoundingBox.from_str(l) for l in open(txt_path, "r").readlines()] if os.path.exists(txt_path) else []
             if len(boxes) == 0:
+                print(f"No boxes found for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
                 continue
             img = draw_boxes_in_image(img_path, boxes).float() / 255.0
             # Annotiertes Bild speichern
@@ -111,6 +113,6 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
         out = draw_bounding_boxes(img, boxes, labels=labels) #, colors=[*color_coding.values()]
     except ValueError as e:
         out = img
-        # print(f"Failed to draw boxes for image {img} with boxes {boxes} and labels {labels}\n\nError: {e}")
+        print(f"Failed to draw boxes for image {img} with boxes {boxes} and labels {labels}\n\nError: {e}")
 
     return out

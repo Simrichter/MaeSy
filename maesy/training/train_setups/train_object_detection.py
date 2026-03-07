@@ -1,17 +1,13 @@
-"""
-Example: Training a Vision Transformer for Object Detection
-
-This script demonstrates how to train both ViTDetector
-for object detection using the MaeSy framework.
-"""
 import os
 import shutil
 
+# import imgaug
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from pathlib import Path
 
-from torchvision import transforms
+from torchvision.transforms import v2 as transforms
 from tqdm import tqdm
 
 from maesy.evaluation.inferer import Inferer
@@ -121,16 +117,22 @@ def train_vit_detector(
         print("No freeze: Fine-tuning entire model (backbone + head)")
 
     train_transforms = transforms.Compose([
-        # transforms.ColorJitter(brightness=0.2, contrast=0.2),
+        transforms.ToImage(),
+        transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
-        # transforms. TODO
-        transforms.ToTensor(),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2),
+        # RandomShift(150),
+        transforms.RandomAffine(degrees=10, translate=(0.4, 0.4), scale=(0.9, 1.1)),
+        # VerticalFlip(),
+        # transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
+
     val_transforms = transforms.Compose([
+        transforms.ToImage(),
+        transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
-        transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     # Create datasets and dataloaders
@@ -141,17 +143,18 @@ def train_vit_detector(
     # Create dataloaders with custom collate function
     train_loader = DataLoader(
         train_dataset,
-        batch_size=64,
+        batch_size=128,
         shuffle=True,
         num_workers=4,
         persistent_workers=True,
         collate_fn=collate_detection_fn,
-        pin_memory=True
+        pin_memory=True,
+        # worker_init_fn=lambda worker_id: imgaug.seed(np.random.get_state()[1][0] + worker_id)
     )
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=64,
+        batch_size=128,
         num_workers=4,
         persistent_workers=True,
         collate_fn=collate_detection_fn,
@@ -161,7 +164,7 @@ def train_vit_detector(
 
     # Create training configuration
     training_config = TrainingConfig(
-        num_epochs=500,
+        num_epochs=200,
         learning_rate=1e-4 if no_freeze else 1e-4,  # Higher LR when only training head
         backbone_learning_rate=1e-5 if no_freeze else 0.0,  # Very low LR for backbone if fine-tuning, otherwise 0
         weight_decay=5e-4,
@@ -217,8 +220,10 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: str, vi
     model.eval()
 
     dataset = UnlabeledDataset(Path(images_path), transforms=transforms.Compose([
+        transforms.ToImage(),
+        transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
-        transforms.ToTensor(),
+        # transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ]), step=50) #, use_first_n=30
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
@@ -251,15 +256,19 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: str, vi
 
 if __name__ == "__main__":
     #argparse:
-    import argparse
-    parser = argparse.ArgumentParser(description="Train a ViTDetector for object detection")
-    parser.add_argument("--checkpoint", type=str, default="", help="Path to pretrained MAE checkpoint (or OD checkpoint if --continue_from_checkpoint is set)")
-    parser.add_argument("--dataset", type=str, default="/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)", help="Path to object detection dataset")
-    parser.add_argument("--output", type=str, default="./od_checkpoints", help="Directory to save checkpoints")
-    parser.add_argument("--device", type=str, default="cuda:0", help="Device to run inference on")
-
-    args = parser.parse_args()
-    train_vit_detector(args.checkpoint, args.dataset, args.output, False, False, False)
+    # import argparse
+    # parser = argparse.ArgumentParser(description="Train a ViTDetector for object detection")
+    # parser.add_argument("--checkpoint", type=str, default="", help="Path to pretrained MAE checkpoint (or OD checkpoint if --continue_from_checkpoint is set)")
+    # parser.add_argument("--dataset", type=str, default="/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)", help="Path to object detection dataset")
+    # parser.add_argument("--output", type=str, default="./od_checkpoints", help="Directory to save checkpoints")
+    # parser.add_argument("--device", type=str, default="cuda:0", help="Device to run inference on")
+    #
+    # args = parser.parse_args
+    checkpoint = "" # "/home/simon/Desktop/maesy-training/od_checkpoints/scarlet-plant-57/latest_model.pth"
+    dataset = "/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)" #r"/home/simon/Desktop/maesy-training/data/"
+    output = r"/home/simon/Desktop/maesy-training/od_checkpoints"
+    resume = checkpoint != ""
+    train_vit_detector(checkpoint, dataset, output, True, resume, False)
 
     # checkpoint = r"/home/simon/Desktop/maesy-training/od_checkpoints/leafy-music-38/best_model.pth"
     # images = r"/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)/train/images"

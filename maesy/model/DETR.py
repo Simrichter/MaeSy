@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import torch
 
+from .backbones.mobilenet_backbone import MobileNetBackbone
 from .base_model import BaseModel
 from .backbones import TransformerBackbone, TransformerBackboneConfig, ResNetBackbone
 from .heads import ViTDetectionHead, DetectionHeadConfig
@@ -62,7 +63,8 @@ class DETR(BaseModel):
         self.config = config
 
         # Create backbone configuration
-        self.backbone = ResNetBackbone(version=self.config.resnet_version, image_size=self.config.image_size, remove_layers=3)
+        # self.backbone = ResNetBackbone(version=self.config.resnet_version, image_size=self.config.image_size, remove_layers=3)
+        self.backbone = MobileNetBackbone(version="v2", image_size=self.config.image_size, remove_layers=3)
         # if self.config.freeze_backbone:
         #     for param in self.backbone.parameters():
         #         param.requires_grad = False
@@ -98,7 +100,6 @@ class DETR(BaseModel):
                 - pred_boxes: Bounding box predictions [B, num_queries, 4]
         """
         features = self.backbone(x) # [B, C, H, W] -> [B, feature_dim, H', W']
-
         features = self.projection(features) # [B, feature_dim, H', W'] -> [B, embed_dim, H', W']
         _, _, h, w = features.shape
         features = features.flatten(2).transpose(1, 2) # [B, embed_dim, H', W'] -> [B, embed_dim, H'*W'] -> [B, H'*W', embed_dim]

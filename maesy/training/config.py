@@ -12,7 +12,7 @@ class TrainingConfig:
     
     # Training parameters
     num_epochs: int = 100
-    batch_size: int = 16
+    # batch_size: int = 16
     learning_rate: float = 1e-4
     backbone_learning_rate: float = learning_rate
     weight_decay: float = 1e-4

@@ -36,7 +36,6 @@ class DetectionTrainer(BaseTrainer):
         losses = self.loss(predictions, targets)
 
         if val:
-            # return losses # TODO
             name_coding = {
                 0: "Ball",  # TODO: Get this stuff from model config?
                 1: "Robot",

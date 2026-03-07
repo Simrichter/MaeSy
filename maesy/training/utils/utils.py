@@ -53,32 +53,31 @@ def collate_detection_fn(batch: List[tuple]) -> Tuple[torch.Tensor, List[Dict[st
             - images: Stacked images tensor [B, C, H, W]
             - targets: List of target dictionaries with 'boxes' [N X  and 'labels'
     """
-    from maesy.dataset.bounding_box import BoundingBox
-    images = []
-    targets = []
-    
-    for image, boxes in batch:
-        images.append(image)
-        
-        if len(boxes) > 0:
-            # Convert BoundingBox objects to tensors
-            labels = torch.tensor([box.cls_id for box in boxes], dtype=torch.long)
-            # Get normalized coordinates in [cx, cy, w, h] format
-            boxes_tensor = torch.tensor([box.as_xywh() for box in boxes], dtype=torch.float32)
-            
-            targets.append({
-                'labels': labels,
-                'boxes': boxes_tensor
-            })
-        else:
-            # Handle images with no boxes
-            targets.append({
-                'labels': torch.tensor([], dtype=torch.long),
-                'boxes': torch.tensor([], dtype=torch.float32).reshape(0, 4)
-            })
-    
+    images = torch.stack([image for image, boxes in batch], dim=0)
+    targets = [boxes for image, boxes in batch]
+    # for ba in batch:
+    #     image, boxes = ba[0], ba[1]
+    #     images.append(image)
+
+        # if len(boxes) > 0:
+        #     # Convert BoundingBox objects to tensors
+        #     labels = boxes["labels"]
+        #     # Get normalized coordinates in [cx, cy, w, h] format
+        #     boxes_tensor = torch.tensor([box.as_cxcywh() for box in boxes], dtype=torch.float32)
+        #
+        #     targets.append({
+        #         'labels': labels,
+        #         'boxes': boxes_tensor
+        #     })
+        # else:
+        #     # Handle images with no boxes
+        #     targets.append({
+        #         'labels': torch.tensor([], dtype=torch.long),
+        #         'boxes': torch.tensor([], dtype=torch.float32).reshape(0, 4)
+        #     })
+
     # Stack images
-    images = torch.stack(images, dim=0)
+    # images = torch.stack(images, dim=0)
     
     return images, targets
 

@@ -117,25 +117,30 @@ class DetectionLoss(BaseLoss):
             pred_logits.transpose(1, 2),
             target_classes,
             weight=self.empty_weight,
-            label_smoothing=0.1 #TODO Experimental
+            label_smoothing=0.08 #TODO Experimental
         )
 
-        # Compute bbox losses
-        idx = self._get_src_permutation_idx(indices) # TODO: Recomputation unnecessary??
-        src_boxes = pred_boxes[idx] # Selecting the boxes selected by the hungarian matching
-        target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)  # Expecting the target boxes to be 0-1 normalized
-        # This selected the two chosen target boxes in correct order
+        num_boxes = target_classes_o.shape[0]
+        if num_boxes > 0:
+            # Compute bbox losses
+            idx = self._get_src_permutation_idx(indices) # TODO: Recomputation unnecessary??
+            src_boxes = pred_boxes[idx] # Selecting the boxes selected by the hungarian matching
+            target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)  # Expecting the target boxes to be 0-1 normalized
+            # This selected the two chosen target boxes in correct order
 
-        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
-        loss_bbox = loss_bbox.sum() / max(target_classes_o.shape[0], 1) # Averaging by number of target boxes
+            loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
+            loss_bbox = loss_bbox.sum() / max(target_classes_o.shape[0], 1) # Averaging by number of target boxes
 
-        # Compute GIoU loss
-        giou_matrix = self._generalized_box_iou(
-            self._box_cxcywh_to_xyxy(src_boxes),
-            self._box_cxcywh_to_xyxy(target_boxes)
-        )
-        loss_giou = 1 - torch.diag(giou_matrix)
-        loss_giou = loss_giou.sum() / max(target_classes_o.shape[0], 1)
+            # Compute GIoU loss
+            giou_matrix = self._generalized_box_iou(
+                self._box_cxcywh_to_xyxy(src_boxes),
+                self._box_cxcywh_to_xyxy(target_boxes)
+            )
+            loss_giou = 1 - torch.diag(giou_matrix)
+            loss_giou = loss_giou.sum() / max(target_classes_o.shape[0], 1)
+        else:
+            loss_bbox = torch.tensor(0.0, device=pred_logits.device)
+            loss_giou = torch.tensor(0.0, device=pred_logits.device)
 
         # Total loss
         losses = {

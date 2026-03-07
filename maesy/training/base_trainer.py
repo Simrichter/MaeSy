@@ -90,7 +90,7 @@ class BaseTrainer(ABC):
                       {"params": self.model.projection.parameters(), "lr": self.config.learning_rate},# TODO Enforce projection in head!!
                       {"params": self.model.head.parameters(), "lr": self.config.learning_rate}]
             return torch.optim.AdamW(
-                self.model.parameters(),
+                params, #self.model.parameters()
                 lr=self.config.learning_rate,
                 weight_decay=self.config.weight_decay
             )
@@ -194,13 +194,14 @@ class BaseTrainer(ABC):
             # Update progress bar
             pbar.set_postfix({
                 'loss': loss.item(),
-                'lr': self.optimizer.param_groups[0]['lr']
+                'lr_bbone': self.optimizer.param_groups[0]['lr'],
+                'lr_head': self.optimizer.param_groups[2]['lr']
             })
 
             # Log to tensorboard
             if self.global_step % self.config.log_frequency == 0:
                 data = {f"train/{k}": v.item() for k, v in losses.items() if not k.startswith('img_')}
-                data['train/lr'] = self.optimizer.param_groups[0]['lr']
+                data['train/lr'] = self.optimizer.param_groups[-1]['lr']
                 if self.enable_wandb: self.wandb_run.log(data=data, step=self.global_step, commit=True)
 
             self.global_step += 1

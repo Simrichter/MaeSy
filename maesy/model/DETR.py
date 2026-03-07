@@ -87,6 +87,8 @@ class DETR(BaseModel):
         )
         self.head = DETRHead(head_config)
 
+        print(f"Created DETR model with backbone {self.backbone.type} and head {self.head.type}\n Feature dims: {self.backbone.get_feature_dims()}")
+
     def forward(self, x: torch.Tensor, **kwargs):
         """
         Forward pass through the model.

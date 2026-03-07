@@ -63,8 +63,8 @@ class DETR(BaseModel):
         self.config = config
 
         # Create backbone configuration
-        # self.backbone = ResNetBackbone(version=self.config.resnet_version, image_size=self.config.image_size, remove_layers=3)
-        self.backbone = MobileNetBackbone(version="v2", image_size=self.config.image_size, remove_layers=3)
+        self.backbone = ResNetBackbone(version=self.config.resnet_version, image_size=self.config.image_size, remove_layers=3)
+        # self.backbone = MobileNetBackbone(version="v2", image_size=self.config.image_size, remove_layers=3)
         # if self.config.freeze_backbone:
         #     for param in self.backbone.parameters():
         #         param.requires_grad = False

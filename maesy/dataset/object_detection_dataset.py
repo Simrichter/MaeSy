@@ -102,7 +102,7 @@ class ObjectDetectionDataset(Dataset):
                     labels = torch.empty((0,), dtype=torch.long)
 
                 target = {"boxes": coords, "labels": labels}
-            image = torchvision.tv_tensors.Image(image)
+            image = torchvision.tv_tensors.Image(image)/255.0
 
             if self.transforms is not None:
                 image, target = self.transforms(image, target)

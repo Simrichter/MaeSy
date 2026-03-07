@@ -121,7 +121,6 @@ def train_vit_detector(
         transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
-        # RandomShift(150),
         transforms.RandomAffine(degrees=10, translate=(0.4, 0.4), scale=(0.9, 1.1)),
         # VerticalFlip(),
         # transforms.ToTensor(),
@@ -143,7 +142,7 @@ def train_vit_detector(
     # Create dataloaders with custom collate function
     train_loader = DataLoader(
         train_dataset,
-        batch_size=128,
+        batch_size=64,
         shuffle=True,
         num_workers=4,
         persistent_workers=True,
@@ -154,7 +153,7 @@ def train_vit_detector(
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=128,
+        batch_size=64,
         num_workers=4,
         persistent_workers=True,
         collate_fn=collate_detection_fn,
@@ -164,13 +163,13 @@ def train_vit_detector(
 
     # Create training configuration
     training_config = TrainingConfig(
-        num_epochs=200,
+        num_epochs=500,
         learning_rate=1e-4 if no_freeze else 1e-4,  # Higher LR when only training head
         backbone_learning_rate=1e-5 if no_freeze else 0.0,  # Very low LR for backbone if fine-tuning, otherwise 0
         weight_decay=5e-4,
         optimizer="adamw",
         lr_scheduler="cosine",
-        warmup_epochs=5,
+        warmup_epochs=4,
         save_frequency=20,
         save_dir=output_dir,
         criterion= "DetectionLoss", #"YOLOv8Loss", #

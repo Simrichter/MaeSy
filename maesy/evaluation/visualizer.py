@@ -82,7 +82,8 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
     color_coding = {
         0: (0, 0, 255),  # Rot für "soccer ball"
         1: (255, 0, 0),  # Blau für "Robot"
-        2: (0, 255, 0)  # Grün für "LineCrossing"
+        2: (0, 255, 0),  # Grün für "LineCrossing"
+        3: (255, 255, 0)  # Gelb für "No-Object"
     }
     name_coding = {
         0: "Ball",  # TODO: Get this stuff from model config?
@@ -96,23 +97,30 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
 
     if labels is None:
         labels = [name_coding[box.cls()] for box in boxes]
-
+        colors = [color_coding[box.cls()] for box in boxes]
+    else:
+        colors = ["red" if label == "Ball" else "blue" if label == "Robot" else "green" if label == "PenaltyCross" else "yellow" for label in labels]
 
 
     # Convert BoundingBox objects to tensor format if needed
     if type(boxes) is list:
         if len(boxes) == 0:
             return img
-        boxes = torch.stack([box.coordinates_as_tensor()[0] for box in boxes])
+        boxes = torch.stack([box.coordinates_as_tensor() for box in boxes])
 
     # Assuming normalized boxes:
     boxes[:, (0, 2)] *= img.shape[2]  # Scale x coordinates to image width
     boxes[:, (1, 3)] *= img.shape[1]  # Scale y coordinates to image height
 
     try:
-        out = draw_bounding_boxes(img, boxes, labels=labels) #, colors=[*color_coding.values()]
+        out = draw_bounding_boxes(img, boxes, labels=labels, colors=colors)
     except ValueError as e:
         out = img
         print(f"Failed to draw boxes for image {img} with boxes {boxes} and labels {labels}\n\nError: {e}")
 
     return out
+
+if __name__ == "__main__":
+    input_dir = "/home/simon/Desktop/maesy-training/inference_results"
+    output_dir = ""
+    visualize_annotations(input_dir, output_dir)

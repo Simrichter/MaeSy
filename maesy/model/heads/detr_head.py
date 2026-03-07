@@ -137,12 +137,12 @@ class DetrEncoderLayer(nn.Module):
     def forward(self, x: torch.Tensor, pos_enc) -> torch.Tensor:
         """Forward pass."""
         # Self-attention
-        attn_out = self.self_attn(x, pos_enc)
-        x = self.norm1(x + attn_out)
+        attn_out = self.self_attn(self.norm1(x), pos_enc)
+        x = x + attn_out
 
         # MLP
-        mlp_out = self.mlp(x)
-        x = self.norm2(x + mlp_out)
+        mlp_out = self.mlp(self.norm2(x))
+        x = x + mlp_out
 
         return x
 
@@ -160,16 +160,16 @@ class DetrDecoderLayer(nn.Module):
     def forward(self, queries: torch.Tensor, enc_features: torch.Tensor, pos_enc_query: torch.Tensor, pos_enc_feature: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
         # Self-attention
-        attn_out = self.self_attn(queries, pos_enc_query)
-        queries = self.norm1(queries + attn_out)
+        attn_out = self.self_attn(self.norm1(queries), pos_enc_query)
+        queries = queries + attn_out
 
         # Cross-attention
-        cross_attn_out = self.cross_attn(queries, enc_features, pos_enc_query, pos_enc_feature)
-        queries = self.norm2(queries + cross_attn_out)
+        cross_attn_out = self.cross_attn(self.norm2(queries), enc_features, pos_enc_query, pos_enc_feature)
+        queries = queries + cross_attn_out
 
         # MLP
-        mlp_out = self.mlp(queries)
-        queries = self.norm3(queries + mlp_out)
+        mlp_out = self.mlp(self.norm3(queries))
+        queries = queries + mlp_out
 
         return queries
 

@@ -11,4 +11,4 @@ def main(args):
                                    "cuda" if torch.cuda.is_available() else "cpu"))
         case "visualize":
             from maesy.evaluation import visualize_annotations
-            visualize_annotations(args.imgpath, args.out, args.label_file)
+            visualize_annotations(args.imgpath, args.out, label_path=args.labels, label_file=args.label_file)

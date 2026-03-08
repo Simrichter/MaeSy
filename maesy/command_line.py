@@ -69,6 +69,7 @@ def main():
 
     vis = eval_parser.add_parser("visualize", help="Visualize predictions on a folder of images")
     vis.add_argument("imgpath", help="Path to folder of images for visualization")
+    vis.add_argument("-l", "--labels", help="Path to a folder that contains the labels in Yolo format", type=str, default="")
     vis.add_argument("-o", "--out", type=str, default="",
                      help="Folder to save visualizations (default: subfolder in input folder)")
     vis.add_argument("--label-file", help="Path to a file that lists the classes names", type=str, default="")

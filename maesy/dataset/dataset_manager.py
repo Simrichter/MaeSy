@@ -116,7 +116,7 @@ class DatasetManager:
             case "resnet_faiss":
                 from maesy.dataset.clustering_methods.resnet_FAISS import cluster_with_faiss as cluster
                 # TODO: Make this a parameter?
-                similarity_threshold = 0.842
+                similarity_threshold = 0.9
                 return cluster(folder_names, chosen_paths, similarity_threshold, step=step, start_index=start_index)
             case "resnet_kmeans":
                 from maesy.dataset.clustering_methods.resnet_kmeans import cluster
@@ -137,7 +137,7 @@ class DatasetManager:
                 if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
                     with Image.open(img_file) as img:
                         img = img.resize((resize[0], resize[1] if len(resize) == 2 else resize[0]))
-                        img.save(target_path / img_file.name)
+                        img.save(target_path)#/ img_file.name
         else:
             for img_file, target_path in tqdm(zip(source_paths, target_paths),
                                               desc=f"Copying {len(source_paths)} files"):
@@ -147,7 +147,7 @@ class DatasetManager:
             for img_file, target_path in tqdm(zip(source_paths, label_target_paths), desc=f"Copying label files"):
                 label_file = img_file.with_suffix('.txt')  # Assuming label files have the same name but .json extension
                 if label_file.exists():
-                    shutil.copy(label_file, target_path / label_file.name)
+                    shutil.copy(label_file, target_path) #/ label_file.name
 
     def create_dataset(self,
                        folder_names: list[str],
@@ -170,7 +170,7 @@ class DatasetManager:
             :param dataset_name: Name of the dataset
             :param split_percentages: List of percentages for the data subsets in format [train, val, test]. Defaults to [0.8, 0.1, 0.1] if not/incorrectly specified
             :param resize: Resize images to WIDTH HEIGHT or WIDTH² if HEIGHT not specified
-            :param with_labels: Whether to include label files in coco style (.txt files with same name as images). Default=True
+            :param with_labels: Whether to include label files in coco style (.txt files with same name as images).
             :param step: Step size for selecting images from folders. Default=1 (use all images)
             :param start_index: Start index for selecting images from folders. Default=0
             :param del_folders: Whether to delete the original folders after use

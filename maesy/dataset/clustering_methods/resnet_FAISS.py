@@ -150,7 +150,7 @@ def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_siz
                                   drop_last=False, in_order=True)
     
     # Setup model for feature extraction
-    model: BaseModel = ResnetFeatureExtractor("resnet50")
+    model: BaseModel = ResnetFeatureExtractor("resnet50", img_size=forward_scale, remove_layers=1)
     model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)

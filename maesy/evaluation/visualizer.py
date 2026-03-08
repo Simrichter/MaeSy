@@ -47,13 +47,14 @@ from maesy.training.utils import collate_detection_fn, handle_raw_batch
 #
 #     print(f"Fertig! Annotierte Bilder liegen in: {output_dir}")
 
-def visualize_annotations(input_dir: str, output_dir: str, label_file:str=""):
+def visualize_annotations(input_dir: str, output_dir: str, label_path:str="", label_file:str=""):
     """
         Zeichnet Bounding Boxen (im YOLO Format) in Bilder
 
         Args:
             :param input_dir: Ordner mit Bildern und Annotationen (.txt im YOLO Format)
             :param output_dir: Ordner, in dem die annotierten Bilder gespeichert werden
+            :param label_path: Path to a folder that contains the labels in Yolo format (default: empty, i.e. look for .txt files in the input directory)
             :param label_file: Path to a file that contains the class names in order (default: empty, i.e. use default class names)
     """
     if output_dir!="" and os.path.exists(output_dir):
@@ -69,16 +70,22 @@ def visualize_annotations(input_dir: str, output_dir: str, label_file:str=""):
     else:
         name_coding = None
 
+    lbl_dir = input_dir if label_path=="" else Path(label_path)
+
     for file in os.listdir(input_dir):
         suffix = "."+file.split(".")[-1]
         if suffix in (".png", ".jpg", ".jpeg"):
             img_path = os.path.join(input_dir, file)
-            txt_path = os.path.join(input_dir, file.replace(suffix, ".txt"))
+            txt_path = os.path.join(lbl_dir, file.replace(suffix, ".txt"))
 
             # Bild laden
-            boxes = [BoundingBox.from_str(l) for l in open(txt_path, "r").readlines()] if os.path.exists(txt_path) else []
+            if not os.path.exists(txt_path):
+                print(f"WARNING: No annotation file found for image {img_path}, skipping visualization.\n (Expected annotation file: {txt_path})")
+                continue
+            boxes = [BoundingBox.from_str(l) for l in open(txt_path, "r").readlines()]
+            boxes = [box for box in boxes if box.cls_id != 2]
             if len(boxes) == 0:
-                print(f"No boxes found for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
+                print(f"Empty annotations for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
                 continue
             img = draw_boxes_in_image(img_path, boxes, name_coding=name_coding).float() / 255.0
             # Annotiertes Bild speichern
@@ -104,6 +111,8 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
 
     if type(img) is str:
         img = read_image(img)
+        if img.shape[0] > 2:
+            img = img[:3]  # Convert RGBA to RGB by dropping alpha channel
 
     if labels is None:
         labels = [name_coding[box.cls()] for box in boxes]
@@ -126,11 +135,11 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
         out = draw_bounding_boxes(img, boxes, labels=labels, colors=colors)
     except ValueError as e:
         out = img
-        print(f"Failed to draw boxes for image {img} with boxes {boxes} and labels {labels}\n\nError: {e}")
+        print(f"Failed to draw boxes for image of shape {img.shape} with boxes {boxes} and labels {labels}\n\nError: {e}")
 
     return out
 
 if __name__ == "__main__":
-    input_dir = "/home/simon/Desktop/maesy-training/inference_results"
+    input_dir = "/home/simon/Desktop/webots-logger/controllers/TrainingDataController/images"
     output_dir = ""
     visualize_annotations(input_dir, output_dir)

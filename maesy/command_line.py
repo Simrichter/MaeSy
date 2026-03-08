@@ -71,6 +71,7 @@ def main():
     vis.add_argument("imgpath", help="Path to folder of images for visualization")
     vis.add_argument("-o", "--out", type=str, default="",
                      help="Folder to save visualizations (default: subfolder in input folder)")
+    vis.add_argument("--label-file", help="Path to a file that lists the classes names", type=str, default="")
 
     # Command: maesy predict
     # TODO

@@ -15,47 +15,59 @@ from maesy.dataset.bounding_box import BoundingBox
 from maesy.training.utils import collate_detection_fn, handle_raw_batch
 
 
-def visualize_from_dataset(dataset: str, output_dir, device=torch.device("cpu")):
-    """
-        Draws bounding boxes from a Dataset that provides images and annotations in the format used for training (i.e., with 'boxes' and 'labels' in the target dictionaries).
+# def visualize_from_dataset(dataset: str, output_dir, device=torch.device("cpu")):
+#     """
+#         Draws bounding boxes from a Dataset that provides images and annotations in the format used for training (i.e., with 'boxes' and 'labels' in the target dictionaries).
+#
+#         Args:
+#             :param dataset: Path to an object detection dataset
+#             :param output_dir: Folder in which the visualized images are saved
+#             :param device: Device to run visualization on (default: auto-detect CUDA if available, otherwise CPU)
+#     """
+#     if output_dir!="" and os.path.exists(output_dir):
+#         raise ValueError(f"Failed: Output directory {output_dir} does not exist. Leave unspecified to create a 'visualized' subfolder in the input directory.")
+#     if output_dir=="":
+#         output_dir = os.path.join(dataset, "visualized")
+#     os.makedirs(output_dir, exist_ok=True)
+#     dataset = ObjectDetectionDataset(dataset, transforms=None)
+#     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, collate_fn=collate_detection_fn)
+#
+#     for i, batch in enumerate(tqdm(dataloader)):
+#         images, targets = handle_raw_batch(batch, device)
+#         # print(targets)
+#         # images = batch["image"]  # [B, C, H, W]
+#         # targets = batch["target"]  # List of target dictionaries
+#         img = images[0]
+#         targ = targets[0]["boxes"]
+#         targ[:, (0, 2)] *= img.shape[2]  # Scale x coordinates to image width
+#         targ[:, (1, 3)] *= img.shape[1]  # Scale y coordinates to image height
+#         boxes = box_convert(targ, "cxcywh", "xyxy")
+#         img_with_boxes = draw_bounding_boxes(img, boxes)
+#         save_image(img_with_boxes, Path(output_dir)/f"{i}.png")
+#
+#     print(f"Fertig! Annotierte Bilder liegen in: {output_dir}")
 
-        Args:
-            :param dataset: Path to an object detection dataset
-            :param output_dir: Folder in which the visualized images are saved
-            :param device: Device to run visualization on (default: auto-detect CUDA if available, otherwise CPU)
-    """
-    os.makedirs(output_dir, exist_ok=True)
-    dataset = ObjectDetectionDataset(dataset, transforms=None)
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, collate_fn=collate_detection_fn)
-
-    for i, batch in enumerate(tqdm(dataloader)):
-        images, targets = handle_raw_batch(batch, device)
-        # print(targets)
-        # images = batch["image"]  # [B, C, H, W]
-        # targets = batch["target"]  # List of target dictionaries
-        img = images[0]
-        targ = targets[0]["boxes"]
-        targ[:, (0, 2)] *= img.shape[2]  # Scale x coordinates to image width
-        targ[:, (1, 3)] *= img.shape[1]  # Scale y coordinates to image height
-        boxes = box_convert(targ, "cxcywh", "xyxy")
-        img_with_boxes = draw_bounding_boxes(img, boxes)
-        save_image(img_with_boxes, Path(output_dir)/f"{i}.png")
-
-    print(f"Fertig! Annotierte Bilder liegen in: {output_dir}")
-
-def visualize_annotations(input_dir, output_dir):
+def visualize_annotations(input_dir: str, output_dir: str, label_file:str=""):
     """
         Zeichnet Bounding Boxen (im YOLO Format) in Bilder
 
         Args:
             :param input_dir: Ordner mit Bildern und Annotationen (.txt im YOLO Format)
             :param output_dir: Ordner, in dem die annotierten Bilder gespeichert werden
+            :param label_file: Path to a file that contains the class names in order (default: empty, i.e. use default class names)
     """
     if output_dir!="" and os.path.exists(output_dir):
         raise ValueError(f"Failed: Output directory {output_dir} does not exist. Leave unspecified to create a 'visualized' subfolder in the input directory.")
     if output_dir=="":
         output_dir = os.path.join(input_dir, "visualized")
     os.makedirs(output_dir, exist_ok=True)
+
+    if label_file!="":
+        with open(label_file, "r") as f:
+            name_coding = {i: line.strip() for i, line in enumerate(f.readlines())}
+        print(name_coding)
+    else:
+        name_coding = None
 
     for file in os.listdir(input_dir):
         suffix = "."+file.split(".")[-1]
@@ -68,29 +80,27 @@ def visualize_annotations(input_dir, output_dir):
             if len(boxes) == 0:
                 print(f"No boxes found for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
                 continue
-            img = draw_boxes_in_image(img_path, boxes).float() / 255.0
+            img = draw_boxes_in_image(img_path, boxes, name_coding=name_coding).float() / 255.0
             # Annotiertes Bild speichern
             out_path = os.path.join(output_dir, file)
             save_image(img, out_path)
 
     print(f"Fertig! Annotierte Bilder liegen in: {output_dir}")
 
-def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torch.Tensor, labels: List[str] = None) -> torch.Tensor:
+def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torch.Tensor, labels: List[str] = None, name_coding: dict[int, str]=None) -> torch.Tensor:
     """
         Draws bounding boxes from YOLO annotation file on the image.
     """
-    color_coding = {
-        0: (0, 0, 255),  # Rot für "soccer ball"
-        1: (255, 0, 0),  # Blau für "Robot"
-        2: (0, 255, 0),  # Grün für "LineCrossing"
-        3: (255, 255, 0)  # Gelb für "No-Object"
-    }
-    name_coding = {
-        0: "Ball",  # TODO: Get this stuff from model config?
-        1: "Robot",
-        2: "PenaltyCross",  # (Keine 27 Beschriftungen erwünscht), alternativ: LineCrossing
-        3: "No-Object"
-    }
+    colors = ["red", "blue", "green", "yellow", "cyan", "magenta", "orange", "purple", "pink", "brown", "gray", "black"]
+    color_coding = {i: c for i, c in enumerate(colors)}
+
+    if name_coding is None:
+        name_coding = {
+            0: "Ball",  # TODO: Get this stuff from model config?
+            1: "Robot",
+            2: "PenaltyCross",  # (Keine 27 Beschriftungen erwünscht), alternativ: LineCrossing
+            3: "No-Object"
+        }
 
     if type(img) is str:
         img = read_image(img)

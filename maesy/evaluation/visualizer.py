@@ -83,7 +83,7 @@ def visualize_annotations(input_dir: str, output_dir: str, label_path:str="", la
                 print(f"WARNING: No annotation file found for image {img_path}, skipping visualization.\n (Expected annotation file: {txt_path})")
                 continue
             boxes = [BoundingBox.from_str(l) for l in open(txt_path, "r").readlines()]
-            boxes = [box for box in boxes if box.cls_id != 2]
+            boxes = [box for box in boxes if box.cls_id != 3]
             if len(boxes) == 0:
                 print(f"Empty annotations for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
                 continue

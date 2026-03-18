@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            setup.py
+            requirements.txt
+            pytest.ini
+            tests/**/*.py
+
+      - name: Install package + quality tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install ruff
+
+      - name: Lint tests
+        run: ruff check tests
+
+      - name: Syntax compile check
+        run: python -m compileall -q maesy tests
+
+      - name: CLI help smoke
+        run: |
+          maesy train -h
+          maesy dataset -h
+          maesy evaluate -h
+
+  test:
+    name: Tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: |
+            setup.py
+            requirements.txt
+            pytest.ini
+            tests/**/*.py
+
+      - name: Install package + test tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pytest pytest-cov
+
+      - name: Dependency sanity check
+        run: python -m pip check
+
+      - name: Run tests with coverage
+        run: |
+          pytest \
+            --junitxml=pytest-report.xml \
+            --cov=maesy \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-report=html
+
+      - name: Upload pytest + coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts-py${{ matrix.python-version }}
+          path: |
+            pytest-report.xml
+            coverage.xml
+            htmlcov/
+          if-no-files-found: warn
+
+  test-py312:
+    name: Tests (py3.12 experimental)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            setup.py
+            requirements.txt
+            pytest.ini
+            tests/**/*.py
+
+      - name: Install package + test tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pytest pytest-cov
+
+      - name: Run tests (best effort)
+        run: |
+          pytest \
+            --junitxml=pytest-report-py312.xml \
+            --cov=maesy \
+            --cov-report=term \
+            --cov-report=xml:coverage-py312.xml
+
+      - name: Upload py3.12 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts-py3.12
+          path: |
+            pytest-report-py312.xml
+            coverage-py312.xml
+          if-no-files-found: warn
+

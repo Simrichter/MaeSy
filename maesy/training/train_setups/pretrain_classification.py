@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 
 from maesy.dataset import UnlabeledDataset
@@ -38,10 +38,7 @@ def train_classification(dataset_path, enable_wandb, batch_size=64, num_epochs=5
     ])
 
 
-    train_dataset = UnlabeledDataset(
-        Path(dataset_path)/"train/images",  # Replace with your training data path
-        transforms=train_transforms
-    )
+    train_dataset = Dataset()
     
     val_dataset = UnlabeledDataset(
         Path(dataset_path)/"val/images",  # Replace with your validation data path

@@ -57,12 +57,12 @@ detr_config = DETRConfig(
 
         # Backbone parameters
         embed_dim=256,
-        resnet_version="resnet18",
+        resnet_version="resnet50",
         # freeze_backbone=True,
 
         # Detection head parameters
         num_classes=3,
-        num_queries=12, # 100
+        num_queries=20, # 100
         num_encoder_layers=4,
         num_decoder_layers=4,
         encoder_num_heads=4,
@@ -70,10 +70,10 @@ detr_config = DETRConfig(
         hidden_dim_out_layers=512,
 
         # Loss weights
-        bbox_loss_coef=1.0,
-        class_loss_coef=2.0,
-        giou_loss_coef=1.0,
-        eos_coef=0.05 #TODO: Move these to training config? Maybe add scheduling?
+        bbox_loss_coef=5, #1.0,
+        class_loss_coef=1.0,#2.0,
+        giou_loss_coef=2.0, #1.0,
+        eos_coef=0.1 # Keep no-object supervision strong enough for DETR query behavior
     )
 
 def train_vit_detector(
@@ -121,7 +121,7 @@ def train_vit_detector(
         transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
-        transforms.RandomAffine(degrees=10, translate=(0.4, 0.4), scale=(0.9, 1.1)),
+        transforms.RandomAffine(degrees=8, translate=(0.15, 0.15), scale=(0.95, 1.05)),
         # VerticalFlip(),
         # transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -144,7 +144,7 @@ def train_vit_detector(
         train_dataset,
         batch_size=64,
         shuffle=True,
-        num_workers=4,
+        num_workers=8,
         persistent_workers=True,
         collate_fn=collate_detection_fn,
         pin_memory=True,
@@ -163,10 +163,10 @@ def train_vit_detector(
 
     # Create training configuration
     training_config = TrainingConfig(
-        num_epochs=300,
+        num_epochs=1000,
         learning_rate=1e-4 if no_freeze else 1e-4,  # Higher LR when only training head
-        backbone_learning_rate=1e-5 if no_freeze else 0.0,  # Very low LR for backbone if fine-tuning, otherwise 0
-        weight_decay=5e-4,
+        backbone_learning_rate=1e-5 if no_freeze else 0.0,  # Lower LR for backbone if fine-tuning, otherwise 0
+        weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler="cosine",
         warmup_epochs=4,
@@ -238,6 +238,7 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: str, vi
     images_dir = dataset.images_dir
     out_path = Path(out_path)
     out_path.mkdir(parents=True, exist_ok=True)
+    save_all_predictions = True  # Intentionally keep all query outputs for debugging.
     for p in tqdm(zip(dataset.images, preds)):
         img_path = images_dir/p[0]
         shutil.copy(img_path, out_path/p[0])
@@ -247,7 +248,7 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: str, vi
             for box, label in zip(boxes, labels):
                 cx, cy, w, h = box
                 score, l = label.max(-1)
-                if True or (l != 3 and score>=0.1): # TODO
+                if save_all_predictions or (l != 3 and score >= 0.1):
                     f.write(f"{l.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
     if visualize:
         from maesy.evaluation import visualize_annotations

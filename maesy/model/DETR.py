@@ -68,11 +68,12 @@ class DETR(BaseModel):
         # if self.config.freeze_backbone:
         #     for param in self.backbone.parameters():
         #         param.requires_grad = False
+        # print(f"DETR Created - Spatial feature size: {self.backbone.get_feature_dims()[1]} X {self.backbone.get_feature_dims()[2]} @ {self.backbone.get_feature_dims()[0]} channels")
 
-        self.projection = torch.nn.Conv2d(self.backbone.get_feature_dims()[0], config.embed_dim, kernel_size=1)
 
         # Create detection head configuration
         head_config = DETRHeadConfig(
+            feature_channels=self.backbone.get_feature_dims()[0],
             embed_dim=config.embed_dim,
             num_classes=config.num_classes,
             num_queries=config.num_queries,
@@ -89,26 +90,22 @@ class DETR(BaseModel):
 
         print(f"Created DETR model with backbone {self.backbone.type} and head {self.head.type}\n Feature dims: {self.backbone.get_feature_dims()}")
 
-    def forward(self, x: torch.Tensor, **kwargs):
-        """
-        Forward pass through the model.
-
-        Args:
-            x: Input images [B, C, H, W]
-
-        Returns:
-            Dictionary containing:
-                - pred_logits: Class predictions [B, num_queries, num_classes + 1]
-                - pred_boxes: Bounding box predictions [B, num_queries, 4]
-        """
-        features = self.backbone(x) # [B, C, H, W] -> [B, feature_dim, H', W']
-        features = self.projection(features) # [B, feature_dim, H', W'] -> [B, embed_dim, H', W']
-        _, _, h, w = features.shape
-        features = features.flatten(2).transpose(1, 2) # [B, embed_dim, H', W'] -> [B, embed_dim, H'*W'] -> [B, H'*W', embed_dim]
-        Utils.get_2d_sinusoidal_encoding(h, w, self.config.embed_dim, features.device) # Compute positional encoding
-        out = self.head(features)
-
-        return out
+    # def forward(self, x: torch.Tensor, **kwargs):
+    #     """
+    #     Forward pass through the model.
+    #
+    #     Args:
+    #         x: Input images [B, C, H, W]
+    #
+    #     Returns:
+    #         Dictionary containing:
+    #             - pred_logits: Class predictions [B, num_queries, num_classes + 1]
+    #             - pred_boxes: Bounding box predictions [B, num_queries, 4]
+    #     """
+    #     features = self.backbone(x) # [B, C, H, W] -> [B, feature_dim, H', W']
+    #     out = self.head(features)
+    #
+    #     return out
 
     def infer(self, images, targets, **kwargs):
         out = self.forward(images, **kwargs)

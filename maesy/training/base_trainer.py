@@ -87,7 +87,6 @@ class BaseTrainer(ABC):
         """Create optimizer."""
         if self.config.optimizer.lower() == "adamw":
             params = [{"params": self.model.backbone.parameters(), "lr": self.config.backbone_learning_rate},
-                      {"params": self.model.projection.parameters(), "lr": self.config.learning_rate},# TODO Enforce projection in head!!
                       {"params": self.model.head.parameters(), "lr": self.config.learning_rate}]
             return torch.optim.AdamW(
                 params, #self.model.parameters()
@@ -133,12 +132,13 @@ class BaseTrainer(ABC):
 
     def _create_loss(self) -> Optional[BaseLoss]:
         if self.config.criterion == "DetectionLoss":
+            model_cfg = getattr(self.model, "config", None)
             loss = DetectionLoss(
-                num_classes=self.model.config.num_classes,
-                bbox_loss_coef= 1.0, #self.model.config.bbox_loss_coef,
-                class_loss_coef= 2.0, #self.model.config.class_loss_coef,
-                giou_loss_coef= 1.0, #self.model.config.giou_loss_coef,
-                eos_coef=self.model.config.eos_coef,
+                num_classes=getattr(model_cfg, "num_classes", 1),
+                bbox_loss_coef=getattr(model_cfg, "bbox_loss_coef", 5.0),
+                class_loss_coef=getattr(model_cfg, "class_loss_coef", 1.0),
+                giou_loss_coef=getattr(model_cfg, "giou_loss_coef", 2.0),
+                eos_coef=getattr(model_cfg, "eos_coef", 0.1),
                 device=self.device
             )
             return loss
@@ -195,13 +195,14 @@ class BaseTrainer(ABC):
             pbar.set_postfix({
                 'loss': loss.item(),
                 'lr_bbone': self.optimizer.param_groups[0]['lr'],
-                'lr_head': self.optimizer.param_groups[2]['lr']
+                'lr_head': self.optimizer.param_groups[-1]['lr']
             })
 
-            # Log to tensorboard
+            # Log to wandb
             if self.global_step % self.config.log_frequency == 0:
                 data = {f"train/{k}": v.item() for k, v in losses.items() if not k.startswith('img_')}
                 data['train/lr'] = self.optimizer.param_groups[-1]['lr']
+                data['train/lr_bbone'] = self.optimizer.param_groups[0]['lr']
                 if self.enable_wandb: self.wandb_run.log(data=data, step=self.global_step, commit=True)
 
             self.global_step += 1
@@ -217,11 +218,18 @@ class BaseTrainer(ABC):
         self.loss.reset_metrics()
         # self.model.eval()
         self.model.train()
+        validation_start_hook = getattr(self, "_validation_start", None)
+        if callable(validation_start_hook):
+            validation_start_hook()
+
         losses: dict[str, Any] = {}
         for batch in tqdm(self.val_loader, desc="Validation"):
             images, targets = handle_raw_batch(batch, self.device)
 
             losses = self.forward_model(images, targets, val=True)
+            validation_step_hook = getattr(self, "_validation_step", None)
+            if callable(validation_step_hook):
+                validation_step_hook(images, targets, losses)
 
 
         save_path = self.save_dir / "images"
@@ -230,6 +238,10 @@ class BaseTrainer(ABC):
             if name.startswith('img_'):
                 save_image(img, f"{save_path}/predicted_image{self.global_step}_{name}.png")
         metrics = self.loss.get_metrics()
+        validation_finalize_hook = getattr(self, "_validation_finalize", None)
+        if callable(validation_finalize_hook):
+            metrics.update(validation_finalize_hook())
+
         if self.enable_wandb:
             imgs_to_log: dict[str, Image] = {k: wandb.Image(v * 255) for k, v in losses.items() if k.startswith('img_')}
             metrics.update(imgs_to_log)
@@ -258,9 +270,16 @@ class BaseTrainer(ABC):
                 val_metrics = {f"val/{k}": v for k, v in self.validate().items()}  # Preparations for logging
                 if self.enable_wandb: self.wandb_run.log(data=val_metrics, step=self.global_step)
 
-                print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
-                      f"Train Loss: {train_metrics['total_loss']:.4f}, "
-                      f"Val Loss: {val_metrics['val/total_loss']:.4f}")
+                val_msg = (f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
+                           f"Train Loss: {train_metrics['total_loss']:.4f}, "
+                           f"Val Loss: {val_metrics['val/total_loss']:.4f}")
+                if 'val/mAP50' in val_metrics and 'val/mAP50_95' in val_metrics:
+                    val_msg += (f", mAP50: {val_metrics['val/mAP50']:.4f}, "
+                                f"mAP50-95: {val_metrics['val/mAP50_95']:.4f}")
+                if 'val/precision50' in val_metrics and 'val/recall50' in val_metrics:
+                    val_msg += (f", P50: {val_metrics['val/precision50']:.4f}, "
+                                f"R50: {val_metrics['val/recall50']:.4f}")
+                print(val_msg)
 
                 # Save best model
                 if val_metrics['val/total_loss'] < self.best_val_loss:
@@ -296,3 +315,4 @@ class BaseTrainer(ABC):
             _, _, _ = self.checkpoint_handler.load_checkpoint(filepath, self.model)
         else:
             self.current_epoch, self.global_step, self.best_val_loss = self.checkpoint_handler.load_checkpoint(filepath, self.model, self.optimizer, self.scheduler)
+            self.current_epoch += 1 # To continue with the next epoch and not repeat an already trained one

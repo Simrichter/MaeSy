@@ -10,6 +10,7 @@ from maesy.model.components import Utils, TransformerBlock
 @dataclass
 class DETRHeadConfig:
     """Configuration for Detection Head."""
+    feature_channels: int = 1024
     embed_dim: int = 128
     spatial_feature_size: Tuple[int] = (7,7)
     num_classes: int = 80
@@ -43,25 +44,20 @@ class DETRHead(nn.Module):
         self.type = "DETRHead"
         self.config = config
 
+        # initial projection to connect backbone output to head input
+        self.input_projection = torch.nn.Conv2d(self.config.feature_channels, config.embed_dim, kernel_size=1)
+
         # self.register_buffer('pos_embed', )
-        pos_embed = Utils.get_2d_sinusoidal_encoding(*self.config.spatial_feature_size, self.config.embed_dim) # Utils.get_sinusoidal_encoding(config.num_patches, config.embed_dim)
+        pos_embed = Utils.get_2d_sinusoidal_encoding(*self.config.spatial_feature_size, self.config.embed_dim)
 
         self.encoder = DetrEncoder(pos_embed, config.embed_dim, config.num_heads_encoder, config.num_encoder_layers, config.mlp_ratio, config.dropout)
         self.decoder = DetrDecoder(pos_embed, config.embed_dim, config.num_queries, config.num_heads_decoder, config.num_decoder_layers, config.mlp_ratio, config.dropout)
 
         # Classification head
-        self.class_embed = MLP(config.embed_dim, config.hidden_dim_out_layers, config.num_classes + 1, config.dropout) #nn.Linear(config.embed_dim, config.num_classes + 1)  # +1 for no-object
+        self.class_embed = MLP(config.embed_dim, config.hidden_dim_out_layers, config.num_classes + 1, config.dropout)
 
         # Bounding box regression head
         self.bbox_embed = MLP(config.embed_dim, config.hidden_dim_out_layers, 4, config.dropout)
-        #     nn.Sequential(
-        #     nn.Linear(config.embed_dim, config.hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(config.hidden_dim, config.hidden_dim),
-        #     nn.ReLU(),
-        #     nn.Linear(config.hidden_dim, 4),  # [cx, cy, w, h]
-        #     nn.Sigmoid()
-        # )
 
     def forward(self, features: torch.Tensor, **kwargs) -> Dict[str, torch.Tensor]:
         """
@@ -75,6 +71,11 @@ class DETRHead(nn.Module):
                 - pred_logits: Class predictions [B, num_queries, num_classes + 1]
                 - pred_boxes: Bounding box predictions [B, num_queries, 4]
         """
+
+        features = self.input_projection(features)  # [B, feature_dim, H', W'] -> [B, embed_dim, H', W']
+        _, _, h, w = features.shape
+        features = features.flatten(2).transpose(1, 2)  # [B, embed_dim, H', W'] -> [B, embed_dim, H'*W'] -> [B, H'*W', embed_dim]
+
         encoder_out = self.encoder(features)  # [B, H'*W', D]
         decoder_out = self.decoder(encoder_out)
 

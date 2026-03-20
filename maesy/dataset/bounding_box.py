@@ -104,10 +104,11 @@ class BoundingBox:
         """
         if not self.normalized:
             return
-        self.x_min = round(self.x_min*image_width)
-        self.y_min = round(self.y_min*image_height)
-        self.x_max = round(self.x_max*image_width)
-        self.y_max = round(self.y_max*image_height)
+        # Keep float precision to avoid quantization noise during train-time re-normalization.
+        self.x_min = self.x_min * image_width
+        self.y_min = self.y_min * image_height
+        self.x_max = self.x_max * image_width
+        self.y_max = self.y_max * image_height
         self.normalized = False
 
     def cls(self):

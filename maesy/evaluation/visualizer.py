@@ -83,7 +83,7 @@ def visualize_annotations(input_dir: str, output_dir: str, label_path:str="", la
                 print(f"WARNING: No annotation file found for image {img_path}, skipping visualization.\n (Expected annotation file: {txt_path})")
                 continue
             boxes = [BoundingBox.from_str(l) for l in open(txt_path, "r").readlines()]
-            boxes = [box for box in boxes if box.cls_id != 3]
+            boxes = [box for box in boxes ] # TODO Filter is deactivated only for tests: if box.cls_id != 3
             if len(boxes) == 0:
                 print(f"Empty annotations for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
                 continue
@@ -102,12 +102,16 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
     color_coding = {i: c for i, c in enumerate(colors)}
 
     if name_coding is None:
-        name_coding = {
-            0: "Ball",  # TODO: Get this stuff from model config?
-            1: "Robot",
-            2: "PenaltyCross",  # (Keine 27 Beschriftungen erwünscht), alternativ: LineCrossing
-            3: "No-Object"
-        }
+        name_coding = {'CenterCircle': 9, 'CenterMark': 6, 'CornerArc': 10, 'FIFA 26 Ball': 0, 'GoalPost': 4, 'K1': 3, 'Lines': 8, 'Nao': 2, 'PenaltyMark': 5, 'Referee': 7, 'SPL Ball': 1}
+
+        name_coding = {k: v for v, k in name_coding.items()}
+
+        # name_coding = {
+        #     0: "Ball",  # TODO: Get this stuff from model config?
+        #     1: "Robot",
+        #     2: "PenaltyCross",  # (Keine 27 Beschriftungen erwünscht), alternativ: LineCrossing
+        #     3: "No-Object"
+        # }
 
     if type(img) is str:
         img = read_image(img)
@@ -115,7 +119,7 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
             img = img[:3]  # Convert RGBA to RGB by dropping alpha channel
 
     if labels is None:
-        labels = [name_coding[box.cls()] for box in boxes]
+        labels = [name_coding.get(box.cls(), "?") for box in boxes]
         colors = [color_coding[box.cls()] for box in boxes]
     else:
         colors = ["red" if label == "Ball" else "blue" if label == "Robot" else "green" if label == "PenaltyCross" else "yellow" for label in labels]

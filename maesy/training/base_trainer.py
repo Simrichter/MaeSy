@@ -216,8 +216,8 @@ class BaseTrainer(ABC):
             return {}
 
         self.loss.reset_metrics()
-        # self.model.eval()
-        self.model.train()
+        self.model.eval()
+        # self.model.train()
         validation_start_hook = getattr(self, "_validation_start", None)
         if callable(validation_start_hook):
             validation_start_hook()

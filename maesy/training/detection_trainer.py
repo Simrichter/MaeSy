@@ -69,6 +69,13 @@ class DetectionTrainer(BaseTrainer):
         scores, labels = probs.max(dim=-1)
         no_obj = pred_logits.shape[-1] - 1
 
+        confidence_threshold = 0.3
+        # filter predictions below the confidence_threshold
+        keep = scores >= confidence_threshold
+        boxes_xyxy = boxes_xyxy[keep]
+        labels = labels[keep]
+        scores = scores[keep]
+
         rendered_labels: List[str] = []
         colors: List[str] = []
         for query_idx, (cls_id, score) in enumerate(zip(labels.tolist(), scores.tolist())):
@@ -123,7 +130,7 @@ class DetectionTrainer(BaseTrainer):
                 pred_logits=predictions["pred_logits"],
                 pred_boxes=predictions["pred_boxes"],
                 no_object_class=predictions["pred_logits"].shape[-1] - 1,
-                score_threshold=0.0,
+                score_threshold=0.3,
             )
             losses["__prepared_targets"] = prepare_targets_for_detection_metrics(targets)
             losses["img_queries_all"] = self._render_all_query_predictions(

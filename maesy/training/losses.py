@@ -34,6 +34,7 @@ class DetectionLoss(BaseLoss):
     total_loss_ce: float
     total_loss_bbox: float
     total_loss_giou: float
+    total_loss_aux: float
 
     def __init__(
             self,
@@ -41,6 +42,7 @@ class DetectionLoss(BaseLoss):
             bbox_loss_coef: float = 5.0,
             class_loss_coef: float = 1.0,
             giou_loss_coef: float = 2.0,
+            aux_loss_coef: float = 1.0,
             eos_coef: float = 0.1, # Weight for no-object class
             device: torch.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu') # TODO: Make this follow commandline-input device
     ):
@@ -60,6 +62,7 @@ class DetectionLoss(BaseLoss):
         self.bbox_loss_coef = bbox_loss_coef
         self.class_loss_coef = class_loss_coef
         self.giou_loss_coef = giou_loss_coef
+        self.aux_loss_coef = aux_loss_coef
 
         self.device = device
 
@@ -77,27 +80,16 @@ class DetectionLoss(BaseLoss):
         self.total_loss_ce = 0.0
         self.total_loss_bbox = 0.0
         self.total_loss_giou = 0.0
+        self.total_loss_aux = 0.0
         self.batch_count = 0
 
-    def forward(
+    def _compute_single_output_losses(
             self,
-            predictions: Dict[str, torch.Tensor],
-            targets: List[Dict[str, torch.Tensor]]
+            pred_logits: torch.Tensor,
+            pred_boxes: torch.Tensor,
+            targets: List[Dict[str, torch.Tensor]],
     ) -> Dict[str, torch.Tensor]:
-        """
-        Compute loss.
-        
-        Args:
-            predictions: Model predictions with 'pred_logits' and 'pred_boxes'
-            targets: Ground truth targets
-            
-        Returns:
-            Dictionary of losses
-        """
-        pred_logits = predictions['pred_logits']  # [B, num_queries, num_classes + 1]
-        pred_boxes = predictions['pred_boxes']  # [B, num_queries, 4]
-
-        # Perform Hungarian matching
+        predictions = {"pred_logits": pred_logits, "pred_boxes": pred_boxes}
         indices = self.match_predictions_to_targets(predictions, targets)
 
         # Compute classification loss
@@ -117,19 +109,18 @@ class DetectionLoss(BaseLoss):
             pred_logits.transpose(1, 2),
             target_classes,
             weight=self.empty_weight,
-            label_smoothing=0.08 #TODO Experimental
+            label_smoothing=0.08 # TODO: Make controllable through config
         )
 
         num_boxes = target_classes_o.shape[0]
         if num_boxes > 0:
             # Compute bbox losses
-            idx = self._get_src_permutation_idx(indices) # TODO: Recomputation unnecessary??
             src_boxes = pred_boxes[idx] # Selecting the boxes selected by the hungarian matching
             target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)  # Expecting the target boxes to be 0-1 normalized
             # This selected the two chosen target boxes in correct order
 
             loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')
-            loss_bbox = loss_bbox.sum() / max(target_classes_o.shape[0], 1) # Averaging by number of target boxes
+            loss_bbox = loss_bbox.sum() / max(num_boxes, 1)
 
             # Compute GIoU loss
             giou_matrix = self._generalized_box_iou(
@@ -137,24 +128,62 @@ class DetectionLoss(BaseLoss):
                 self._box_cxcywh_to_xyxy(target_boxes)
             )
             loss_giou = 1 - torch.diag(giou_matrix)
-            loss_giou = loss_giou.sum() / max(target_classes_o.shape[0], 1)
+            loss_giou = loss_giou.sum() / max(num_boxes, 1)
         else:
             loss_bbox = torch.tensor(0.0, device=pred_logits.device)
             loss_giou = torch.tensor(0.0, device=pred_logits.device)
 
-        # Total loss
-        losses = {
+        return {
             'loss_ce': loss_ce * self.class_loss_coef,
             'loss_bbox': loss_bbox * self.bbox_loss_coef,
-            'loss_giou': loss_giou * self.giou_loss_coef
+            'loss_giou': loss_giou * self.giou_loss_coef,
         }
-        losses['loss'] = sum(losses.values())
+
+    def forward(
+            self,
+            predictions: Dict[str, torch.Tensor],
+            targets: List[Dict[str, torch.Tensor]]
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Compute loss.
+        
+        Args:
+            predictions: Model predictions with 'pred_logits' and 'pred_boxes'
+            targets: Ground truth targets
+            
+        Returns:
+            Dictionary of losses
+        """
+        losses = self._compute_single_output_losses(
+            pred_logits=predictions['pred_logits'],
+            pred_boxes=predictions['pred_boxes'],
+            targets=targets,
+        )
+
+        aux_total = torch.tensor(0.0, device=predictions['pred_logits'].device)
+        aux_outputs = predictions.get('aux_outputs', [])
+        for aux_idx, aux_prediction in enumerate(aux_outputs):
+            aux_losses = self._compute_single_output_losses(
+                pred_logits=aux_prediction['pred_logits'],
+                pred_boxes=aux_prediction['pred_boxes'],
+                targets=targets,
+            )
+            aux_component_total = sum(aux_losses.values()) * self.aux_loss_coef
+            losses[f'loss_ce_aux_{aux_idx}'] = aux_losses['loss_ce'] * self.aux_loss_coef
+            losses[f'loss_bbox_aux_{aux_idx}'] = aux_losses['loss_bbox'] * self.aux_loss_coef
+            losses[f'loss_giou_aux_{aux_idx}'] = aux_losses['loss_giou'] * self.aux_loss_coef
+            losses[f'loss_aux_{aux_idx}'] = aux_component_total
+            aux_total = aux_total + aux_component_total
+
+        losses['loss_aux'] = aux_total
+        losses['loss'] = losses['loss_ce'] + losses['loss_bbox'] + losses['loss_giou'] + aux_total
 
         # Log the sums of the losses per epoch
         self.total_loss += losses['loss'].item()
         self.total_loss_ce += losses['loss_ce'].item()
         self.total_loss_bbox += losses['loss_bbox'].item()
         self.total_loss_giou += losses['loss_giou'].item()
+        self.total_loss_aux += losses['loss_aux'].item()
         self.batch_count += 1
 
         return losses
@@ -163,7 +192,8 @@ class DetectionLoss(BaseLoss):
         return {"total_loss": self.total_loss / self.batch_count,
                 "total_loss_ce": self.total_loss_ce / self.batch_count,
                 "total_loss_bbox": self.total_loss_bbox / self.batch_count,
-                "total_loss_giou": self.total_loss_giou / self.batch_count}
+                "total_loss_giou": self.total_loss_giou / self.batch_count,
+                "total_loss_aux": self.total_loss_aux / self.batch_count}
 
     @torch.no_grad()
     def match_predictions_to_targets(

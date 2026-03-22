@@ -5,6 +5,19 @@ import torch
 
 class CheckpointHandler:
 
+    @staticmethod
+    def _assert_compatible_config(checkpoint_config: dict, current_config: dict, part_name: str):
+        mismatches = {}
+        for key, value in checkpoint_config.items():
+            if key in current_config and current_config[key] != value:
+                mismatches[key] = {"checkpoint": value, "current": current_config[key]}
+        if mismatches:
+            raise ValueError(
+                f"Failed to load {part_name} due to incompatible configuration values: {mismatches}\n"
+                f"Checkpoint {part_name} config: {checkpoint_config}\n"
+                f"Current {part_name} config: {current_config}"
+            )
+
     def __init__(self, device: torch.device, save_dir: Optional[str | Path]=None):
         if save_dir:
             self.save_dir = Path(save_dir)
@@ -55,15 +68,19 @@ class CheckpointHandler:
 
     @staticmethod
     def _check_head_configs(checkpoint, model):
-        if checkpoint['headconfig'] != model.head.config.__dict__:
-            raise ValueError(
-                f"Failed to load head due to incompatible configuration.\n \n Checkpoint head config:\n{checkpoint['headconfig']}\n \n actual head config:\n{model.head.config.__dict__}")
+        CheckpointHandler._assert_compatible_config(
+            checkpoint_config=checkpoint['headconfig'],
+            current_config=model.head.config.__dict__,
+            part_name="head",
+        )
 
     @staticmethod
     def _check_bb_configs(checkpoint, model):
-        if checkpoint['backboneconfig'] != model.backbone.config.__dict__:
-            raise ValueError(
-                f"Failed to load backbone due to incompatible configuration. Checkpoint backbone config: {checkpoint['backboneconfig']}, actual backbone config: {model.backbone.config.__dict__}")
+        CheckpointHandler._assert_compatible_config(
+            checkpoint_config=checkpoint['backboneconfig'],
+            current_config=model.backbone.config.__dict__,
+            part_name="backbone",
+        )
 
     def _load_model(self, checkpoint, model):
         if (model.backbone.type != checkpoint['backbonetype']) and (model.head.type != checkpoint['headtype']):

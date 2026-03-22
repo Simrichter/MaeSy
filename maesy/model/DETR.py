@@ -36,6 +36,8 @@ class DETRConfig:
     decoder_mlp_ratio: float = 4.0
     decoder_dropout: float = 0.1
     hidden_dim_out_layers: int = 256
+    enable_auxiliary_losses: bool = True
+    aux_loss_coef: float = 1.0
 
     # Loss weights (for compatibility with loss functions)
     bbox_loss_coef: float = 5.0
@@ -85,6 +87,7 @@ class DETR(BaseModel):
             dropout=config.decoder_dropout,
             hidden_dim_out_layers=config.hidden_dim_out_layers,
             spatial_feature_size=tuple(self.backbone.get_feature_dims()[1:]),
+            enable_auxiliary_losses=config.enable_auxiliary_losses,
         )
         self.head = DETRHead(head_config)
 

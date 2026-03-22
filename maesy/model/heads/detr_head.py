@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dataclasses import dataclass, asdict
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 from maesy.model.components import Utils, TransformerBlock
 
@@ -26,6 +26,7 @@ class DETRHeadConfig:
     num_queries: int = 100
     num_decoder_layers: int = 6
     num_heads_decoder: int = 8
+    enable_auxiliary_losses: bool = True
 
     # def __post_init__(self):
     #     self.num_patches = self.spatial_feature_size[0] * self.spatial_feature_size[1]
@@ -77,16 +78,30 @@ class DETRHead(nn.Module):
         features = features.flatten(2).transpose(1, 2)  # [B, embed_dim, H', W'] -> [B, embed_dim, H'*W'] -> [B, H'*W', embed_dim]
 
         encoder_out = self.encoder(features)  # [B, H'*W', D]
-        decoder_out = self.decoder(encoder_out)
+        decoder_out, decoder_intermediates = self.decoder(
+            encoder_out,
+            return_intermediate=self.config.enable_auxiliary_losses,
+        )
 
         # Predict classes and bounding boxes
         pred_logits = self.class_embed(decoder_out)  # [B, num_queries, num_classes + 1]
         pred_boxes = self.bbox_embed(decoder_out).sigmoid()  # [B, num_queries, 4] normalized to [0, 1]
 
-        return {
+        outputs = {
             'pred_logits': pred_logits,
             'pred_boxes': pred_boxes
         }
+
+        if self.config.enable_auxiliary_losses and len(decoder_intermediates) > 1:
+            aux_outputs: List[Dict[str, torch.Tensor]] = []
+            for hidden_state in decoder_intermediates[:-1]:
+                aux_outputs.append({
+                    'pred_logits': self.class_embed(hidden_state),
+                    'pred_boxes': self.bbox_embed(hidden_state).sigmoid(),
+                })
+            outputs['aux_outputs'] = aux_outputs
+
+        return outputs
 
 class DetrEncoder(nn.Module):
     """Transformer encoder for DETR."""
@@ -118,20 +133,24 @@ class DetrDecoder(nn.Module):
             DetrDecoderLayer(embed_dim, num_heads, mlp_ratio, dropout) for _ in range(num_decoder_layers)
         ])
 
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
+    def forward(self, features: torch.Tensor, return_intermediate: bool = False) -> tuple[torch.Tensor, List[torch.Tensor]]:
         """Forward pass."""
         query_pos_enc = self.query_embed.weight.unsqueeze(0)
 
         queries = self.query_dropout(self.query_embed.weight).unsqueeze(0).repeat(features.shape[0], 1, 1)
 
         # Add query noise during training to prevent query collapse
-        if self.train():
+        if self.training:
             noise = torch.randn_like(query_pos_enc) * 0.1
-            query_pos_enc += noise
+            query_pos_enc = query_pos_enc + noise
 
+        intermediate_outputs: List[torch.Tensor] = []
         for block in self.decoder_blocks:
             queries = block(queries, features, query_pos_enc, self.pos_embed.expand(features.shape[0], -1, -1))
-        return queries
+            if return_intermediate:
+                intermediate_outputs.append(queries)
+
+        return queries, intermediate_outputs
 
 class DetrEncoderLayer(nn.Module):
     """Single layer of the DETR encoder."""

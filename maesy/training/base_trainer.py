@@ -138,6 +138,7 @@ class BaseTrainer(ABC):
                 bbox_loss_coef=getattr(model_cfg, "bbox_loss_coef", 5.0),
                 class_loss_coef=getattr(model_cfg, "class_loss_coef", 1.0),
                 giou_loss_coef=getattr(model_cfg, "giou_loss_coef", 2.0),
+                aux_loss_coef=getattr(model_cfg, "aux_loss_coef", 0.5),
                 eos_coef=getattr(model_cfg, "eos_coef", 0.1),
                 device=self.device
             )

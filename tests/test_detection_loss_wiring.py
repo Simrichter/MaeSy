@@ -20,6 +20,7 @@ class DummyDetectionModel(nn.Module):
             bbox_loss_coef=7.0,
             class_loss_coef=3.0,
             giou_loss_coef=4.0,
+            aux_loss_coef=0.6,
             eos_coef=0.25,
         )
 
@@ -49,5 +50,6 @@ def test_detection_loss_uses_model_config_coefficients():
     assert trainer.loss.bbox_loss_coef == 7.0
     assert trainer.loss.class_loss_coef == 3.0
     assert trainer.loss.giou_loss_coef == 4.0
+    assert trainer.loss.aux_loss_coef == 0.6
     assert trainer.loss.empty_weight[-1].item() == 0.25
 

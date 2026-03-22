@@ -36,7 +36,7 @@ detr_config = DETRConfig(
 
         # Detection head parameters
         num_classes=3,
-        num_queries=20, # 100
+        num_queries=30, # 100
         num_encoder_layers=4,
         num_decoder_layers=4,
         encoder_num_heads=4,
@@ -47,7 +47,8 @@ detr_config = DETRConfig(
         bbox_loss_coef=5, #1.0,
         class_loss_coef=2.0,#2.0,
         giou_loss_coef=2.0, #1.0,
-        eos_coef=0.05
+        eos_coef=0.05,
+        aux_loss_coef=0.5,
     )
 
 def train_vit_detector(
@@ -138,7 +139,7 @@ def train_vit_detector(
     # Create training configuration
     training_config = TrainingConfig(
         num_epochs=1000,
-        learning_rate=5e-5 if no_freeze else 1e-4,  # Higher LR when only training head
+        learning_rate=1e-4 if no_freeze else 1e-4,  # Higher LR when only training head
         backbone_learning_rate=1e-5 if no_freeze else 0.0,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4,
         optimizer="adamw",

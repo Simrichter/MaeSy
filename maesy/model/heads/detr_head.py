@@ -111,6 +111,7 @@ class DetrDecoder(nn.Module):
         super().__init__()
 
         self.query_embed = nn.Embedding(num_queries, embed_dim)
+        self.query_dropout = nn.Dropout(dropout)
         self.register_buffer('pos_embed', pos_embed)
 
         self.decoder_blocks = nn.ModuleList([
@@ -120,8 +121,14 @@ class DetrDecoder(nn.Module):
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """Forward pass."""
         query_pos_enc = self.query_embed.weight.unsqueeze(0)
-        # queries = torch.zeros_like(query_pos_enc).repeat(features.shape[0], 1, 1) # [B, num_queries, embed_dim]
-        queries = self.query_embed.weight.unsqueeze(0).repeat(features.shape[0], 1, 1)
+
+        queries = self.query_dropout(self.query_embed.weight).unsqueeze(0).repeat(features.shape[0], 1, 1)
+
+        # Add query noise during training to prevent query collapse
+        if self.train():
+            noise = torch.randn_like(query_pos_enc) * 0.1
+            query_pos_enc += noise
+
         for block in self.decoder_blocks:
             queries = block(queries, features, query_pos_enc, self.pos_embed.expand(features.shape[0], -1, -1))
         return queries

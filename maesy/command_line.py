@@ -39,6 +39,13 @@ def main():
     od_parser.add_argument("--resume", action="store_true",
                            help="Whether to resume training from an existing OD checkpoint (instead of starting from a pretrained MAE checkpoint)")
     od_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
+    od_parser.add_argument(
+        "--detector",
+        type=str,
+        choices=["detr", "rt_detr"],
+        default="rt_detr",
+        help="Detection architecture to train (default: rt_detr)",
+    )
 
 
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")
@@ -64,6 +71,13 @@ def main():
     infer.add_argument("-o", "--out", type=str, default="./inference_results", help="Folder to save inference results")
     infer.add_argument("--device", type=str, default="",
                        help="Device to run inference on (default: auto-detect CUDA if available, otherwise CPU)")
+    infer.add_argument(
+        "--detector",
+        type=str,
+        choices=["auto", "detr", "rt_detr"],
+        default="auto",
+        help="Detection architecture for inference (default: auto-detect from checkpoint)",
+    )
     infer.add_argument("-v", "--visualize", action="store_true",
                        help="Whether to save visualizations of predictions in a subfolder (default: False)")
 

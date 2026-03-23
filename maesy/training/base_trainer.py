@@ -119,7 +119,8 @@ class BaseTrainer(ABC):
                 T_max=self.config.num_epochs - self.config.warmup_epochs,
                 eta_min=1e-6 # TODO: Make this configurable?
             )
-            return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, cosine],  milestones=[self.config.warmup_epochs])
+            constant = torch.optim.lr_scheduler.ConstantLR(self.optimizer, factor=1.0, total_iters=1000000)
+            return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, cosine, constant],  milestones=[self.config.warmup_epochs, self.config.num_epochs])
         elif self.config.lr_scheduler.lower() == "step":
             return torch.optim.lr_scheduler.StepLR(
                 self.optimizer,

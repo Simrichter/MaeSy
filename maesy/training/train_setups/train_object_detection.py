@@ -1,8 +1,6 @@
-import os
 import shutil
 
 # import imgaug
-import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from pathlib import Path
@@ -12,9 +10,7 @@ from tqdm import tqdm
 
 from maesy.evaluation.inferer import Inferer
 # Import models
-from maesy.model import ViTDetector, ViTDetectorConfig, DETR, DETRConfig
-from maesy.model import MaskedAutoencoderViT, MAEConfig
-from maesy.model.yolo_v2_model import YoloV2Model
+from maesy.model import DETR, DETRConfig, RTDETR, RTDETRConfig
 from maesy.model_tools import replace_bn_with_frozenbn
 
 # Import training components
@@ -23,9 +19,8 @@ from maesy.training.utils import collate_detection_fn
 
 # Import dataset
 from maesy.dataset import ObjectDetectionDataset, UnlabeledDataset
-import torch.multiprocessing as mp
 
-detr_config = DETRConfig(
+DETR_CONFIG = DETRConfig(
 
         image_size=224,
 
@@ -51,6 +46,39 @@ detr_config = DETRConfig(
         aux_loss_coef=0.5,
     )
 
+RT_DETR_CONFIG = RTDETRConfig(
+    image_size=224,
+    resnet_version="resnet50",
+    num_classes=3,
+    num_queries=30,
+    embed_dim=256,
+    num_decoder_layers=4,
+    decoder_num_heads=8,
+    hidden_dim_out_layers=512,
+    bbox_loss_coef=5.0,
+    class_loss_coef=2.0,
+    giou_loss_coef=2.0,
+    eos_coef=0.05,
+    aux_loss_coef=0.5,
+)
+
+
+def _build_detection_model(detector_arch: str):
+    detector_arch = detector_arch.lower()
+    if detector_arch == "detr":
+        return DETR(DETR_CONFIG)
+    if detector_arch == "rt_detr":
+        return RTDETR(RT_DETR_CONFIG)
+    raise ValueError(f"Unsupported detector architecture: {detector_arch}")
+
+
+def _infer_detector_arch_from_checkpoint(checkpoint_path: str, device: torch.device) -> str:
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    head_type = str(checkpoint.get("headtype", ""))
+    if "RTDETR" in head_type:
+        return "rt_detr"
+    return "detr"
+
 def train_vit_detector(
     checkpoint_path: str,
     dataset_path: str,
@@ -58,13 +86,14 @@ def train_vit_detector(
     no_freeze: bool,
     continue_from_checkpoint: bool,
     enable_wandb: bool,
+    detector_arch: str = "rt_detr",
     seed: int = 42
 ):
     """
-    Train an object detection model using MAE pretrained backbone.
+    Train an object detection model with the selected detector architecture.
 
     Args:
-        checkpoint_path: Path to pretrained MAE checkpoint
+        checkpoint_path: Path to a checkpoint (pretrained or full OD checkpoint)
         dataset_path: Path to object detection dataset
         output_dir: Directory to save checkpoints
         no_freeze: Whether to continue training the backbone
@@ -81,7 +110,8 @@ def train_vit_detector(
     # Create detection model
     # model = ViTDetector(det_config)
     # model = YoloV2Model()
-    model = DETR(detr_config)
+    model = _build_detection_model(detector_arch)
+    print(f"Selected detector architecture: {detector_arch}")
 
     # Optionally freeze backbone
     if not no_freeze:
@@ -112,12 +142,13 @@ def train_vit_detector(
     # Create datasets and dataloaders
     train_dataset = ObjectDetectionDataset(f"{dataset_path}/train", transforms=train_transforms)
     val_dataset = ObjectDetectionDataset(f"{dataset_path}/val", transforms=val_transforms)
+    batch_size = 64 if detector_arch.lower() == "rt_detr" else 64
 
     # mp.set_sharing_strategy("file_system")
     # Create dataloaders with custom collate function
     train_loader = DataLoader(
         train_dataset,
-        batch_size=64,
+        batch_size=batch_size,
         shuffle=True,
         num_workers=8,
         persistent_workers=True,
@@ -128,7 +159,7 @@ def train_vit_detector(
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=64,
+        batch_size=batch_size,
         num_workers=4,
         persistent_workers=True,
         collate_fn=collate_detection_fn,
@@ -139,8 +170,8 @@ def train_vit_detector(
     # Create training configuration
     training_config = TrainingConfig(
         num_epochs=1000,
-        learning_rate=1e-4 if no_freeze else 1e-4,  # Higher LR when only training head
-        backbone_learning_rate=1e-5 if no_freeze else 0.0,  # Lower LR for backbone if fine-tuning, otherwise 0
+        learning_rate=1e-5 if no_freeze else 1e-4,  # Higher LR when only training head
+        backbone_learning_rate=1e-6 if no_freeze else 0.0,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler="cosine",
@@ -171,7 +202,14 @@ def train_vit_detector(
     # Train
     trainer.train()
 
-def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: str, visualize: bool, device: torch.device) -> None:
+def infer_vit_detector(
+    checkpoint_path: str,
+    images_path: str,
+    out_path: str,
+    visualize: bool,
+    device: torch.device,
+    detector_arch: str | None = None,
+) -> None:
     """
     Run inference with a trained object detection model.
 
@@ -190,7 +228,9 @@ def infer_vit_detector(checkpoint_path: str, images_path: str, out_path: str, vi
     # Load model
     # model = ViTDetector(det_config)
     # model = YoloV2Model()
-    model = DETR(detr_config)
+    selected_arch = detector_arch or _infer_detector_arch_from_checkpoint(checkpoint_path, device)
+    model = _build_detection_model(selected_arch)
+    print(f"Selected detector architecture: {selected_arch}")
 
     CheckpointHandler(device=device).load_checkpoint(checkpoint_path, model=model)
     model.eval()

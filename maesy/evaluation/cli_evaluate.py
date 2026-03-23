@@ -6,9 +6,16 @@ def main(args):
         case "infer":
             # infer_video(args)
             import torch
-            infer_vit_detector(args.checkpoint, args.imgpath, args.out, args.visualize,
-                               torch.device(args.device) if args.device != "" else torch.device(
-                                   "cuda" if torch.cuda.is_available() else "cpu"))
+            infer_vit_detector(
+                args.checkpoint,
+                args.imgpath,
+                args.out,
+                args.visualize,
+                torch.device(args.device) if args.device != "" else torch.device(
+                    "cuda" if torch.cuda.is_available() else "cpu"
+                ),
+                detector_arch=None if args.detector == "auto" else args.detector,
+            )
         case "visualize":
             from maesy.evaluation import visualize_annotations
             visualize_annotations(args.imgpath, args.out, label_path=args.labels, label_file=args.label_file)

@@ -21,15 +21,31 @@ def create_model(model: str, config) -> BaseModel:
 
     """
     if model == "mae":
-        from maesy.model import MaskedAutoencoderViT, BaseModel
+        from maesy.model import MaskedAutoencoderViT, MAEConfig
 
-        model = MaskedAutoencoderViT(config=config)
-        _print_model_info(model)
-        return model
+        if not isinstance(config, MAEConfig):
+            raise TypeError(f"Model 'mae' expects config type MAEConfig, got {type(config).__name__}")
+        instance = MaskedAutoencoderViT(config=config)
     elif model == "ViTDetector":
-        from maesy.model import ViTDetector
-        model = ViTDetector(config=config)
-        _print_model_info(model)
-        return model
+        from maesy.model import ViTDetector, ViTDetectorConfig
+
+        if not isinstance(config, ViTDetectorConfig):
+            raise TypeError(f"Model 'ViTDetector' expects config type ViTDetectorConfig, got {type(config).__name__}")
+        instance = ViTDetector(config=config)
+    elif model == "detr":
+        from maesy.model import DETR, DETRConfig
+
+        if not isinstance(config, DETRConfig):
+            raise TypeError(f"Model 'detr' expects config type DETRConfig, got {type(config).__name__}")
+        instance = DETR(config=config)
+    elif model == "rt_detr":
+        from maesy.model import RTDETR, RTDETRConfig
+
+        if not isinstance(config, RTDETRConfig):
+            raise TypeError(f"Model 'rt_detr' expects config type RTDETRConfig, got {type(config).__name__}")
+        instance = RTDETR(config=config)
     else:
-        raise ValueError(f"Model {model} not recognized. Available models: ['mae']")
+        raise ValueError(f"Model {model} not recognized. Available models: ['mae', 'ViTDetector', 'detr', 'rt_detr']")
+
+    _print_model_info(instance)
+    return instance

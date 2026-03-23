@@ -7,6 +7,7 @@ from maesy.model.mae_model import MaskedAutoencoderViT, MAEConfig
 from maesy.model.vit_detector import ViTDetector, ViTDetectorConfig
 from maesy.model.classification_CNN_model import ClassificationCNN, ClassificationCNNConfig
 from maesy.model.DETR import DETR, DETRConfig
+from maesy.model.rt_detr import RTDETR, RTDETRConfig
 
 __all__ = [
     "ModelConfig",
@@ -20,4 +21,6 @@ __all__ = [
     "ClassificationCNNConfig",
     "DETR",
     "DETRConfig",
+    "RTDETR",
+    "RTDETRConfig",
 ]

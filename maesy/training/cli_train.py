@@ -9,7 +9,7 @@ def main(args):
             args.checkpoint,
             args.dataset,
             args.output,
-            args.no_freeze,
+            args.freeze,
             enable_wandb=args.wandb,
             continue_from_checkpoint=args.resume,
             detector_arch=args.detector,

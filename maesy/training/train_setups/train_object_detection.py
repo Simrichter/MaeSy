@@ -83,7 +83,7 @@ def train_vit_detector(
     checkpoint_path: str,
     dataset_path: str,
     output_dir: str,
-    no_freeze: bool,
+    freeze: bool,
     continue_from_checkpoint: bool,
     enable_wandb: bool,
     detector_arch: str = "rt_detr",
@@ -96,7 +96,7 @@ def train_vit_detector(
         checkpoint_path: Path to a checkpoint (pretrained or full OD checkpoint)
         dataset_path: Path to object detection dataset
         output_dir: Directory to save checkpoints
-        no_freeze: Whether to continue training the backbone
+        freeze: Whether to freeze the backbone
         continue_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
         enable_wandb: Whether to enable Weights & Biases logging
         seed: Random seed for reproducibility (default: 42)
@@ -114,7 +114,7 @@ def train_vit_detector(
     print(f"Selected detector architecture: {detector_arch}")
 
     # Optionally freeze backbone
-    if not no_freeze:
+    if freeze:
         for param in model.backbone.parameters():
             param.requires_grad = False
         # print("Froze backbone parameters - only training detection head")
@@ -170,8 +170,8 @@ def train_vit_detector(
     # Create training configuration
     training_config = TrainingConfig(
         num_epochs=1000,
-        learning_rate=1e-5 if no_freeze else 1e-4,  # Higher LR when only training head
-        backbone_learning_rate=1e-6 if no_freeze else 0.0,  # Lower LR for backbone if fine-tuning, otherwise 0
+        learning_rate=1e-4 if freeze else 1e-5,  # Higher LR when only training head
+        backbone_learning_rate=0.0 if freeze else 1e-6,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler="cosine",

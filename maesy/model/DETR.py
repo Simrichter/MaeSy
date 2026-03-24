@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import torch
 
 from .backbones.mobilenet_backbone import MobileNetBackbone
+from .backbones.resnet_backbone import ResNetBackboneConfig
 from .base_model import BaseModel
 from .backbones import TransformerBackbone, TransformerBackboneConfig, ResNetBackbone
 from .heads import ViTDetectionHead, DetectionHeadConfig
@@ -17,6 +18,7 @@ class DETRConfig:
     image_size: int = 224
 
     resnet_version: str = "resnet18"
+    feature_scale: str = "c4"
     # freeze_backbone: bool = True
 
     # Transformer backbone parameters
@@ -65,7 +67,13 @@ class DETR(BaseModel):
         self.config = config
 
         # Create backbone configuration
-        self.backbone = ResNetBackbone(version=self.config.resnet_version, image_size=self.config.image_size, remove_layers=3)
+        bbone_conf = ResNetBackboneConfig(
+            version = "resnet50",
+            image_size = 224,
+            pretrained = True,
+            feature_scales = (self.config.feature_scale,)
+        )
+        self.backbone = ResNetBackbone(bbone_conf)
         # self.backbone = MobileNetBackbone(version="v2", image_size=self.config.image_size, remove_layers=3)
         # if self.config.freeze_backbone:
         #     for param in self.backbone.parameters():
@@ -75,7 +83,7 @@ class DETR(BaseModel):
 
         # Create detection head configuration
         head_config = DETRHeadConfig(
-            feature_channels=self.backbone.get_feature_dims()[0],
+            feature_channels=self.backbone.get_feature_dims()[self.config.feature_scale][0],
             embed_dim=config.embed_dim,
             num_classes=config.num_classes,
             num_queries=config.num_queries,
@@ -86,29 +94,29 @@ class DETR(BaseModel):
             mlp_ratio=config.decoder_mlp_ratio,
             dropout=config.decoder_dropout,
             hidden_dim_out_layers=config.hidden_dim_out_layers,
-            spatial_feature_size=tuple(self.backbone.get_feature_dims()[1:]),
+            spatial_feature_size=tuple(self.backbone.get_feature_dims()[self.config.feature_scale][1:]),
             enable_auxiliary_losses=config.enable_auxiliary_losses,
         )
         self.head = DETRHead(head_config)
 
         print(f"Created DETR model with backbone {self.backbone.type} and head {self.head.type}\n Feature dims: {self.backbone.get_feature_dims()}")
 
-    # def forward(self, x: torch.Tensor, **kwargs):
-    #     """
-    #     Forward pass through the model.
-    #
-    #     Args:
-    #         x: Input images [B, C, H, W]
-    #
-    #     Returns:
-    #         Dictionary containing:
-    #             - pred_logits: Class predictions [B, num_queries, num_classes + 1]
-    #             - pred_boxes: Bounding box predictions [B, num_queries, 4]
-    #     """
-    #     features = self.backbone(x) # [B, C, H, W] -> [B, feature_dim, H', W']
-    #     out = self.head(features)
-    #
-    #     return out
+    def forward(self, x: torch.Tensor, **kwargs):
+        """
+        Forward pass through the model.
+
+        Args:
+            x: Input images [B, C, H, W]
+
+        Returns:
+            Dictionary containing:
+                - pred_logits: Class predictions [B, num_queries, num_classes + 1]
+                - pred_boxes: Bounding box predictions [B, num_queries, 4]
+        """
+        features = self.backbone(x) # [B, C, H, W] -> [B, feature_dim, H', W']
+        out = self.head(features[self.config.feature_scale])
+
+        return out
 
     def infer(self, images, targets, **kwargs):
         out = self.forward(images, **kwargs)

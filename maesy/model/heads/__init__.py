@@ -4,6 +4,7 @@ from .decoder_head import DecoderHead, DecoderHeadConfig
 from .dummy_head import DummyHead
 from .vit_detection_head import ViTDetectionHead, DetectionHeadConfig
 from .detr_head import DETRHead, DETRHeadConfig
+from .rt_detr_head import RTDETRHead, RTDETRHeadConfig
 
 __all__ = [
     "BaseHead",
@@ -16,4 +17,6 @@ __all__ = [
     "DetectionHeadConfig",
     "DETRHead",
     "DETRHeadConfig",
+    "RTDETRHead",
+    "RTDETRHeadConfig",
 ]

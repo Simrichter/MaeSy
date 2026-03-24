@@ -17,6 +17,7 @@ def main():
     train = subparsers.add_parser('train', help="Train a model")
     debug = subparsers.add_parser('debug', help="Call debug utilities")
     eval = subparsers.add_parser('evaluate', help="Evaluate a model")
+    export = subparsers.add_parser("export", help="Export a model to a different format (e.g. ONNX)")
     subparsers.add_parser('predict', help="Make predictions with a model")
     data = subparsers.add_parser('dataset', help="Manage datasets")
     data.add_argument("-p", "--path", type=str, help="Path to the data root dir (default: ./data)", default="./data")
@@ -91,6 +92,12 @@ def main():
     # Command: maesy predict
     # TODO
 
+    # Command: maesy export
+    export.add_argument("checkpoint", help="Path to model checkpoint file")
+    export.add_argument("-o", "--out", type=str, default="", help="Folder to save exported model")
+    export.add_argument("--architecture", type=str, choices=["detr", "rt_detr"], default="rt_detr",
+                        help="Detection architecture for export (default: auto-detect from checkpoint)")
+
     # Command: maesy dataset
     data_subs = data.add_subparsers(dest='command')
 
@@ -152,6 +159,8 @@ def main():
         #     from .prediction.cli_predict import main
         case "dataset":
             from .dataset.cli_dataset import main
+        case "export":
+            from .model_tools.cli_export import main
         case _:
             print(f"Module '{args.module}' not recognized.")
             # print_help()

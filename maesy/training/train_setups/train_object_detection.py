@@ -11,7 +11,7 @@ from tqdm import tqdm
 from maesy.evaluation.inferer import Inferer
 # Import models
 from maesy.model import DETR, DETRConfig, RTDETR, RTDETRConfig
-from maesy.model_tools import replace_bn_with_frozenbn
+from maesy.model_tools import replace_bn_with_frozenbn, CheckpointHandler
 
 # Import training components
 from maesy.training import DetectionTrainer, TrainingConfig
@@ -219,8 +219,8 @@ def infer_vit_detector(
         :param out_path: Path to save inference results (predicted bounding boxes and labels)
         :param visualize: Whether to save visualizations of predictions (e.g., images with predicted boxes drawn)
         :param device: Device to run inference on (e.g., "cuda" or "cpu")
+        :param detector_arch: The architecture to be used (e.g., "detr" or "rt_detr")
     """
-    from maesy.model_tools import CheckpointHandler
     print("=" * 60)
     print("Running Inference")
     print("=" * 60)
@@ -270,6 +270,40 @@ def infer_vit_detector(
     if visualize:
         from maesy.evaluation import visualize_annotations
         visualize_annotations(out_path, "")
+
+def export_vit_detector(
+    checkpoint_path: str,
+    output_path: str,
+    detector_arch: str | None = None,
+) -> None:
+    """
+    Export a trained object detection model to ONNX format for deployment.
+
+    Args:
+        :param checkpoint_path: Path to trained model checkpoint
+        :param output_path: Path to save the exported ONNX model
+        :param detector_arch: Architecture of the model. If None, the architecture will be inferred from the checkpoint. (e.g., "detr" or "rt_detr")
+    """
+    device = torch.device("cpu") # For exporting no GPU is required
+    selected_arch = detector_arch or _infer_detector_arch_from_checkpoint(checkpoint_path, device)
+    model = _build_detection_model(selected_arch)
+    print(f"Selected detector architecture: {selected_arch}")
+
+    CheckpointHandler(device=device).load_checkpoint(checkpoint_path, model=model)
+    model.eval()
+
+    example_inputs = (torch.randn(1, 3, 224, 224),)
+    onnx_program = torch.onnx.export(model, example_inputs, dynamo=True)
+
+    path = Path(checkpoint_path).parent if output_path == "" else Path(output_path)
+    path.mkdir(parents=True, exist_ok=True)
+    print("=" * 60)
+    print("Starting ONNX export...")
+    save_name = path / f"{selected_arch}.onnx"
+    onnx_program.save(save_name)
+    print("=" * 60)
+    print(f"Success! Model has been exported to {path / f'{selected_arch}.onnx'}")
+
 
 if __name__ == "__main__":
     #argparse:

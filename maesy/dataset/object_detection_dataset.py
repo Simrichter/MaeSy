@@ -1,14 +1,13 @@
 """Object detection dataset implementation."""
 
 import os
-import json
 from pathlib import Path
 
 import torch
 import torchvision.tv_tensors
 from torch.utils.data import Dataset
 from PIL import Image
-from typing import Optional, Callable, Dict, Any, List, Tuple
+from typing import Optional, Callable, Dict, List, Tuple
 import numpy as np
 from torchvision.ops import box_convert
 
@@ -22,6 +21,7 @@ class ObjectDetectionDataset(Dataset):
         self,
         dataset_dir: str,
         transforms: Optional[Callable] = None,
+        line_class_id: Optional[int] = None,
         repeat_factor: int = 1,
         step: int = 1,
         start_index: int = 0,
@@ -37,6 +37,7 @@ class ObjectDetectionDataset(Dataset):
         self.images_dir = Path(dataset_dir) / "images"
         self.annotations_dir = Path(dataset_dir) / "labels"
         self.transforms = transforms
+        self.line_class_id = line_class_id
 
         self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if img.endswith((".jpg", ".jpeg", ".png"))][start_index::step]*repeat_factor
 
@@ -79,7 +80,32 @@ class ObjectDetectionDataset(Dataset):
                     "\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(
                         annotation_path, image_path))
             with open(annotation_path, "r") as f:
-                boxes_list = [BoundingBox.from_str(line) for line in f.readlines()]
+                boxes_list: List[BoundingBox] = []
+                line_points_list: List[List[float]] = []
+                for raw_line in f.readlines():
+                    splits = raw_line.split()
+                    if len(splits) != 5:
+                        raise ValueError(
+                            f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. "
+                            f"Expected 5 columns: 'class value1 value2 value3 value4'."
+                        )
+                    cls_id = int(splits[0])
+                    v1, v2, v3, v4 = map(float, splits[1:])
+                    if self.line_class_id is not None and cls_id == self.line_class_id:
+                        x1, y1, x2, y2 = v1, v2, v3, v4
+                        cx = (x1 + x2) * 0.5
+                        cy = (y1 + y2) * 0.5
+                        w = abs(x2 - x1)
+                        h = abs(y2 - y1)
+                        box = BoundingBox.from_xywh(cls_id, cx, cy, w, h, normalized=True)
+                        boxes_list.append(box)
+                        line_points_list.append([x1, y1, x2, y2])
+                    else:
+                        box = BoundingBox.from_xywh(cls_id, v1, v2, v3, v4, normalized=True)
+                        boxes_list.append(box)
+                        x1, y1, x2, y2 = box.as_xyxy_normalized(1.0, 1.0)
+                        line_points_list.append([x1, y1, x2, y2])
+
                 for box in boxes_list:
                     box.scale_to_size(img_width, img_height) # TODO: Ugly
                 if len(boxes_list) > 0:
@@ -93,6 +119,7 @@ class ObjectDetectionDataset(Dataset):
                         canvas_size=(img_height, img_width)  # (H, W)
                     )
                     labels = torch.tensor([box.cls_id for box in boxes_list], dtype=torch.long)
+                    line_points = torch.tensor(line_points_list, dtype=torch.float32)
                 else:
                     coords = torchvision.tv_tensors.BoundingBoxes(
                         torch.empty((0, 4), dtype=torch.float32),
@@ -100,8 +127,9 @@ class ObjectDetectionDataset(Dataset):
                         canvas_size=(img_height, img_width)
                     )
                     labels = torch.empty((0,), dtype=torch.long)
+                    line_points = torch.empty((0, 4), dtype=torch.float32)
 
-                target = {"boxes": coords, "labels": labels}
+                target = {"boxes": coords, "labels": labels, "line_points": line_points}
             image = torchvision.tv_tensors.Image(image)/255.0
 
             if self.transforms is not None:
@@ -118,6 +146,7 @@ class ObjectDetectionDataset(Dataset):
 
                 target["boxes"] = boxes[valid_mask]
                 target["labels"] = labels[valid_mask]
+                target["line_points"] = target["line_points"][valid_mask]
 
                 # Normalize boxes back to [0,1]
                 h, w = image.shape[-2:]
@@ -129,5 +158,8 @@ class ObjectDetectionDataset(Dataset):
                 # Normalize boxes back to [0,1] after transforms
                 h, w = image.shape[-2:]
                 target["boxes"] = target["boxes"] / torch.tensor([w, h, w, h], device=target["boxes"].device)
+
+            if len(target["line_points"]) > 0:
+                target["line_points"] = target["line_points"].to(dtype=torch.float32)
 
             return image, target

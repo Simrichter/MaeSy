@@ -21,6 +21,10 @@ class DummyDetectionModel(nn.Module):
             class_loss_coef=3.0,
             giou_loss_coef=4.0,
             aux_loss_coef=0.6,
+            line_loss_coef=1.7,
+            dn_loss_coef=0.9,
+            enable_line_detection=True,
+            line_class_id=2,
             eos_coef=0.25,
         )
 
@@ -51,5 +55,9 @@ def test_detection_loss_uses_model_config_coefficients():
     assert trainer.loss.class_loss_coef == 3.0
     assert trainer.loss.giou_loss_coef == 4.0
     assert trainer.loss.aux_loss_coef == 0.6
+    assert trainer.loss.line_loss_coef == 1.7
+    assert trainer.loss.dn_loss_coef == 0.9
+    assert trainer.loss.enable_line_detection is True
+    assert trainer.loss.line_class_id == 2
     assert trainer.loss.empty_weight[-1].item() == 0.25
 

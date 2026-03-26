@@ -120,7 +120,7 @@ class DetectionTrainer(BaseTrainer):
             Dictionary of losses from the loss function
         """
         # Get model predictions
-        predictions = self.model.forward(images)
+        predictions = self.model.forward(images, targets=targets)
 
         # Compute loss
         losses = self.loss(predictions, targets)

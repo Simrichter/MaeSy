@@ -1,12 +1,9 @@
 from dataclasses import dataclass, field
-from typing import Tuple, List, Dict
+from typing import Tuple, Dict
 
 import torch
 import torch.nn as nn
-from torch import Size
-from torch.fx.immutable_collections import immutable_list
 from torchvision.models import resnet50, ResNet50_Weights, resnet18, ResNet18_Weights, resnet34, ResNet34_Weights, resnet101, ResNet101_Weights, resnet152, ResNet152_Weights
-from wandb.util import downsample
 
 
 @dataclass
@@ -14,7 +11,7 @@ class ResNetBackboneConfig:
     version: str = "resnet50"
     image_size: int = 224
     pretrained: bool = True
-    feature_scales: Tuple = field(default_factory = ("c3", "c4", "c5"))
+    feature_scales: Tuple[str, ...] = field(default_factory = ("c3", "c4", "c5"))
 
 class ResNetBackbone(nn.Module):
     """ResNet Backbone for feature extraction."""
@@ -115,4 +112,4 @@ class ResNetBackbone(nn.Module):
         """
             Return the number of channels for each feature scale as a tuple
         """
-        return tuple(self.feature_dim.values())
+        return tuple(self.feature_dim[k] for k in self.config.feature_scales)

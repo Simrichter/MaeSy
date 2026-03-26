@@ -87,6 +87,13 @@ def train_vit_detector(
     continue_from_checkpoint: bool,
     enable_wandb: bool,
     detector_arch: str = "rt_detr",
+    enable_denoising: bool = False,
+    denoising_num_queries: int = 0,
+    denoising_label_noise_ratio: float = 0.2,
+    denoising_box_noise_scale: float = 0.4,
+    enable_line_detection: bool = False,
+    line_class_id: int = -1,
+    line_loss_coef: float = 2.0,
     seed: int = 42
 ):
     """
@@ -110,6 +117,15 @@ def train_vit_detector(
     # Create detection model
     # model = ViTDetector(det_config)
     # model = YoloV2Model()
+    if detector_arch.lower() == "rt_detr":
+        RT_DETR_CONFIG.enable_denoising = enable_denoising
+        RT_DETR_CONFIG.denoising_num_queries = denoising_num_queries
+        RT_DETR_CONFIG.denoising_label_noise_ratio = denoising_label_noise_ratio
+        RT_DETR_CONFIG.denoising_box_noise_scale = denoising_box_noise_scale
+        RT_DETR_CONFIG.enable_line_detection = enable_line_detection
+        RT_DETR_CONFIG.line_class_id = line_class_id
+        RT_DETR_CONFIG.line_loss_coef = line_loss_coef
+
     model = _build_detection_model(detector_arch)
     print(f"Selected detector architecture: {detector_arch}")
 
@@ -121,16 +137,17 @@ def train_vit_detector(
     else:
         print("No freeze: Fine-tuning entire model (backbone + head)")
 
-    train_transforms = transforms.Compose([
+    train_transform_steps = [
         transforms.ToImage(),
         transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
-        transforms.RandomAffine(degrees=8, translate=(0.15, 0.15), scale=(0.95, 1.05)),
-        # VerticalFlip(),
-        # transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    ]
+    if not enable_line_detection:
+        train_transform_steps.append(transforms.RandomAffine(degrees=8, translate=(0.15, 0.15), scale=(0.95, 1.05)))
+        # TODO: Affine should be possible with lines as well?
+    train_transform_steps.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
+    train_transforms = transforms.Compose(train_transform_steps)
 
 
     val_transforms = transforms.Compose([
@@ -140,8 +157,16 @@ def train_vit_detector(
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     # Create datasets and dataloaders
-    train_dataset = ObjectDetectionDataset(f"{dataset_path}/train", transforms=train_transforms)
-    val_dataset = ObjectDetectionDataset(f"{dataset_path}/val", transforms=val_transforms)
+    train_dataset = ObjectDetectionDataset(
+        f"{dataset_path}/train",
+        transforms=train_transforms,
+        line_class_id=line_class_id if enable_line_detection else None,
+    )
+    val_dataset = ObjectDetectionDataset(
+        f"{dataset_path}/val",
+        transforms=val_transforms,
+        line_class_id=line_class_id if enable_line_detection else None,
+    )
     batch_size = 64 if detector_arch.lower() == "rt_detr" else 64
 
     # mp.set_sharing_strategy("file_system")

@@ -140,6 +140,10 @@ class BaseTrainer(ABC):
                 class_loss_coef=getattr(model_cfg, "class_loss_coef", 1.0),
                 giou_loss_coef=getattr(model_cfg, "giou_loss_coef", 2.0),
                 aux_loss_coef=getattr(model_cfg, "aux_loss_coef", 0.5),
+                line_loss_coef=getattr(model_cfg, "line_loss_coef", 2.0),
+                dn_loss_coef=getattr(model_cfg, "dn_loss_coef", 1.0),
+                enable_line_detection=getattr(model_cfg, "enable_line_detection", False),
+                line_class_id=getattr(model_cfg, "line_class_id", -1),
                 eos_coef=getattr(model_cfg, "eos_coef", 0.1),
                 device=self.device
             )

@@ -8,7 +8,7 @@ import maesy.training.cli_train as cli_train
 def test_cli_train_forwards_detector_arch(monkeypatch):
     captured = {}
 
-    def fake_train_vit_detector(checkpoint, dataset, output, no_freeze, enable_wandb, continue_from_checkpoint, detector_arch):
+    def fake_train_vit_detector(checkpoint, dataset, output, no_freeze, enable_wandb, continue_from_checkpoint, detector_arch, **kwargs):
         captured["checkpoint"] = checkpoint
         captured["dataset"] = dataset
         captured["output"] = output
@@ -16,6 +16,8 @@ def test_cli_train_forwards_detector_arch(monkeypatch):
         captured["enable_wandb"] = enable_wandb
         captured["continue"] = continue_from_checkpoint
         captured["detector"] = detector_arch
+        captured["enable_denoising"] = kwargs.get("enable_denoising")
+        captured["enable_line_detection"] = kwargs.get("enable_line_detection")
 
     monkeypatch.setattr(cli_train, "train_vit_detector", fake_train_vit_detector)
 
@@ -34,6 +36,8 @@ def test_cli_train_forwards_detector_arch(monkeypatch):
 
     assert captured["detector"] == "rt_detr"
     assert captured["continue"] is True
+    assert captured["enable_denoising"] is False
+    assert captured["enable_line_detection"] is False
 
 
 def test_cli_evaluate_maps_auto_detector_to_none(monkeypatch):

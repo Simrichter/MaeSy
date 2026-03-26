@@ -47,6 +47,13 @@ def main():
         default="rt_detr",
         help="Detection architecture to train (default: rt_detr)",
     )
+    od_parser.add_argument("--enable-denoising", action="store_true", help="Enable RT-DETR denoising training branch")
+    od_parser.add_argument("--dn-queries", type=int, default=100, help="Number of denoising queries when denoising is enabled")
+    od_parser.add_argument("--dn-label-noise", type=float, default=0.2, help="Label corruption ratio for denoising branch")
+    od_parser.add_argument("--dn-box-noise", type=float, default=0.4, help="Box/line noise scale for denoising branch")
+    od_parser.add_argument("--enable-line-detection", action="store_true", help="Enable optional line endpoint prediction branch")
+    od_parser.add_argument("--line-class-id", type=int, default=-1, help="Class id that should be treated as a line target (x1 y1 x2 y2)")
+    od_parser.add_argument("--line-loss-coef", type=float, default=2.0, help="Loss coefficient for line endpoint regression")
 
 
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")

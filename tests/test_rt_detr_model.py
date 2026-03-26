@@ -34,3 +34,54 @@ def test_rt_detr_forward_matches_detection_contract():
         assert aux["pred_logits"].shape == (2, 20, 4)
         assert aux["pred_boxes"].shape == (2, 20, 4)
 
+
+def test_rt_detr_optional_line_head_outputs_pred_lines():
+    config = RTDETRConfig(
+        image_size=64,
+        resnet_version="resnet18",
+        backbone_pretrained=False,
+        num_classes=3,
+        num_queries=12,
+        embed_dim=64,
+        num_decoder_layers=2,
+        decoder_num_heads=8,
+        hidden_dim_out_layers=64,
+        enable_line_detection=True,
+        line_class_id=2,
+    )
+    model = RTDETR(config)
+
+    outputs = model(torch.randn(1, 3, 64, 64))
+    assert "pred_lines" in outputs
+    assert outputs["pred_lines"].shape == (1, 12, 4)
+
+
+def test_rt_detr_denoising_outputs_emitted_only_in_training_with_targets():
+    config = RTDETRConfig(
+        image_size=64,
+        resnet_version="resnet18",
+        backbone_pretrained=False,
+        num_classes=3,
+        num_queries=10,
+        embed_dim=64,
+        num_decoder_layers=2,
+        decoder_num_heads=8,
+        hidden_dim_out_layers=64,
+        enable_denoising=True,
+        denoising_num_queries=6,
+    )
+    model = RTDETR(config)
+    model.train()
+
+    images = torch.randn(1, 3, 64, 64)
+    targets = [{
+        "labels": torch.tensor([1], dtype=torch.long),
+        "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], dtype=torch.float32),
+        "line_points": torch.tensor([[0.4, 0.4, 0.6, 0.6]], dtype=torch.float32),
+    }]
+
+    outputs = model(images, targets=targets)
+    assert "dn_outputs" in outputs
+    assert outputs["dn_outputs"]["pred_logits"].shape[1] == 6
+
+

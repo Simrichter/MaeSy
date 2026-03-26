@@ -195,10 +195,11 @@ class RTDETRHead(nn.Module):
         for layer, cls_head, box_head in zip(self.decoder_layers, self.decoder_class_heads, self.decoder_box_heads):
             query = layer(query, memory, query_pos)
             pred_logits = cls_head(query)
-            pred_boxes = (box_head(query) + reference_logits).sigmoid()
+            tmp_box_pred = box_head(query)
+            pred_boxes = (tmp_box_pred + reference_logits).sigmoid()
             logits_per_layer.append(pred_logits)
             boxes_per_layer.append(pred_boxes)
-            reference_logits = self._inverse_sigmoid(pred_boxes.detach())
+            reference_logits = tmp_box_pred.detach() + reference_logits.detach() # TODO: Is this detach() logic correct? Or does it introduce bug?
 
         outputs = {
             "pred_logits": logits_per_layer[-1],

@@ -77,6 +77,7 @@ def cluster(paths, similarity_threshold=0.85, batch_size=128, forward_scale=128,
     features = features / (features.norm(dim=1, keepdim=True) + 1e-8)
     features = features.to("cpu").detach().numpy()
 
+
     # Process each image in the batch
     for i, feature in enumerate(tqdm(features)):
         if len(representative_embeddings) == 0:
@@ -150,7 +151,7 @@ def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_siz
                                   drop_last=False, in_order=True)
     
     # Setup model for feature extraction
-    model: BaseModel = ResnetFeatureExtractor("resnet50", img_size=forward_scale, remove_layers=1)
+    model: BaseModel = ResnetFeatureExtractor("resnet50", img_size=forward_scale, out_layers=["c6"])
     model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -173,7 +174,7 @@ def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_siz
             batch_tensor = batch_tensor.to(device)
             # Extract features
             with torch.no_grad():
-                features = model(batch_tensor)
+                features = model(batch_tensor)["c6"]
                 # Normalize features for cosine similarity
                 features = features / (features.norm(dim=1, keepdim=True) + 1e-8)
             features_cpu = features.cpu().numpy()
@@ -189,7 +190,7 @@ def cluster_with_faiss(paths, chosen_paths, similarity_threshold=0.85, batch_siz
         batch_tensor = batch_tensor.to(device)
         # Extract features
         with torch.no_grad():
-            features = model(batch_tensor)
+            features = model(batch_tensor)["c6"]
             # Normalize features for cosine similarity
             features = features / (features.norm(dim=1, keepdim=True) + 1e-8)
         

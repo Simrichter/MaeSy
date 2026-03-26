@@ -31,7 +31,7 @@ def main():
 
     od_parser = train_parser.add_parser("od", help="Train with MAE pretrained backbone")
     od_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
-    od_parser.add_argument("--freeze", action="store_false",
+    od_parser.add_argument("--freeze", action="store_true",
                            help="Do not freeze backbone during training (default: False, i.e. backbone is frozen)")
     od_parser.add_argument("--checkpoint", type=str,
                            help="Path to trained checkpoint (MAE checkpoint for fresh training, or OD checkpoint if --resume flag is set",
@@ -69,7 +69,7 @@ def main():
     infer = eval_parser.add_parser("infer", help="Run inference on a folder of images")
     infer.add_argument("imgpath", help="Path to folder of images for inference")
     infer.add_argument("checkpoint", help="Path to model checkpoint file")
-    infer.add_argument("-o", "--out", type=str, default="./inference_results", help="Folder to save inference results")
+    infer.add_argument("-o", "--out", type=str, default="./inference_results", help="Folder to save inference results. Default: ./inference_results")
     infer.add_argument("--device", type=str, default="",
                        help="Device to run inference on (default: auto-detect CUDA if available, otherwise CPU)")
     infer.add_argument(
@@ -143,6 +143,7 @@ def main():
                                         help="Start index for sampling images from folders")
     dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "resnet_faiss"],
                                         default=None, help="Clustering method to use for dataset creation")
+    dataset_creator_parser.add_argument("-o", "--output-path", type=str, default="./data", help="Directory, in which the dataset will be saved (default: ./data)")
 
     args = parser.parse_args()
     # args = sys.argv[1:]

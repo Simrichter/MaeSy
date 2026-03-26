@@ -170,8 +170,8 @@ def train_vit_detector(
     # Create training configuration
     training_config = TrainingConfig(
         num_epochs=1000,
-        learning_rate=1e-4 if freeze else 1e-5,  # Higher LR when only training head
-        backbone_learning_rate=0.0 if freeze else 1e-6,  # Lower LR for backbone if fine-tuning, otherwise 0
+        learning_rate=1e-4 if freeze else 1e-4,  # Higher LR when only training head
+        backbone_learning_rate=0.0 if freeze else 1e-5,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler="cosine",
@@ -241,7 +241,7 @@ def infer_vit_detector(
         transforms.Resize((224, 224)),
         # transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ]), step=50) #, use_first_n=30
+    ])) #, use_first_n=30 # , step=50
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
     inferer = Inferer(model=model, data_loader=dataloader, device=device)
     preds, _ = inferer.infer() # List[Dict] with keys "pred_boxes" (B X num_querys X 4) and "pred_logits" (B X num_queries)
@@ -255,7 +255,7 @@ def infer_vit_detector(
     images_dir = dataset.images_dir
     out_path = Path(out_path)
     out_path.mkdir(parents=True, exist_ok=True)
-    save_all_predictions = True  # Intentionally keep all query outputs for debugging.
+    save_all_predictions = False  # Intentionally keep all query outputs for debugging.
     for p in tqdm(zip(dataset.images, preds)):
         img_path = images_dir/p[0]
         shutil.copy(img_path, out_path/p[0])
@@ -265,7 +265,7 @@ def infer_vit_detector(
             for box, label in zip(boxes, labels):
                 cx, cy, w, h = box
                 score, l = label.max(-1)
-                if save_all_predictions or (l != 3 and score >= 0.1):
+                if save_all_predictions or (l < 3 and score >= 0.3):
                     f.write(f"{l.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
     if visualize:
         from maesy.evaluation import visualize_annotations

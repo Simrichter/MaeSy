@@ -116,7 +116,7 @@ class DatasetManager:
             case "resnet_faiss":
                 from maesy.dataset.clustering_methods.resnet_FAISS import cluster_with_faiss as cluster
                 # TODO: Make this a parameter?
-                similarity_threshold = 0.9
+                similarity_threshold = 0.85
                 return cluster(folder_names, chosen_paths, similarity_threshold, step=step, start_index=start_index)
             case "resnet_kmeans":
                 from maesy.dataset.clustering_methods.resnet_kmeans import cluster
@@ -137,10 +137,14 @@ class DatasetManager:
                 if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
                     with Image.open(img_file) as img:
                         img = img.resize((resize[0], resize[1] if len(resize) == 2 else resize[0]))
+                        if not os.path.exists(target_path.parent):
+                            target_path.parent.mkdir(parents=True, exist_ok=True)
                         img.save(target_path)#/ img_file.name
         else:
             for img_file, target_path in tqdm(zip(source_paths, target_paths),
                                               desc=f"Copying {len(source_paths)} files"):
+                if not os.path.exists(target_path.parent):
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(img_file, target_path)
 
         if label_target_paths is not None:
@@ -234,20 +238,28 @@ class DatasetManager:
         random.shuffle(image_files)
 
         target_paths = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
-            2]) / f"images/{img_file.name}" for i, img_file in enumerate(image_files)]
+            2]) / f"images/Right/{img_file.name}" for i, img_file in enumerate(image_files)]
         if with_labels:
             target_paths_lbls = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
                 2]) / f"labels/{img_file.with_suffix('.txt').name}" for i, img_file in enumerate(image_files)]
         else:
             target_paths_lbls = None
+
         self._copy_resize(image_files, target_paths, resize, target_paths_lbls)
+
+        left_right = True # TODO
+        if left_right:
+            print("Copying corresponding left files")
+            image_files = [f.parent.parent/"Left"/f"{Path(f).name.removesuffix('_right.png')}_left.png" for f in image_files]
+            target_paths = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
+            2]) / f"images/Left/{img_file.name}" for i, img_file in enumerate(image_files)]
+            self._copy_resize(image_files, target_paths, resize, target_paths_lbls)
+
 
         # if del_folders:
         #     print("Deleting original folder:", folder_path)
         #     shutil.rmtree(folder_path)
-        # os.rmdir(folder_path)
-
-        # TODO: Add support for label files
+        # os.rmdir(folder_path) TODO
         return dataset_dir
 
     def list_datasets(self) -> list:

@@ -102,7 +102,8 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
     color_coding = {i: c for i, c in enumerate(colors)}
 
     if name_coding is None:
-        name_coding = {'CenterCircle': 9, 'CenterMark': 6, 'CornerArc': 10, 'FIFA 26 Ball': 0, 'GoalPost': 4, 'K1': 3, 'Lines': 8, 'Nao': 2, 'PenaltyMark': 5, 'Referee': 7, 'SPL Ball': 1}
+        # name_coding = {'CenterCircle': 9, 'CenterMark': 6, 'CornerArc': 10, 'FIFA 26 Ball': 0, 'GoalPost': 4, 'K1': 3, 'Lines': 8, 'Nao': 2, 'PenaltyMark': 5, 'Referee': 7, 'SPL Ball': 1}
+        name_coding = {'PenaltyCross': 2, 'Robot': 1, 'Ball': 0}
 
         name_coding = {k: v for v, k in name_coding.items()}
 

@@ -248,6 +248,7 @@ def _compute_prf1_at_iou(
     targets: List[Dict[str, torch.Tensor]],
     num_classes: int,
     iou_threshold: float,
+    fb_beta: float,
 ) -> Tuple[float, float, float]:
     total_tp = 0.0
     total_fp = 0.0
@@ -270,8 +271,8 @@ def _compute_prf1_at_iou(
 
     precision = total_tp / max(total_tp + total_fp, 1e-12)
     recall = total_tp / max(total_tp + total_fn, 1e-12)
-    f1 = 2.0 * precision * recall / max(precision + recall, 1e-12)
-    return float(precision), float(recall), float(f1)
+    fb = (1.0+fb_beta**2) * precision * recall / max(fb_beta**2*precision + recall, 1e-12)
+    return float(precision), float(recall), float(fb)
 
 
 def compute_detection_metrics(
@@ -304,7 +305,7 @@ def compute_detection_metrics(
         mean_aps.append(float(np.mean(aps)) if aps else 0.0)
     map50_95 = float(np.mean(mean_aps)) if mean_aps else 0.0
 
-    precision50, recall50, f1_50 = _compute_prf1_at_iou(predictions, targets, num_classes=num_classes, iou_threshold=0.5)
+    precision50, recall50, f1_50 = _compute_prf1_at_iou(predictions, targets, num_classes=num_classes, iou_threshold=0.5, fb_beta=0.25)
 
     metrics: Dict[str, float] = {
         "mAP50": map50,

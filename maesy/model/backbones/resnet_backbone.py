@@ -52,9 +52,10 @@ class ResNetBackbone(nn.Module):
         if config.version not in constructors:
             raise ValueError(f"Unsupported ResNet version for RT-DETR: {config.version}")
 
-        self.calc_c3 = "c3" in self.config.feature_scales or "c4" in self.config.feature_scales or "c5" in self.config.feature_scales
-        self.calc_c4 = "c4" in self.config.feature_scales or "c5" in self.config.feature_scales
-        self.calc_c5 = "c5" in self.config.feature_scales
+        self.calc_c3 = "c3" in self.config.feature_scales or "c4" in self.config.feature_scales or "c5" in self.config.feature_scales or "c6" in self.config.feature_scales
+        self.calc_c4 = "c4" in self.config.feature_scales or "c5" in self.config.feature_scales or "c6" in self.config.feature_scales
+        self.calc_c5 = "c5" in self.config.feature_scales or "c6" in self.config.feature_scales
+        self.calc_c6 = "c6" in self.config.feature_scales
 
         # self.return_idx = sorted([int(scale[1])-3 for scale in self.config.feature_scales]) # indices to select which feature_scales are returned
 
@@ -72,6 +73,8 @@ class ResNetBackbone(nn.Module):
             self.layer3 = model.layer3
         if self.calc_c5:
             self.layer4 = model.layer4
+        if self.calc_c6:
+            self.avgPool = model.avgpool
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> Dict[str, torch.Tensor]:
         """
@@ -94,6 +97,9 @@ class ResNetBackbone(nn.Module):
                 if self.calc_c5:
                     c5 = self.layer4(c4)
                     feature_maps["c5"] = c5
+                    if self.calc_c6:
+                        c6 = self.avgPool(c5)
+                        feature_maps["c6"] = c6
         return {k: feature_maps[k] for k in self.config.feature_scales}
 
     def get_feature_dims(self) -> Dict[str, torch.Size]:

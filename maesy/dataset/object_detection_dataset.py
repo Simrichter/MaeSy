@@ -93,18 +93,18 @@ class ObjectDetectionDataset(Dataset):
                     v1, v2, v3, v4 = map(float, splits[1:])
                     if self.line_class_id is not None and cls_id == self.line_class_id:
                         x1, y1, x2, y2 = v1, v2, v3, v4
-                        cx = (x1 + x2) * 0.5
-                        cy = (y1 + y2) * 0.5
-                        w = abs(x2 - x1)
-                        h = abs(y2 - y1)
-                        box = BoundingBox.from_xywh(cls_id, cx, cy, w, h, normalized=True)
-                        boxes_list.append(box)
+                        # cx = (x1 + x2) * 0.5
+                        # cy = (y1 + y2) * 0.5
+                        # w = abs(x2 - x1)
+                        # h = abs(y2 - y1)
+                        # box = BoundingBox.from_xywh(cls_id, cx, cy, w, h, normalized=True)
+                        # boxes_list.append(box)
                         line_points_list.append([x1, y1, x2, y2])
                     else:
                         box = BoundingBox.from_xywh(cls_id, v1, v2, v3, v4, normalized=True)
                         boxes_list.append(box)
-                        x1, y1, x2, y2 = box.as_xyxy_normalized(1.0, 1.0)
-                        line_points_list.append([x1, y1, x2, y2])
+                        # x1, y1, x2, y2 = box.as_xyxy_normalized(1.0, 1.0)
+                        # line_points_list.append([x1, y1, x2, y2])
 
                 for box in boxes_list:
                     box.scale_to_size(img_width, img_height) # TODO: Ugly

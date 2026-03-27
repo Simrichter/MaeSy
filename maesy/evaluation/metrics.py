@@ -305,14 +305,15 @@ def compute_detection_metrics(
         mean_aps.append(float(np.mean(aps)) if aps else 0.0)
     map50_95 = float(np.mean(mean_aps)) if mean_aps else 0.0
 
-    precision50, recall50, f1_50 = _compute_prf1_at_iou(predictions, targets, num_classes=num_classes, iou_threshold=0.5, fb_beta=0.25)
+    fb_beta=0.25
+    precision50, recall50, f1_b = _compute_prf1_at_iou(predictions, targets, num_classes=num_classes, iou_threshold=0.5, fb_beta=fb_beta)
 
     metrics: Dict[str, float] = {
         "mAP50": map50,
         "mAP50_95": map50_95,
         "precision50": precision50,
         "recall50": recall50,
-        "f1_50": f1_50,
+        f"f1_{int(fb_beta*100)}": f1_b,
         "num_gt_boxes": float(sum(target["boxes"].shape[0] for target in targets)),
         "num_pred_boxes": float(sum(pred["boxes"].shape[0] for pred in predictions)),
     }

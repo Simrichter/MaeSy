@@ -1,5 +1,5 @@
 """Loss functions for object detection."""
-
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -365,7 +365,9 @@ class DetectionLoss(BaseLoss):
             # Final cost matrix
             C = self.bbox_loss_coef * cost_bbox + self.class_loss_coef * cost_class + self.giou_loss_coef * cost_giou
             C = C.cpu().numpy()
-
+            # Check for invalid entries in C
+            if np.isnan(C).any() or np.isinf(C).any() or np.isnan(C).any():
+                print(f"C contains NaN, Inf or NegInf:\n{C}")
             # Hungarian algorithm
             src_idx, tgt_idx = linear_sum_assignment(C)
             indices.append((torch.as_tensor(src_idx, dtype=torch.int64), torch.as_tensor(tgt_idx, dtype=torch.int64)))

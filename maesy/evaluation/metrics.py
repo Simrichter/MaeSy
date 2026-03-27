@@ -313,7 +313,7 @@ def compute_detection_metrics(
         "mAP50_95": map50_95,
         "precision50": precision50,
         "recall50": recall50,
-        f"f1_{int(fb_beta*100)}": f1_b,
+        f"f{fb_beta}_50": f1_b,
         "num_gt_boxes": float(sum(target["boxes"].shape[0] for target in targets)),
         "num_pred_boxes": float(sum(pred["boxes"].shape[0] for pred in predictions)),
     }

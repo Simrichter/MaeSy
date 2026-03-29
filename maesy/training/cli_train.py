@@ -19,7 +19,6 @@ def main(args):
             denoising_box_noise_scale=getattr(args, "dn_box_noise", 0.4),
             enable_line_detection=getattr(args, "enable_line_detection", False),
             line_class_id=getattr(args, "line_class_id", -1),
-            line_loss_coef=getattr(args, "line_loss_coef", 2.0),
         )
     elif args.mode == "mae":
         train_mae(dataset_path=args.dataset, checkpoint=args.checkpoint, enable_wandb=args.wandb)

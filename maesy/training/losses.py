@@ -41,12 +41,12 @@ class DetectionLoss(BaseLoss):
             bbox_loss_coef: float = 5.0,
             class_loss_coef: float = 1.0,
             giou_loss_coef: float = 2.0,
+            eos_coef: float = 0.1,  # Weight for no-object class
             aux_loss_coef: float = 1.0,
             line_loss_coef: float = 2.0,
             dn_loss_coef: float = 1.0,
             enable_line_detection: bool = False,
             line_class_id: int = -1,
-            eos_coef: float = 0.1, # Weight for no-object class
             device: torch.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu') # TODO: Make this follow commandline-input device
     ):
         """
@@ -58,6 +58,11 @@ class DetectionLoss(BaseLoss):
             :param class_loss_coef: Coefficient for classification loss
             :param giou_loss_coef: Coefficient for GIoU loss
             :param eos_coef: Coefficient for no-object class
+            :param aux_loss_coef: Coefficient for weighting of auxiliary loss
+            :param line_loss_coef: Coefficient for loss of line-detection head
+            :param dn_loss_coef: Coefficient for auxiliary denoising loss
+            :param enable_line_detection: Wether line detection head is enabled
+            :param line_class_id: The class id of the lines
             :param device: Device to run loss computation on
         """
         super().__init__()
@@ -98,17 +103,57 @@ class DetectionLoss(BaseLoss):
             pred_boxes: torch.Tensor,
             targets: List[Dict[str, torch.Tensor]],
             pred_lines: torch.Tensor | None = None,
+            indices: List[tuple[torch.Tensor, torch.Tensor]] | None = None,
     ) -> Dict[str, torch.Tensor]:
-        predictions = {"pred_logits": pred_logits, "pred_boxes": pred_boxes}
-        if pred_lines is not None:
-            predictions["pred_lines"] = pred_lines
-        indices = self.match_predictions_to_targets(predictions, targets)
+        if indices is None:
+            predictions = {"pred_logits": pred_logits, "pred_boxes": pred_boxes}
+            if pred_lines is not None:
+                predictions["pred_lines"] = pred_lines
+            indices = self.match_predictions_to_targets(predictions, targets) # List[Tuple[Tensor, Tensor]]
+
+        all_target_boxes = []
+        all_target_lines = []
+        all_target_labels = []
+        all_is_line = []
+
+        for t, (_, tgt_idx) in zip(targets, indices):
+            num_boxes = len(t['boxes'])
+
+            # Identify which matched targets are lines
+            is_line = tgt_idx >= num_boxes
+            is_box = ~is_line
+
+            # BOX indices
+            box_idx = tgt_idx[is_box]
+
+            # LINE indices (shift back!)
+            line_idx = tgt_idx[is_line] - num_boxes
+
+            # Boxes
+            if is_box.any():
+                all_target_boxes.append(t['boxes'][box_idx])
+
+            # Lines
+            if is_line.any():
+                all_target_lines.append(t['line_points'][line_idx])
+
+            # Labels (already correct)
+            all_target_labels.append(t['labels'][tgt_idx])
+
+            # Mask
+            all_is_line.append(is_line)
+
+        target_classes_o = torch.cat(all_target_labels)
+        line_mask = torch.cat(all_is_line)
+
+        target_boxes = torch.cat(all_target_boxes) if all_target_boxes else torch.empty(0, 4, device=pred_logits.device)
+        target_lines = torch.cat(all_target_lines) if all_target_lines else torch.empty(0, 4, device=pred_logits.device)
 
         # Compute classification loss
-        target_classes_o = torch.cat([t['labels'][J] for t, (_, J) in zip(targets, indices)])
+        # target_classes_o = torch.cat([t['labels'][J] for t, (_, J) in zip(targets, indices)])
         target_classes = torch.full(
-            pred_logits.shape[:2], # No-Object class
-            self.num_classes,
+            pred_logits.shape[:2],
+            self.num_classes, # No-Object class
             dtype=torch.int64,
             device=pred_logits.device
         )
@@ -124,49 +169,42 @@ class DetectionLoss(BaseLoss):
             label_smoothing=0.08 # TODO: Make controllable through config
         )
 
-        num_boxes = target_classes_o.shape[0]
-        matched_target_boxes = None
-        matched_src_boxes = None
-        matched_target_lines = None
-        matched_src_lines = None
-        line_mask = None
-        if num_boxes > 0:
+        num_matched_targets = target_classes_o.shape[0]
+        if num_matched_targets > 0:
             # Compute bbox losses
             src_boxes = pred_boxes[idx] # Selecting the boxes selected by the hungarian matching
-            target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)  # Expecting the target boxes to be 0-1 normalized
+            src_lines = pred_lines[idx] if pred_lines is not None else None
             # This selected the two chosen target boxes in correct order
 
-            matched_src_boxes = src_boxes
-            matched_target_boxes = target_boxes
-
-            if self.enable_line_detection and self.line_class_id >= 0 and pred_lines is not None and all("line_points" in t for t in targets):
-                matched_target_lines = torch.cat([t["line_points"][i] for t, (_, i) in zip(targets, indices)], dim=0)
-                matched_src_lines = pred_lines[idx]
-                line_mask = target_classes_o == self.line_class_id
-            else:
-                line_mask = torch.zeros_like(target_classes_o, dtype=torch.bool)
-
             box_mask = ~line_mask
+            num_box_matches = int(box_mask.sum().item())
+            num_line_matches = int(line_mask.sum().item())
 
             if box_mask.any():
-                src_boxes_for_loss = matched_src_boxes[box_mask]
-                target_boxes_for_loss = matched_target_boxes[box_mask]
+                src_boxes_for_loss = src_boxes[box_mask]
+                target_boxes_for_loss = target_boxes
+                assert src_boxes_for_loss.shape[0] == target_boxes_for_loss.shape[0]
                 loss_bbox = F.l1_loss(src_boxes_for_loss, target_boxes_for_loss, reduction='none')
-                loss_bbox = loss_bbox.sum() / max(int(box_mask.sum().item()), 1)
+                if num_box_matches > 0:
+                    loss_bbox = loss_bbox.sum() / num_box_matches
 
                 giou_matrix = self._generalized_box_iou(
                     self._box_cxcywh_to_xyxy(src_boxes_for_loss),
                     self._box_cxcywh_to_xyxy(target_boxes_for_loss)
                 )
                 loss_giou = 1 - torch.diag(giou_matrix)
-                loss_giou = loss_giou.sum() / max(int(box_mask.sum().item()), 1)
+                if num_box_matches > 0:
+                    loss_giou = loss_giou.sum() / num_box_matches
             else:
                 loss_bbox = torch.tensor(0.0, device=pred_logits.device)
                 loss_giou = torch.tensor(0.0, device=pred_logits.device)
 
-            if line_mask.any() and matched_src_lines is not None and matched_target_lines is not None:
-                loss_line = F.l1_loss(matched_src_lines[line_mask], matched_target_lines[line_mask], reduction='none')
-                loss_line = loss_line.sum() / max(int(line_mask.sum().item()), 1)
+            if line_mask.any() and src_lines is not None:
+                src_lines_for_loss = src_lines[line_mask]
+                tgt_lines_for_loss = target_lines
+                assert src_lines_for_loss.shape[0] == tgt_lines_for_loss.shape[0]
+                loss_line = F.l1_loss(src_lines_for_loss, tgt_lines_for_loss, reduction='none')
+                loss_line = loss_line.sum() / max(num_line_matches, 1)
             else:
                 loss_line = torch.tensor(0.0, device=pred_logits.device)
         else:
@@ -193,6 +231,7 @@ class DetectionLoss(BaseLoss):
         target_boxes = dn_outputs["target_boxes"]
         valid_mask = dn_outputs["target_valid_mask"]
 
+        # Denoising targets are provided in aligned query order, so no Hungarian matching is required here.
         if not valid_mask.any():
             return {"loss_dn": torch.tensor(0.0, device=pred_logits.device)}
 
@@ -250,21 +289,36 @@ class DetectionLoss(BaseLoss):
         Returns:
             Dictionary of losses
         """
+        main_indices = self.match_predictions_to_targets(
+            {
+                'pred_logits': predictions['pred_logits'],
+                'pred_boxes': predictions['pred_boxes'],
+                'pred_lines': predictions.get('pred_lines'),
+            },
+            targets,
+        )
         losses = self._compute_single_output_losses(
             pred_logits=predictions['pred_logits'],
             pred_boxes=predictions['pred_boxes'],
             targets=targets,
             pred_lines=predictions.get('pred_lines'),
+            indices=main_indices,
         )
 
         aux_total = torch.tensor(0.0, device=predictions['pred_logits'].device)
         aux_outputs = predictions.get('aux_outputs', [])
         for aux_idx, aux_prediction in enumerate(aux_outputs):
+            if aux_prediction['pred_logits'].shape[:2] != predictions['pred_logits'].shape[:2]:
+                raise ValueError(
+                    "Auxiliary outputs must use the same [batch, num_queries] shape as main predictions to "
+                    "reuse Hungarian assignments."
+                )
             aux_losses = self._compute_single_output_losses(
                 pred_logits=aux_prediction['pred_logits'],
                 pred_boxes=aux_prediction['pred_boxes'],
                 targets=targets,
                 pred_lines=aux_prediction.get('pred_lines'),
+                indices=main_indices,
             )
             aux_component_total = sum(aux_losses.values()) * self.aux_loss_coef
             losses[f'loss_ce_aux_{aux_idx}'] = aux_losses['loss_ce'] * self.aux_loss_coef
@@ -306,7 +360,7 @@ class DetectionLoss(BaseLoss):
             self,
             predictions: Dict[str, torch.Tensor],
             targets: List[Dict[str, torch.Tensor]]
-    ) -> List[tuple]:
+    ) -> List[tuple[torch.Tensor, torch.Tensor]]:
         """Perform Hungarian matching between predictions and targets."""
         pred_logits = predictions['pred_logits']  # [B, num_queries, num_classes + 1]
         pred_boxes = predictions['pred_boxes']  # [B, num_queries, 4]
@@ -320,38 +374,37 @@ class DetectionLoss(BaseLoss):
 
 
         for i, target in enumerate(targets):
-            tgt_ids = target['labels'] # [num_target_boxes,]
+            tgt_ids = target['labels'] # [num_target_boxes+num_target_lines,]
             tgt_bbox = target['boxes'] # [num_target_boxes, 4]
-            tgt_lines = target.get('line_points')
+            tgt_lines = target.get('line_points') # [num_target_lines, 4]
 
             if len(tgt_ids) == 0:
                 indices.append((torch.tensor([], dtype=torch.int64), torch.tensor([], dtype=torch.int64)))
                 continue
 
-            # Classification cost
-            # cost_class = -out_prob[i * num_queries:(i + 1) * num_queries, tgt_ids]
-            cost_class = -out_prob[i*num_queries:(i+1)*num_queries][:, tgt_ids]
-
-            # L1 cost (bbox for regular classes, line endpoints for line class if enabled)
-            cost_bbox = torch.cdist(out_bbox[i * num_queries:(i + 1) * num_queries], tgt_bbox, p=1)
+            # L1 cost lines
+            cost_line = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)
             if (
                 self.enable_line_detection
                 and self.line_class_id >= 0
                 and pred_lines is not None
                 and tgt_lines is not None
-                and len(tgt_lines) == len(tgt_ids)
+                # and len(tgt_lines) == len(tgt_ids)
             ):
-                line_targets_mask = tgt_ids == self.line_class_id
-                if line_targets_mask.any():
-                    line_pred = pred_lines[i]
-                    line_tgt = tgt_lines.to(device=pred_logits.device, dtype=pred_logits.dtype)
-                    cost_line = torch.cdist(line_pred, line_tgt, p=1)
-                    cost_bbox[:, line_targets_mask] = cost_line[:, line_targets_mask]
+                assert tgt_ids.shape[0] == len(tgt_bbox) + len(tgt_lines) # Check if assumption of labels including ALL classes is fulfilled
+                cost_line[:, len(tgt_bbox):] = torch.cdist(pred_lines[i], tgt_lines, p=1)
+
+            # L1 cost bboxes
+            cost_bbox = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)
+            cost_bbox[:, :len(tgt_bbox)] = torch.cdist(out_bbox[i * num_queries:(i + 1) * num_queries], tgt_bbox, p=1)
+
+            # Classification cost
+            cost_class = -out_prob[i * num_queries:(i + 1) * num_queries][:, tgt_ids]
 
             # GIoU cost
-            cost_giou = -self._generalized_box_iou(
+            cost_giou = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)
+            cost_giou[:, :len(tgt_bbox)] = -self._generalized_box_iou(
                 self._box_cxcywh_to_xyxy(out_bbox[i * num_queries:(i + 1) * num_queries]),
-                # self._box_cxcywh_to_xyxy(tgt_bbox),
                 self._box_cxcywh_to_xyxy(tgt_bbox)
             )
             if cost_giou.shape[1] > cost_giou.shape[0]:
@@ -363,7 +416,7 @@ class DetectionLoss(BaseLoss):
             # print(cost_giou.mean())
 
             # Final cost matrix
-            C = self.bbox_loss_coef * cost_bbox + self.class_loss_coef * cost_class + self.giou_loss_coef * cost_giou
+            C = self.bbox_loss_coef * cost_bbox + self.line_loss_coef * cost_line + self.class_loss_coef * cost_class + self.giou_loss_coef * cost_giou
             C = C.cpu().numpy()
             # Check for invalid entries in C
             if np.isnan(C).any() or np.isinf(C).any() or np.isnan(C).any():

@@ -32,8 +32,6 @@ class RTDETRConfig:
     denoising_box_noise_scale: float = 0.4
     enable_line_detection: bool = False
     line_class_id: int = -1
-    line_loss_coef: float = 2.0
-    dn_loss_coef: float = 1.0
     enable_auxiliary_losses: bool = True
 
     bbox_loss_coef: float = 5.0
@@ -41,6 +39,8 @@ class RTDETRConfig:
     giou_loss_coef: float = 2.0
     eos_coef: float = 0.1
     aux_loss_coef: float = 1.0
+    line_loss_coef: float = 2.0
+    dn_loss_coef: float = 1.0
 
 
 class RTDETR(BaseModel):

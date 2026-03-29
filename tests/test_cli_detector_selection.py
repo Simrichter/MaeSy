@@ -8,11 +8,11 @@ import maesy.training.cli_train as cli_train
 def test_cli_train_forwards_detector_arch(monkeypatch):
     captured = {}
 
-    def fake_train_vit_detector(checkpoint, dataset, output, no_freeze, enable_wandb, continue_from_checkpoint, detector_arch, **kwargs):
+    def fake_train_vit_detector(checkpoint, dataset, output, freeze, enable_wandb, continue_from_checkpoint, detector_arch, **kwargs):
         captured["checkpoint"] = checkpoint
         captured["dataset"] = dataset
         captured["output"] = output
-        captured["no_freeze"] = no_freeze
+        captured["freeze"] = freeze
         captured["enable_wandb"] = enable_wandb
         captured["continue"] = continue_from_checkpoint
         captured["detector"] = detector_arch
@@ -26,7 +26,7 @@ def test_cli_train_forwards_detector_arch(monkeypatch):
         checkpoint="/tmp/ckpt.pth",
         dataset="/tmp/data",
         output="/tmp/out",
-        no_freeze=True,
+        freeze=True,
         wandb=False,
         resume=True,
         detector="rt_detr",

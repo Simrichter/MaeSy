@@ -163,7 +163,8 @@ class DatasetManager:
                        step: int,
                        start_index: int,
                        del_folders: bool,  # TODO: Add functionality
-                       cluster_method
+                       cluster_method: str,
+                       left_right: bool
                        ) -> Path:
         """
         Combines multiple folders with images into a single dataset
@@ -179,6 +180,7 @@ class DatasetManager:
             :param start_index: Start index for selecting images from folders. Default=0
             :param del_folders: Whether to delete the original folders after use
             :param cluster_method: If specified, use clustering_method to select images. Default=None
+            :param left_right: If active, expects matching images from stereo cameras. Assumes chosen_paths to lead to right images and expects "left" folder next to "right" folder
 
         Returns:
             Path to final dataset
@@ -238,7 +240,7 @@ class DatasetManager:
         random.shuffle(image_files)
 
         target_paths = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
-            2]) / f"images/Right/{img_file.name}" for i, img_file in enumerate(image_files)]
+            2]) / f"images/{'Right/' if left_right else ''}{img_file.name}" for i, img_file in enumerate(image_files)]
         if with_labels:
             target_paths_lbls = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
                 2]) / f"labels/{img_file.with_suffix('.txt').name}" for i, img_file in enumerate(image_files)]
@@ -247,7 +249,6 @@ class DatasetManager:
 
         self._copy_resize(image_files, target_paths, resize, target_paths_lbls)
 
-        left_right = True # TODO
         if left_right:
             print("Copying corresponding left files")
             image_files = [f.parent.parent/"Left"/f"{Path(f).name.removesuffix('_right.png')}_left.png" for f in image_files]

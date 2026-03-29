@@ -130,15 +130,9 @@ class MultiScaleDeformableAttention(nn.Module):
         _, value_len, _ = value.shape
 
         value = self.value_proj(value).reshape(b, value_len, self.num_heads, self.head_dim)
-        sampling_offsets = self.sampling_offsets(query).reshape(
-            b, num_queries, self.num_heads, self.num_levels, self.num_points, 2
-        )
-        attention_weights = self.attention_weights(query).reshape(
-            b, num_queries, self.num_heads, self.num_levels * self.num_points
-        )
-        attention_weights = attention_weights.softmax(dim=-1).reshape(
-            b, num_queries, self.num_heads, self.num_levels, self.num_points
-        )
+        sampling_offsets = self.sampling_offsets(query).reshape(b, num_queries, self.num_heads, self.num_levels, self.num_points, 2)
+        attention_weights = self.attention_weights(query).reshape(b, num_queries, self.num_heads, self.num_levels * self.num_points)
+        attention_weights = attention_weights.softmax(dim=-1).reshape(b, num_queries, self.num_heads, self.num_levels, self.num_points)
 
         normalizer = torch.tensor(
             [[w, h] for h, w in spatial_shapes],

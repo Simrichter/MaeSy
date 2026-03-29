@@ -53,7 +53,6 @@ def main():
     od_parser.add_argument("--dn-box-noise", type=float, default=0.4, help="Box/line noise scale for denoising branch (default: 0.4)")
     od_parser.add_argument("--enable-line-detection", action="store_true", help="Enable optional line endpoint prediction branch")
     od_parser.add_argument("--line-class-id", type=int, default=-1, help="Class id that should be treated as a line target (x1 y1 x2 y2)")
-    od_parser.add_argument("--line-loss-coef", type=float, default=2.0, help="Loss coefficient for line endpoint regression")
 
 
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")
@@ -151,6 +150,14 @@ def main():
     dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "resnet_faiss"],
                                         default=None, help="Clustering method to use for dataset creation")
     dataset_creator_parser.add_argument("-o", "--output-path", type=str, default="./data", help="Directory, in which the dataset will be saved (default: ./data)")
+    dataset_creator_parser.add_argument("--left-right", "-lr", action="store_true", default=False, help="If set, expects matching images from stereo cameras. Assumes data_paths to lead to right images and expects 'left' folder next to 'right' folder")
+
+
+    # Command: maesy dataset convert
+    dataset_convert_parser = data_subs.add_parser('convert', help="Convert between dataset formats")
+    dataset_convert_parser.add_argument("path", help="Path to the root of the dataset")
+    dataset_convert_parser.add_argument("--input_format", help="Current format of the dataset", choices=["datumaro"], default="datumaro")
+    dataset_convert_parser.add_argument("--output_format", help="Desired format of the dataset", choices=["devilsyolo"], default="devilsyolo")
 
     args = parser.parse_args()
     # args = sys.argv[1:]

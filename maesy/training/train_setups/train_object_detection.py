@@ -48,14 +48,16 @@ DETR_CONFIG = DETRConfig(
 
 RT_DETR_CONFIG = RTDETRConfig(
     image_size=224,
-    resnet_version="resnet50",
-    num_classes=3,
-    num_queries=30,
-    embed_dim=256,
-    num_decoder_layers=4,
+    resnet_version="resnet18", #"resnet50",
+    num_classes=11,
+    num_queries=40,
+    embed_dim=128, # 256
+    num_decoder_layers=2, # 4
     decoder_num_heads=8,
-    hidden_dim_out_layers=512,
+    hidden_dim_out_layers=256, # 512
+    enable_line_detection=True,
     bbox_loss_coef=5.0,
+    line_loss_coef=5.0,
     class_loss_coef=2.0,
     giou_loss_coef=2.0,
     eos_coef=0.05,
@@ -91,9 +93,8 @@ def train_vit_detector(
     denoising_num_queries: int = 0,
     denoising_label_noise_ratio: float = 0.2,
     denoising_box_noise_scale: float = 0.4,
-    enable_line_detection: bool = False,
-    line_class_id: int = -1,
-    line_loss_coef: float = 2.0,
+    enable_line_detection: bool = True,
+    line_class_id: int = 8,
     seed: int = 42
 ):
     """
@@ -124,7 +125,6 @@ def train_vit_detector(
         RT_DETR_CONFIG.denoising_box_noise_scale = denoising_box_noise_scale
         RT_DETR_CONFIG.enable_line_detection = enable_line_detection
         RT_DETR_CONFIG.line_class_id = line_class_id
-        RT_DETR_CONFIG.line_loss_coef = line_loss_coef
 
     model = _build_detection_model(detector_arch)
     print(f"Selected detector architecture: {detector_arch}")
@@ -167,7 +167,7 @@ def train_vit_detector(
         transforms=val_transforms,
         line_class_id=line_class_id if enable_line_detection else None,
     )
-    batch_size = 64 if detector_arch.lower() == "rt_detr" else 64
+    batch_size = 64
 
     # mp.set_sharing_strategy("file_system")
     # Create dataloaders with custom collate function
@@ -202,6 +202,7 @@ def train_vit_detector(
         lr_scheduler="cosine",
         warmup_epochs=2,
         save_frequency=100,
+        log_frequency=50,
         save_dir=output_dir,
         criterion= "DetectionLoss", #"YOLOv8Loss", #
         use_amp=True,

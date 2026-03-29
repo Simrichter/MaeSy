@@ -30,10 +30,8 @@ def handle_raw_batch(batch: Any, device: torch.device) -> tuple[torch.Tensor, Op
                 # Move targets to device
                 targets_device = []
                 for target in targets:
-                    targets_device.append({
-                        'boxes': target['boxes'].to(device, non_blocking=True),
-                        'labels': target['labels'].to(device, non_blocking=True)
-                    })
+                    td = {k:target[k].to(device, non_blocking=True) for k in target.keys()}
+                    targets_device.append(td)
                 targets = targets_device
             elif len(targets)>0 and isinstance(targets[0], torch.Tensor):
                 targets = [t.to(device, non_blocking=True) for t in targets]

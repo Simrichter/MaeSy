@@ -41,10 +41,14 @@ class DetectionTrainer(BaseTrainer):
     def _validation_finalize(self) -> Dict[str, float]:
         if len(self._val_predictions) == 0 or len(self._val_targets) == 0:
             return {}
+        line_class_id = getattr(self.model.config, "line_class_id", None)
+        if line_class_id is not None and line_class_id < 0:
+            line_class_id = None
         return compute_detection_metrics(
             predictions=self._val_predictions,
             targets=self._val_targets,
             num_classes=self.model.config.num_classes,
+            line_class_id=line_class_id,
         )
 
     def _render_all_query_predictions(
@@ -126,13 +130,21 @@ class DetectionTrainer(BaseTrainer):
         losses = self.loss(predictions, targets)
 
         if val and targets is not None:
+            line_class_id = getattr(self.model.config, "line_class_id", None)
+            if line_class_id is not None and line_class_id < 0:
+                line_class_id = None
             losses["__decoded_predictions"] = decode_detr_predictions(
                 pred_logits=predictions["pred_logits"],
                 pred_boxes=predictions["pred_boxes"],
+                pred_lines=predictions.get("pred_lines"),
+                line_class_id=line_class_id,
                 no_object_class=predictions["pred_logits"].shape[-1] - 1,
                 score_threshold=0.3,
             )
-            losses["__prepared_targets"] = prepare_targets_for_detection_metrics(targets)
+            losses["__prepared_targets"] = prepare_targets_for_detection_metrics(
+                targets,
+                line_class_id=line_class_id,
+            )
             losses["img_queries_all"] = self._render_all_query_predictions(
                 image=images[0],
                 pred_boxes=predictions["pred_boxes"][0],

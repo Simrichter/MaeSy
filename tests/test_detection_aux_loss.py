@@ -1,4 +1,5 @@
 import torch
+from unittest.mock import patch
 
 from maesy.model.heads.detr_head import DETRHead, DETRHeadConfig
 from maesy.training.losses import DetectionLoss
@@ -94,4 +95,66 @@ def test_detection_loss_accumulates_auxiliary_outputs():
         targets,
     )
     assert losses["loss"] > main_only_losses["loss"]
+
+
+def test_detection_loss_reuses_main_hungarian_matching_for_aux_and_dn():
+    loss_fn = DetectionLoss(num_classes=2, aux_loss_coef=0.5, device=torch.device("cpu"))
+
+    predictions = {
+        "pred_logits": torch.tensor(
+            [[
+                [6.0, -6.0, -8.0],
+                [-4.0, 4.0, -8.0],
+            ]],
+            dtype=torch.float32,
+        ),
+        "pred_boxes": torch.tensor(
+            [[
+                [0.50, 0.50, 0.20, 0.20],
+                [0.10, 0.10, 0.10, 0.10],
+            ]],
+            dtype=torch.float32,
+        ),
+        "aux_outputs": [
+            {
+                "pred_logits": torch.tensor(
+                    [[
+                        [0.2, 0.2, 0.2],
+                        [0.2, 0.2, 0.2],
+                    ]],
+                    dtype=torch.float32,
+                ),
+                "pred_boxes": torch.tensor(
+                    [[
+                        [0.20, 0.20, 0.30, 0.30],
+                        [0.90, 0.90, 0.05, 0.05],
+                    ]],
+                    dtype=torch.float32,
+                ),
+            }
+        ],
+        "dn_outputs": {
+            "pred_logits": torch.tensor([[[6.0, -6.0, -8.0]]], dtype=torch.float32),
+            "pred_boxes": torch.tensor([[[0.50, 0.50, 0.20, 0.20]]], dtype=torch.float32),
+            "target_labels": torch.tensor([[0]], dtype=torch.long),
+            "target_boxes": torch.tensor([[[0.50, 0.50, 0.20, 0.20]]], dtype=torch.float32),
+            "target_valid_mask": torch.tensor([[True]]),
+        },
+    }
+    targets = [{
+        "labels": torch.tensor([0], dtype=torch.long),
+        "boxes": torch.tensor([[0.50, 0.50, 0.20, 0.20]], dtype=torch.float32),
+    }]
+
+    with patch.object(
+        loss_fn,
+        "match_predictions_to_targets",
+        wraps=loss_fn.match_predictions_to_targets,
+    ) as matcher_spy:
+        losses = loss_fn(predictions, targets)
+
+    assert matcher_spy.call_count == 1
+    assert losses["loss_aux"] > 0
+    assert losses["loss_dn"] >= 0
+
 

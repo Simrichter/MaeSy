@@ -98,16 +98,17 @@ class ObjectDetectionDataset(Dataset):
                         # w = abs(x2 - x1)
                         # h = abs(y2 - y1)
                         # box = BoundingBox.from_xywh(cls_id, cx, cy, w, h, normalized=True)
-                        # boxes_list.append(box)
+                        # boxes_list.append(box) # Adding lines to boxes_list to keep structure. Is filtered out in loss function
                         line_points_list.append([x1, y1, x2, y2])
                     else:
                         box = BoundingBox.from_xywh(cls_id, v1, v2, v3, v4, normalized=True)
                         boxes_list.append(box)
                         # x1, y1, x2, y2 = box.as_xyxy_normalized(1.0, 1.0)
-                        # line_points_list.append([x1, y1, x2, y2])
-
+                        # line_points_list.append([x1, y1, x2, y2]) # Same for boxes in line_points_list
                 for box in boxes_list:
                     box.scale_to_size(img_width, img_height) # TODO: Ugly
+
+                labels_list = []
                 if len(boxes_list) > 0:
                     coords_np = np.array([box.as_cxcywh() for box in boxes_list], dtype=np.float32)
                     coords = torch.from_numpy(coords_np)
@@ -118,15 +119,23 @@ class ObjectDetectionDataset(Dataset):
                         format="CXCYWH",
                         canvas_size=(img_height, img_width)  # (H, W)
                     )
-                    labels = torch.tensor([box.cls_id for box in boxes_list], dtype=torch.long)
-                    line_points = torch.tensor(line_points_list, dtype=torch.float32)
-                else:
+                    labels_list.extend([box.cls_id for box in boxes_list])
+                if len(line_points_list) > 0:
+                    labels_list.extend([self.line_class_id]*len(line_points_list))
+                labels = torch.tensor(labels_list, dtype=torch.long)
+
+                # Basically an else to the two above
+                if len(boxes_list) <= 0 and len(line_points_list) <= 0:
                     coords = torchvision.tv_tensors.BoundingBoxes(
                         torch.empty((0, 4), dtype=torch.float32),
                         format="CXCYWH",
                         canvas_size=(img_height, img_width)
                     )
                     labels = torch.empty((0,), dtype=torch.long)
+
+                if len(line_points_list) > 0:
+                    line_points = torch.tensor(line_points_list, dtype=torch.float32)
+                else:
                     line_points = torch.empty((0, 4), dtype=torch.float32)
 
                 target = {"boxes": coords, "labels": labels, "line_points": line_points}
@@ -145,8 +154,10 @@ class ObjectDetectionDataset(Dataset):
                 valid_mask = (boxes_xyxy[:, 2]-boxes_xyxy[:, 0]) * (boxes_xyxy[:, 3] - boxes_xyxy[:, 1]) > 0
 
                 target["boxes"] = boxes[valid_mask]
+                if target["line_points"].shape[0] >0:
+                    valid_mask = torch.cat((valid_mask, torch.ones((target["line_points"].shape[0],), dtype=torch.bool, device=valid_mask.device))) # Keep all line targets in labels
                 target["labels"] = labels[valid_mask]
-                target["line_points"] = target["line_points"][valid_mask]
+                # target["line_points"] = target["line_points"][valid_mask]
 
                 # Normalize boxes back to [0,1]
                 h, w = image.shape[-2:]
@@ -160,6 +171,5 @@ class ObjectDetectionDataset(Dataset):
                 target["boxes"] = target["boxes"] / torch.tensor([w, h, w, h], device=target["boxes"].device)
 
             if len(target["line_points"]) > 0:
-                target["line_points"] = target["line_points"].to(dtype=torch.float32)
-
+                target["line_points"] = target["line_points"].clamp(0.0, 1.0).to(dtype=torch.float32)
             return image, target

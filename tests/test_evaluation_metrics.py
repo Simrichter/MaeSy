@@ -50,3 +50,83 @@ def test_compute_detection_metrics_reports_map_fields():
     assert "f1_50" in metrics
     assert "AP50_class_0" in metrics
 
+
+def test_prepare_and_decode_support_mixed_bbox_and_line_targets():
+    line_class_id = 2
+    targets = [
+        {
+            "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], dtype=torch.float32),
+            "labels": torch.tensor([0, line_class_id], dtype=torch.long),
+            "line_points": torch.tensor([[0.1, 0.1, 0.8, 0.8]], dtype=torch.float32),
+        }
+    ]
+    prepared = prepare_targets_for_detection_metrics(targets, line_class_id=line_class_id)
+
+    assert prepared[0]["boxes"].shape == (1, 4)
+    assert prepared[0]["labels"].tolist() == [0]
+    assert prepared[0]["line_points"].shape == (1, 4)
+    assert prepared[0]["line_labels"].tolist() == [line_class_id]
+
+    pred_logits = torch.tensor(
+        [[[6.0, -6.0, -6.0, -8.0], [-6.0, -6.0, 6.0, -8.0]]],
+        dtype=torch.float32,
+    )
+    pred_boxes = torch.tensor(
+        [[[0.5, 0.5, 0.2, 0.2], [0.2, 0.2, 0.2, 0.2]]],
+        dtype=torch.float32,
+    )
+    pred_lines = torch.tensor(
+        [[[0.2, 0.2, 0.3, 0.3], [0.1, 0.1, 0.8, 0.8]]],
+        dtype=torch.float32,
+    )
+
+    decoded = decode_detr_predictions(
+        pred_logits,
+        pred_boxes,
+        pred_lines=pred_lines,
+        line_class_id=line_class_id,
+        no_object_class=3,
+    )
+
+    assert decoded[0]["boxes"].shape[0] == 1
+    assert decoded[0]["labels"].tolist() == [0]
+    assert decoded[0]["line_points"].shape[0] == 1
+    assert decoded[0]["line_labels"].tolist() == [line_class_id]
+
+
+def test_compute_detection_metrics_includes_line_metrics_when_enabled():
+    predictions = [
+        {
+            "boxes": torch.tensor([[0.4, 0.4, 0.6, 0.6]], dtype=torch.float32),
+            "labels": torch.tensor([0], dtype=torch.long),
+            "scores": torch.tensor([0.95], dtype=torch.float32),
+            "line_points": torch.tensor([[0.1, 0.1, 0.8, 0.8]], dtype=torch.float32),
+            "line_labels": torch.tensor([2], dtype=torch.long),
+            "line_scores": torch.tensor([0.9], dtype=torch.float32),
+        }
+    ]
+    raw_targets = [
+        {
+            "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], dtype=torch.float32),
+            "labels": torch.tensor([0, 2], dtype=torch.long),
+            "line_points": torch.tensor([[0.1, 0.1, 0.8, 0.8]], dtype=torch.float32),
+        }
+    ]
+    targets = prepare_targets_for_detection_metrics(raw_targets, line_class_id=2)
+
+    metrics = compute_detection_metrics(
+        predictions,
+        targets,
+        num_classes=3,
+        line_class_id=2,
+        line_distance_thresholds=(0.05,),
+    )
+
+    assert "line_precision@0.05" in metrics
+    assert "line_recall@0.05" in metrics
+    assert "line_f1@0.05" in metrics
+    assert "line_AP@0.05" in metrics
+    assert "line_endpoint_error@0.05" in metrics
+    assert "line_mAP" in metrics
+
+

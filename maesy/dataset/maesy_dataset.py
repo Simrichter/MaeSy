@@ -67,7 +67,7 @@ class MaesyDataset(Dataset):
 
         dataset_dir = yaml_data.get("path", dataset_dir)
 
-        split_path = Path(yaml_data.get(split, Path(dataset_dir) / split))
+        split_path = Path(dataset_dir) / yaml_data.get(split, split)
         self.images_dir = split_path / "images"
         self.annotations_dir = split_path / "labels"
         self.transforms = transforms
@@ -226,4 +226,10 @@ class MaesyDataset(Dataset):
         return Path(os.path.join(self.images_dir, self.images[idx]))
 
     def get_special_classes(self) -> Dict[str, int]:
+        """
+            Get all classes that are not standard axis-aligned bounding boxes.
+            (This is used for multi-head training)
+            Returns:
+                A dict containing name: class_id pairs
+        """
         return {"line_class_id": self.line_class_id}

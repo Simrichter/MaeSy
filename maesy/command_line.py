@@ -33,9 +33,8 @@ def main():
     od_parser.add_argument("--dataset", type=str, help="Path to dataset root directory or yaml file")
     od_parser.add_argument("--freeze", action="store_true",
                            help="Do not freeze backbone during training (default: False, i.e. backbone is frozen)")
-    od_parser.add_argument("--checkpoint", type=str,
-                           help="Path to trained checkpoint (MAE checkpoint for fresh training, or OD checkpoint if --resume flag is set",
-                           default="")
+    od_parser.add_argument("model", type=str,
+                           help="Either a model architecture like [rt-detr, detr, mae] or a path to a training checkpoint")
     od_parser.add_argument("--output", type=str, default="./od_checkpoints", help="Output directory for checkpoints")
     od_parser.add_argument("--resume", action="store_true",
                            help="Whether to resume training from an existing OD checkpoint (instead of starting from a pretrained MAE checkpoint)")

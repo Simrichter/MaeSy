@@ -6,7 +6,7 @@ from maesy.training.train_setups import train_vit_detector, train_mae
 def main(args):
     if args.mode == "od":
         train_vit_detector(
-            args.checkpoint,
+            args.model,
             args.dataset,
             args.output,
             args.freeze,
@@ -18,7 +18,6 @@ def main(args):
             denoising_label_noise_ratio=getattr(args, "dn_label_noise", 0.2),
             denoising_box_noise_scale=getattr(args, "dn_box_noise", 0.4),
             enable_line_detection=getattr(args, "enable_line_detection", False),
-            line_class_id=getattr(args, "line_class_id", -1),
         )
     elif args.mode == "mae":
         train_mae(dataset_path=args.dataset, checkpoint=args.checkpoint, enable_wandb=args.wandb)

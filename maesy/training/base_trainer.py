@@ -40,16 +40,38 @@ class BaseTrainer(ABC):
             val_loader: Validation data loader
             config: Training configuration
         """
-        self.model = model
+
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = config or TrainingConfig()
+
+        self.enable_wandb = enable_wandb
+        if self.enable_wandb:
+            # Setup wandb
+            self.wandb_run = wandb.init(
+                entity="simon-richter-tu-dortmund",
+                project=project_name,
+                config=asdict(self.config)
+            )
 
         # Setup device
         self.device = self.config.device
         if not torch.cuda.is_available() and self.device != torch.device("cpu"):
             print(f"Warning: CUDA is not available, switching to CPU!")
             self.device = torch.device("cpu")
+
+        # Setup directories
+        self.save_dir = Path(self.config.save_dir) / (self.wandb_run.name if self.enable_wandb else "offline_run")
+        self.checkpoint_handler = CheckpointHandler(self.device, self.save_dir)
+
+        # Mixed precision training
+        self.scaler = torch.amp.GradScaler("cuda") if self.config.use_amp else None
+
+        if issubclass(type(model), BaseModel):
+            self.model = model
+        else:
+            raise ValueError(f"Unknown model type '{type(model)}'")
+
         self.model.to(self.device)
 
         # Setup optimizer
@@ -59,27 +81,11 @@ class BaseTrainer(ABC):
         self.scheduler = self._create_scheduler()
 
         self.loss: BaseLoss = self._create_loss()
-        self.enable_wandb = enable_wandb
-
-        if self.enable_wandb:
-            # Setup wandb
-            self.wandb_run = wandb.init(
-                entity="simon-richter-tu-dortmund",
-                project=project_name,
-                config=asdict(self.config)
-            )
-
-        # Setup directories
-        self.save_dir = Path(self.config.save_dir)/(self.wandb_run.name if self.enable_wandb else "offline_run")
-        self.checkpoint_handler = CheckpointHandler(self.device, self.save_dir)
 
         # Training state
         self.current_epoch = 0
         self.global_step = 0
         self.best_val_loss = float('inf')
-
-        # Mixed precision training
-        self.scaler = torch.amp.GradScaler("cuda") if self.config.use_amp else None
 
 
 
@@ -309,16 +315,7 @@ class BaseTrainer(ABC):
         if self. enable_wandb: self.wandb_run.finish()
         print("Training completed!")
 
-
-    def load_checkpoint(self, filepath: str, model_only=False) -> None:
-        """
-        Load training checkpoint.
-        Args:
-            :param filepath: Path to checkpoint file
-            :param model_only: If True, only load model weights (ignore optimizer, scheduler, epoch, etc.)
-        """
-        if model_only:
-            _, _, _ = self.checkpoint_handler.load_checkpoint(filepath, self.model)
-        else:
-            self.current_epoch, self.global_step, self.best_val_loss = self.checkpoint_handler.load_checkpoint(filepath, self.model, self.optimizer, self.scheduler)
-            self.current_epoch += 1 # To continue with the next epoch and not repeat an already trained one
+    def resume(self, checkpoint_path: str):
+        self.current_epoch, self.global_step, self.best_val_loss = self.checkpoint_handler.load_training_state(checkpoint_path, self.optimizer, self.scheduler)
+        self.current_epoch += 1  # To continue with the next epoch and not repeat an already trained one
+        self.train()

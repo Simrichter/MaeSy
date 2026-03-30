@@ -116,7 +116,7 @@ def train_mae(
 
 
     if checkpoint != "" and Path(checkpoint).exists():
-        pretrainer.load_checkpoint(checkpoint)
+        ... # TODO: removed old trainer.load_checkpoint behaviour. Use load_model and load_training_state instead!
 
     # Start pretraining
     print("\nStarting MAE pretraining...")

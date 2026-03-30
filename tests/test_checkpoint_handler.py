@@ -51,12 +51,13 @@ def test_checkpoint_save_and_load_round_trip(tmp_path):
     reloaded_optimizer = torch.optim.SGD(reloaded_model.parameters(), lr=0.1)
     reloaded_scheduler = torch.optim.lr_scheduler.StepLR(reloaded_optimizer, step_size=1)
 
-    epoch, step, best_loss = handler.load_checkpoint(
+    epoch, step, best_loss = handler.load_training_state(
         str(tmp_path / "ckpt.pth"),
-        model=reloaded_model,
         optimizer=reloaded_optimizer,
         scheduler=reloaded_scheduler,
     )
+
+    reloaded_model = handler.load_model(str(tmp_path / "ckpt.pth"))
 
     assert epoch == 3
     assert step == 12
@@ -88,5 +89,5 @@ def test_checkpoint_load_fails_on_incompatible_head_config(tmp_path):
     incompatible_model.head.config = SimpleNamespace(width=999)
 
     with pytest.raises(ValueError, match="incompatible configuration"):
-        handler.load_checkpoint(str(tmp_path / "ckpt.pth"), model=incompatible_model)
+        handler.load_model(str(tmp_path / "ckpt.pth"), model=incompatible_model)
 

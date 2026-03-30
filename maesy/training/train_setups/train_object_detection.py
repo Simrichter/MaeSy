@@ -1,4 +1,6 @@
 import shutil
+from dataclasses import dataclass
+from typing import Optional
 
 # import imgaug
 import torch
@@ -11,7 +13,8 @@ from tqdm import tqdm
 from maesy.evaluation.inferer import Inferer
 # Import models
 from maesy.model import DETR, DETRConfig, RTDETR, RTDETRConfig
-from maesy.model_tools import replace_bn_with_frozenbn, CheckpointHandler
+from maesy.model_tools import replace_bn_with_frozenbn, CheckpointHandler, read_yaml
+from maesy.model_tools.model_factory import create_model_from_config, known_architectures, create_model_from_checkpoint
 
 # Import training components
 from maesy.training import DetectionTrainer, TrainingConfig
@@ -20,69 +23,94 @@ from maesy.training.utils import collate_detection_fn
 # Import dataset
 from maesy.dataset import ObjectDetectionDataset, UnlabeledDataset, MaesyDataset
 
-DETR_CONFIG = DETRConfig(
 
-        image_size=224,
+@dataclass
+class ODTrainingConfig(TrainingConfig):
+    """Configuration for training."""
 
-        # Backbone parameters
-        embed_dim=256,
-        resnet_version="resnet50",
-        # freeze_backbone=True,
+    # Training parameters
+    num_epochs: int = 100
+    batch_size: int = 16
+    learning_rate: float = 1e-4
+    backbone_learning_rate: float = learning_rate
+    weight_decay: float = 1e-4
+    warmup_epochs: int = 5
+    criterion: str = "None"  # e.g., DetectionLoss, MaskedMSE, etc.
 
-        # Detection head parameters
-        num_classes=3,
-        num_queries=30, # 100
-        num_encoder_layers=4,
-        num_decoder_layers=4,
-        encoder_num_heads=4,
-        decoder_num_heads=4,
-        hidden_dim_out_layers=512,
+    # Optimizer
+    optimizer: str = "adamw"  # adamw, adam, sgd
+    momentum: float = 0.9  # For SGD
 
-        # Loss weights
-        bbox_loss_coef=5, #1.0,
-        class_loss_coef=2.0,#2.0,
-        giou_loss_coef=2.0, #1.0,
-        eos_coef=0.05,
-        aux_loss_coef=0.5,
-    )
+    # Learning rate schedule
+    lr_scheduler: str = "cosine"  # cosine, step, multistep
+    lr_step_size: int = 30  # For step scheduler
+    lr_gamma: float = 0.1  # For step scheduler
 
-RT_DETR_CONFIG = RTDETRConfig(
-    image_size=224,
-    resnet_version="resnet18", #"resnet50",
-    num_classes=11,
-    num_queries=40,
-    embed_dim=128, # 256
-    num_decoder_layers=2, # 4
-    decoder_num_heads=8,
-    hidden_dim_out_layers=256, # 512
-    enable_line_detection=True,
-    bbox_loss_coef=5.0,
-    line_loss_coef=5.0,
-    class_loss_coef=2.0,
-    giou_loss_coef=2.0,
-    eos_coef=0.05,
-    aux_loss_coef=0.5,
-)
+    # Checkpoint and logging
+    save_dir: str = "./checkpoints"
+    save_frequency: int = 10  # Save every n epochs
+    log_frequency: int = 10  # Log every n global steps
 
+    # Device
+    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
+    # num_workers: int = 4
 
-def _build_detection_model(detector_arch: str):
-    detector_arch = detector_arch.lower()
-    if detector_arch == "detr":
-        return DETR(DETR_CONFIG)
-    if detector_arch == "rt_detr":
-        return RTDETR(RT_DETR_CONFIG)
-    raise ValueError(f"Unsupported detector architecture: {detector_arch}")
+    # Gradient clipping
+    max_grad_norm: float = 1.0
 
+    # Early stopping
+    # early_stopping_patience: Optional[int] = None TODO
 
-def _infer_detector_arch_from_checkpoint(checkpoint_path: str, device: torch.device) -> str:
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    head_type = str(checkpoint.get("headtype", ""))
-    if "RTDETR" in head_type:
-        return "rt_detr"
-    return "detr"
+    # Mixed precision training
+    use_amp: bool = True
+
+# DETR_CONFIG = DETRConfig(
+#
+#         image_size=224,
+#
+#         # Backbone parameters
+#         embed_dim=256,
+#         resnet_version="resnet50",
+#         # freeze_backbone=True,
+#
+#         # Detection head parameters
+#         num_classes=3,
+#         num_queries=30, # 100
+#         num_encoder_layers=4,
+#         num_decoder_layers=4,
+#         encoder_num_heads=4,
+#         decoder_num_heads=4,
+#         hidden_dim_out_layers=512,
+#
+#         # Loss weights
+#         bbox_loss_coef=5, #1.0,
+#         class_loss_coef=2.0,#2.0,
+#         giou_loss_coef=2.0, #1.0,
+#         eos_coef=0.05,
+#         aux_loss_coef=0.5,
+#     )
+
+# RT_DETR_CONFIG = RTDETRConfig(
+#     image_size=224,
+#     resnet_version="resnet18", #"resnet50",
+#     num_classes=11,
+#     num_queries=40,
+#     embed_dim=128, # 256
+#     num_decoder_layers=2, # 4
+#     decoder_num_heads=8,
+#     hidden_dim_out_layers=256, # 512
+#     enable_line_detection=True,
+#     bbox_loss_coef=5.0,
+#     line_loss_coef=5.0,
+#     class_loss_coef=2.0,
+#     giou_loss_coef=2.0,
+#     eos_coef=0.05,
+#     aux_loss_coef=0.5,
+# )
 
 def train_vit_detector(
-    checkpoint_path: str,
+    # checkpoint_path: str,
+    model_info: str,
     dataset_path: str,
     output_dir: str,
     freeze: bool,
@@ -94,48 +122,26 @@ def train_vit_detector(
     denoising_label_noise_ratio: float = 0.2,
     denoising_box_noise_scale: float = 0.4,
     enable_line_detection: bool = True,
-    line_class_id: int = 8,
     seed: int = 42
 ):
     """
     Train an object detection model with the selected detector architecture.
 
     Args:
-        checkpoint_path: Path to a checkpoint (pretrained or full OD checkpoint)
-        dataset_path: Path to object detection dataset
-        output_dir: Directory to save checkpoints
-        freeze: Whether to freeze the backbone
-        continue_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
-        enable_wandb: Whether to enable Weights & Biases logging
-        seed: Random seed for reproducibility (default: 42)
+        # :param checkpoint_path: Path to a checkpoint (pretrained or full OD checkpoint)
+        :param model: String that specifies the model configuration to be used. Either a path to a checkpoint, or a model architecture like "rt-detr"
+        :param dataset_path: Path to object detection dataset
+        :param output_dir: Directory to save checkpoints
+        :param freeze: Whether to freeze the backbone
+        :param continue_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
+        :param enable_wandb: Whether to enable Weights & Biases logging
+        :param seed: Random seed for reproducibility (default: 42)
     """
     print("=" * 60)
     print("Starting object detection training")
     print("=" * 60)
 
     torch.manual_seed(seed)
-
-    # Create detection model
-    # model = ViTDetector(det_config)
-    # model = YoloV2Model()
-    if detector_arch.lower() == "rt_detr":
-        RT_DETR_CONFIG.enable_denoising = enable_denoising
-        RT_DETR_CONFIG.denoising_num_queries = denoising_num_queries
-        RT_DETR_CONFIG.denoising_label_noise_ratio = denoising_label_noise_ratio
-        RT_DETR_CONFIG.denoising_box_noise_scale = denoising_box_noise_scale
-        RT_DETR_CONFIG.enable_line_detection = enable_line_detection
-        RT_DETR_CONFIG.line_class_id = line_class_id
-
-    model = _build_detection_model(detector_arch)
-    # print(f"Selected detector architecture: {detector_arch}")
-
-    # Optionally freeze backbone
-    if freeze:
-        for param in model.backbone.parameters():
-            param.requires_grad = False
-        print("Froze backbone parameters - only training detection head")
-    # else:
-    #     print("No freeze: Fine-tuning entire model (backbone + head)")
 
     train_transform_steps = [
         transforms.ToImage(),
@@ -148,54 +154,20 @@ def train_vit_detector(
         # TODO: Affine should be possible with lines as well?
     train_transform_steps.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
     train_transforms = transforms.Compose(train_transform_steps)
-
-
     val_transforms = transforms.Compose([
         transforms.ToImage(),
         transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
-    # Create datasets and dataloaders
-    #train_dataset = ObjectDetectionDataset(
-    #     f"{dataset_path}/train",
-    #     transforms=train_transforms,
-    #     line_class_id=line_class_id if enable_line_detection else None,
-    # )
+
     train_dataset = MaesyDataset(dataset_path, "train", "detection", train_transforms)
     val_dataset = MaesyDataset(dataset_path, "val", "detection", val_transforms)
-    # val_dataset = ObjectDetectionDataset(
-    #     f"{dataset_path}/val",
-    #     transforms=val_transforms,
-    #     line_class_id=line_class_id if enable_line_detection else None,
-    # )
-    batch_size = 64
-
-    # mp.set_sharing_strategy("file_system")
-    # Create dataloaders with custom collate function
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=8,
-        persistent_workers=True,
-        collate_fn=collate_detection_fn,
-        pin_memory=True,
-        # worker_init_fn=lambda worker_id: imgaug.seed(np.random.get_state()[1][0] + worker_id)
-    )
-
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        num_workers=4,
-        persistent_workers=True,
-        collate_fn=collate_detection_fn,
-        shuffle=True,
-        pin_memory=True
-    )
+    assert train_dataset.get_special_classes() == val_dataset.get_special_classes(), "Error, train and val datasets must have same special classes!"
 
     # Create training configuration
-    training_config = TrainingConfig(
+    training_config = ODTrainingConfig(
+        batch_size=64,
         num_epochs=500,
         learning_rate=1e-4 if freeze else 1e-4,  # Higher LR when only training head
         backbone_learning_rate=0.0 if freeze else 1e-5,  # Lower LR for backbone if fine-tuning, otherwise 0
@@ -206,10 +178,41 @@ def train_vit_detector(
         save_frequency=100,
         log_frequency=50,
         save_dir=output_dir,
-        criterion= "DetectionLoss", #"YOLOv8Loss", #
+        criterion="DetectionLoss",  # "YOLOv8Loss", #
         use_amp=True,
         # device=torch.device("cpu")
     )
+
+    # Create dataloaders with custom collate function
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=training_config.batch_size,
+        shuffle=True,
+        num_workers=8,
+        persistent_workers=True,
+        collate_fn=collate_detection_fn,
+        pin_memory=True,
+    )
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=training_config.batch_size,
+        num_workers=4,
+        persistent_workers=True,
+        collate_fn=collate_detection_fn,
+        shuffle=True,
+        pin_memory=True
+    )
+
+    if model_info.lower() in known_architectures:
+        config = read_yaml(f"cfg/{model_info.lower()}.yaml")
+        config["line_class_id"] = train_dataset.get_special_classes()["line_class_id"]
+        model = create_model_from_config(config)
+    elif not model_info.endswith(".pth"):
+        raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
+    else:
+        model = create_model_from_checkpoint(model_info)
+        assert model.config.line_class_id == train_dataset.get_special_classes()["line_class_id"], "Error: The line_class_id in the model config does not match the line_class_id in the dataset. Please make sure they match before continuing training."
 
     # Create trainer
     trainer = DetectionTrainer(
@@ -221,14 +224,17 @@ def train_vit_detector(
         enable_wandb=enable_wandb
     )
 
-    if checkpoint_path != "":
-        # Transfer backbone weights
-        trainer.load_checkpoint(checkpoint_path, model_only=not continue_from_checkpoint)
+    # if checkpoint_path != "":
+    #     # Transfer backbone weights
+    #     trainer.load_checkpoint(checkpoint_path, model_only=not continue_from_checkpoint)
 
     replace_bn_with_frozenbn(trainer.model.backbone)
 
     # Train
-    trainer.train()
+    if continue_from_checkpoint:
+        trainer.resume(model_info)
+    else:
+        trainer.train()
 
 def infer_vit_detector(
     checkpoint_path: str,
@@ -254,13 +260,7 @@ def infer_vit_detector(
     print("=" * 60)
 
     # Load model
-    # model = ViTDetector(det_config)
-    # model = YoloV2Model()
-    selected_arch = detector_arch or _infer_detector_arch_from_checkpoint(checkpoint_path, device)
-    model = _build_detection_model(selected_arch)
-    print(f"Selected detector architecture: {selected_arch}")
-
-    CheckpointHandler(device=device).load_checkpoint(checkpoint_path, model=model)
+    model = CheckpointHandler(device=device).load_model(checkpoint_path)
     model.eval()
 
     dataset = UnlabeledDataset(Path(images_path), transforms=transforms.Compose([
@@ -302,7 +302,6 @@ def infer_vit_detector(
 def export_vit_detector(
     checkpoint_path: str,
     output_path: str,
-    detector_arch: str | None = None,
 ) -> None:
     """
     Export a trained object detection model to ONNX format for deployment.
@@ -313,11 +312,8 @@ def export_vit_detector(
         :param detector_arch: Architecture of the model. If None, the architecture will be inferred from the checkpoint. (e.g., "detr" or "rt_detr")
     """
     device = torch.device("cpu") # For exporting no GPU is required
-    selected_arch = detector_arch or _infer_detector_arch_from_checkpoint(checkpoint_path, device)
-    model = _build_detection_model(selected_arch)
-    print(f"Selected detector architecture: {selected_arch}")
 
-    CheckpointHandler(device=device).load_checkpoint(checkpoint_path, model=model)
+    model = CheckpointHandler(device=device).load_model(checkpoint_path)
     model.eval()
 
     example_inputs = (torch.randn(1, 3, 224, 224),)
@@ -327,10 +323,10 @@ def export_vit_detector(
     path.mkdir(parents=True, exist_ok=True)
     print("=" * 60)
     print("Starting ONNX export...")
-    save_name = path / f"{selected_arch}.onnx"
+    save_name = path / f"{model.config.type}.onnx"
     onnx_program.save(save_name)
     print("=" * 60)
-    print(f"Success! Model has been exported to {path / f'{selected_arch}.onnx'}")
+    print(f"Success! Model has been exported to {save_name}")
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from .heads import RTDETRHead, RTDETRHeadConfig
 
 @dataclass
 class RTDETRConfig:
+    type: str = "RT-DETR"
     image_size: int = 224
     resnet_version: str = "resnet50"
     backbone_pretrained: bool = True
@@ -34,6 +35,7 @@ class RTDETRConfig:
     line_class_id: int = -1
     enable_auxiliary_losses: bool = True
 
+    # Additional settings
     bbox_loss_coef: float = 5.0
     class_loss_coef: float = 1.0
     giou_loss_coef: float = 2.0
@@ -59,7 +61,7 @@ class RTDETR(BaseModel):
         self.backbone = ResNetBackbone(bbone_conf)
 
         head_conf = RTDETRHeadConfig(
-                feature_channels=self.backbone.get_feature_channels(),
+                feature_channels=self.backbone.get_feature_channels(), # 512, 1024, 2048
                 num_classes=config.num_classes,
                 num_queries=config.num_queries,
                 embed_dim=config.embed_dim,
@@ -83,7 +85,7 @@ class RTDETR(BaseModel):
 
         print(
             f"Created RT-DETR model with backbone {self.backbone.type} and head {self.head.type}"
-            f"\n Feature channels: {self.backbone.get_feature_channels()}"
+            # f"\n Feature channels: {self.backbone.get_feature_channels()}"
         )
 
     def infer(self, images, targets, **kwargs):

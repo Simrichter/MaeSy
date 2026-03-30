@@ -18,7 +18,7 @@ from maesy.training import DetectionTrainer, TrainingConfig
 from maesy.training.utils import collate_detection_fn
 
 # Import dataset
-from maesy.dataset import ObjectDetectionDataset, UnlabeledDataset
+from maesy.dataset import ObjectDetectionDataset, UnlabeledDataset, MaesyDataset
 
 DETR_CONFIG = DETRConfig(
 
@@ -110,7 +110,7 @@ def train_vit_detector(
         seed: Random seed for reproducibility (default: 42)
     """
     print("=" * 60)
-    print("Training with MAE Pretrained Backbone")
+    print("Starting object detection training")
     print("=" * 60)
 
     torch.manual_seed(seed)
@@ -127,15 +127,15 @@ def train_vit_detector(
         RT_DETR_CONFIG.line_class_id = line_class_id
 
     model = _build_detection_model(detector_arch)
-    print(f"Selected detector architecture: {detector_arch}")
+    # print(f"Selected detector architecture: {detector_arch}")
 
     # Optionally freeze backbone
     if freeze:
         for param in model.backbone.parameters():
             param.requires_grad = False
-        # print("Froze backbone parameters - only training detection head")
-    else:
-        print("No freeze: Fine-tuning entire model (backbone + head)")
+        print("Froze backbone parameters - only training detection head")
+    # else:
+    #     print("No freeze: Fine-tuning entire model (backbone + head)")
 
     train_transform_steps = [
         transforms.ToImage(),
@@ -157,16 +157,18 @@ def train_vit_detector(
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     # Create datasets and dataloaders
-    train_dataset = ObjectDetectionDataset(
-        f"{dataset_path}/train",
-        transforms=train_transforms,
-        line_class_id=line_class_id if enable_line_detection else None,
-    )
-    val_dataset = ObjectDetectionDataset(
-        f"{dataset_path}/val",
-        transforms=val_transforms,
-        line_class_id=line_class_id if enable_line_detection else None,
-    )
+    #train_dataset = ObjectDetectionDataset(
+    #     f"{dataset_path}/train",
+    #     transforms=train_transforms,
+    #     line_class_id=line_class_id if enable_line_detection else None,
+    # )
+    train_dataset = MaesyDataset(dataset_path, "train", "detection", train_transforms)
+    val_dataset = MaesyDataset(dataset_path, "val", "detection", val_transforms)
+    # val_dataset = ObjectDetectionDataset(
+    #     f"{dataset_path}/val",
+    #     transforms=val_transforms,
+    #     line_class_id=line_class_id if enable_line_detection else None,
+    # )
     batch_size = 64
 
     # mp.set_sharing_strategy("file_system")

@@ -7,6 +7,7 @@ from .unlabeled_dataset import UnlabeledDataset
 from .multidataset import MultiDataset
 from .extract_from_log import extract_mcap
 from .converter import datumaro_to_devils_yolo
+from .maesy_dataset import MaesyDataset
 
 __all__ = [
     "DatasetManager",
@@ -16,5 +17,6 @@ __all__ = [
     "UnlabeledDataset",
     "MultiDataset",
     "extract_mcap",
-    "datumaro_to_devils_yolo"
+    "datumaro_to_devils_yolo",
+    "MaesyDataset",
 ]

@@ -63,7 +63,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                         if len(line_parts) == 4: # Subtype: Line
                             x1, y1, x2, y2 = [float(lp.lstrip("(").rstrip("),")) for lp in line_parts]
                             x1, x2 = x1/544, x2/544
-                            y1, y2 = y1/448, y2/448
+                            y1, y2 = 1-y1/448, 1-y2/448 # TODO: Quickfix for horizontally flipped lines????
                             new_lines.append(f"{name_to_id['Line']} {x1} {y1} {x2} {y2}\n") # Class ID 1 for lines, can be changed if needed
                         else: # Subtype: CornerArc
                             ... # TODO

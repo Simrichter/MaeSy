@@ -101,6 +101,8 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
 
 
 
+    # TODO: Line visualization not working!! Probably because line class id not known
+
     if label_file!="":
         with open(label_file, "r") as f:
             name_coding = {i: line.strip() for i, line in enumerate(f.readlines())}

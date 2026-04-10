@@ -300,8 +300,8 @@ def infer_vit_detector(
                 if save_all_predictions or (l < 3 and score >= 0.3):
                     f.write(f"{l.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
     if visualize:
-        from maesy.evaluation import visualize_annotations
-        visualize_annotations(out_path, "")
+        from maesy.evaluation import visualize_data
+        visualize_data(out_path, "")
 
 def export_vit_detector(
     checkpoint_path: str,

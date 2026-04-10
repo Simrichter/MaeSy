@@ -50,7 +50,26 @@ def decode_detr_predictions(
     no_object_class: int | None = None,
     score_threshold: float = 0.0,
 ) -> List[Dict[str, torch.Tensor]]:
-    """Decode DETR outputs to a list of ``xyxy`` detections per image."""
+    """
+    Decode DETR outputs to a list of ``xyxy`` detections per image.
+
+    Args:
+        :param pred_logits: Tensor of cls logits
+        :param pred_boxes: Tensor of predicted box coordinates
+        :param pred_lines: Tensor of predicted line endpoint coordinates
+        :param line_class_id: Int specifying the cls_id for lines
+        :param no_object_class: Int specifying the cls_id for no objects. Defaults to last cls_id
+        :param score_threshold: Threshold to filter predictions with too low confidence
+
+    Returns:
+        List of dicts containing:
+            {"boxes": boxes_xyxy,
+            "labels": det_labels,
+            "scores": det_scores,
+            "line_points": line_points,
+            "line_labels": line_labels,
+            "line_scores": line_scores}
+    """
     if no_object_class is None:
         no_object_class = pred_logits.shape[-1] - 1
 

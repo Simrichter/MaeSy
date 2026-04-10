@@ -1,9 +1,11 @@
 import os
+import warnings
 from pathlib import Path
 from typing import List
 
 import cv2
 import torch
+from PIL.ImageColor import getrgb
 from torch.utils.data import DataLoader
 from torchvision.io import read_image
 from torchvision.ops import box_convert
@@ -11,6 +13,7 @@ from torchvision.utils import draw_bounding_boxes, save_image
 from tqdm import tqdm
 
 from maesy import ObjectDetectionDataset
+from maesy.dataset import MaesyDataset
 from maesy.dataset.bounding_box import BoundingBox
 from maesy.training.utils import collate_detection_fn, handle_raw_batch
 
@@ -47,21 +50,56 @@ from maesy.training.utils import collate_detection_fn, handle_raw_batch
 #
 #     print(f"Fertig! Annotierte Bilder liegen in: {output_dir}")
 
-def visualize_annotations(input_dir: str, output_dir: str, label_path:str="", label_file:str=""):
+def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = ""):
     """
-        Zeichnet Bounding Boxen (im YOLO Format) in Bilder
+        Visualizes bounding boxes and lines from a MaesyDataset.
 
         Args:
-            :param input_dir: Ordner mit Bildern und Annotationen (.txt im YOLO Format)
-            :param output_dir: Ordner, in dem die annotierten Bilder gespeichert werden
-            :param label_path: Path to a folder that contains the labels in Yolo format (default: empty, i.e. look for .txt files in the input directory)
-            :param label_file: Path to a file that contains the class names in order (default: empty, i.e. use default class names)
+            :param dataset: The MaesyDataset to visualize
+            :param output_dir: Output folder. !Expected to already exist!
+            :param label_file: Path to a file that contains the class names in order (default: empty, i.e. use default class names from MaesyDataset yaml)
     """
+
+    for idx, (img, targets) in tqdm(enumerate(dataset)):
+        drawn = draw_objects_in_tensor((img*255).to(torch.uint8), targets["boxes"], targets["labels"][:len(targets["boxes"])], targets["line_points"])
+        out_path = os.path.join(output_dir, dataset.get_image_path(idx).name)
+        save_image(drawn/255, out_path)
+        # save_image(img, out_path)
+
+def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_file:str= ""):
+    """
+        Visualizes bounding boxes and lines. Autodetects MaesyDataset or standard image folder
+
+        Args:
+            :param input_dir: Root folder of MaesyDataset or path to images (autodetects)
+            :param output_dir: Output folder to be created. Default: 'Visualized' subfolder in the input directory
+            :param label_path: Path to a folder that contains the annotation text files (Leave empty, if MaesyDataset or annotations in input_dir)
+            :param label_file: Path to a file that contains the class names in order (default: empty, i.e. use default class names / class names from MaesyDataset yaml)
+    """ # TODO: Update tooltips in commandline.py
+    # TODO: Use MaesyDataset yaml for class names
     if output_dir!="" and os.path.exists(output_dir):
-        raise ValueError(f"Failed: Output directory {output_dir} does not exist. Leave unspecified to create a 'visualized' subfolder in the input directory.")
+        raise ValueError(f"Failed: Output directory {output_dir} already exists. Leave unspecified to create a 'visualized' subfolder in the input directory.")
     if output_dir=="":
         output_dir = os.path.join(input_dir, "visualized")
     os.makedirs(output_dir, exist_ok=True)
+
+    datasets = []
+    for split in ["train", "val", "test"]:
+        try:
+            datasets.append(MaesyDataset(input_dir, split, "detection"))
+        except AssertionError:
+            ...
+        except ValueError:
+            ...
+        except FileNotFoundError:
+            ...
+    if len(datasets) >= 0:
+        for d in datasets:
+            visualize_dataset(d, output_dir)
+    else:
+        print("No MaesyDataset detected, assuming standard image folder with annotations (txt files with same name as images).")
+
+
 
     if label_file!="":
         with open(label_file, "r") as f:
@@ -144,7 +182,92 @@ def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torc
 
     return out
 
+def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None) -> torch.Tensor:
+    """
+        Draws bounding boxes on the image. If specified, uses labels and colors. If boxes is empty, img is returned
+
+        Args:
+            :param img: The image as a torch.Tensor in format [C, H, W] (pixel range: [0,255], dtype=torch.uint8)
+            :param boxes: Tensor of bounding boxes in normalized cxcywh format, shape [nb, 4]
+            :param labels: Tensor of labels, shape [nb, ]
+            :param name_coding: Optional dict to translate from class id to label name
+            :param color_coding: Optional dict to translate from class id to color
+
+        returns:
+            img: The tensor with drawn bounding boxes, in format [C, H, W] (pixel range: [0,255])
+    """
+    if boxes is None or boxes.shape[0]==0:
+        return img
+    if not img.dtype == torch.uint8:
+        warnings.warn("img does not have dtype uint8")
+        img = img.to(torch.uint8)
+
+    if color_coding is None:
+        colors = ["blue"]* len(boxes)
+    else:
+        colors = [color_coding[cls_id] for cls_id in labels]
+
+    if name_coding is None:
+        rendered_labels = [f"C{cls_id.item()}" for cls_id in labels]
+    else:
+        rendered_labels = [name_coding[cls_id.item()] for cls_id in labels]
+
+
+    h, w = img.shape[-2:]
+    boxes_xyxy = box_convert(boxes.detach().cpu(), "cxcywh", "xyxy")
+    boxes_xyxy[:, (0, 2)] *= w
+    boxes_xyxy[:, (1, 3)] *= h
+    boxes_xyxy[:, (0, 2)] = boxes_xyxy[:, (0, 2)].clamp(0, w - 1)
+    boxes_xyxy[:, (1, 3)] = boxes_xyxy[:, (1, 3)].clamp(0, h - 1)
+
+    drawn = draw_bounding_boxes(img, boxes_xyxy, labels=rendered_labels, colors=colors, width=1)
+    return drawn
+
+def _draw_lines_in_tensor(img: torch.Tensor, lines: torch.Tensor, color: str="pink") -> torch.Tensor:
+    """
+    Draws lines in image tensor using cv2
+
+    Args:
+        :param img: The image as a torch.Tensor in format [C, H, W] (pixel range: [0,255], dtype=torch.uint8)
+        :param lines: Tensor containing the lines as two keypoints in normalized xyxy format, shape [nl, 4]
+        :param color: The color to draw the lines with. Default is pink. !Expects
+
+    returns:
+        img: The tensor with drawn bounding boxes, in format [C, H, W] (pixel range: [0,1])
+    """
+    drawn = img.detach().cpu().clamp(0, 255).to(torch.uint8).permute(1, 2, 0).contiguous().numpy()
+    h, w = img.shape[-2:]
+    for line in lines:
+        x1, y1, x2, y2 = line.detach().cpu()
+        x1 = int(x1.item() * w)
+        y1 = int(y1.item() * h)
+        x2 = int(x2.item() * w)
+        y2 = int(y2.item() * h)
+        cv2.line(drawn, (x1, y1), (x2, y2), color=getrgb(color), thickness=1)  # cv2.line draws in-place !!!
+    drawn = torch.from_numpy(drawn).permute(2, 0, 1).contiguous()
+
+    return drawn.float()
+
+def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, lines: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None) -> torch.Tensor:
+    """
+        Draws bounding boxes and lines on the image.
+
+        Args:
+            :param img: Tensor containing the image in format [C, H, W] (pixel range: [0,255], dtype=torch.uint8)
+            :param boxes: Tensor of bounding boxes in normalized cxcywh format, shape [nb, 4]
+            :param labels: Tensor of bbox labels, shape [nb, ]
+            :param lines: Tensor of lines in normalized xyxy format, shape [nl, 4]
+            :param name_coding: Optional dict to translate from class id to label name
+            :param color_coding: Optional dict to translate from class id to color
+
+    """
+    img = _draw_boxes_in_tensor(img, boxes, labels, name_coding, color_coding)
+    img = _draw_lines_in_tensor(img, lines)
+    return img
+
+
+
 if __name__ == "__main__":
     input_dir = "/home/simon/Desktop/webots-logger/controllers/TrainingDataController/images"
     output_dir = ""
-    visualize_annotations(input_dir, output_dir)
+    visualize_data(input_dir, output_dir)

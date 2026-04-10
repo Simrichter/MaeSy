@@ -68,8 +68,12 @@ class MaesyDataset(Dataset):
         dataset_dir = yaml_data.get("path", dataset_dir)
 
         split_path = Path(dataset_dir) / yaml_data.get(split, split)
+        assert split_path.exists(), f"Requested split {split} does not exist in dataset at {dataset_dir}"
+
         self.images_dir = split_path / "images"
         self.annotations_dir = split_path / "labels"
+        assert self.images_dir.exists()
+        assert self.annotations_dir.exists()
         self.transforms = transforms
         self.return_labels = dataset_type != "None"
 
@@ -209,7 +213,7 @@ class MaesyDataset(Dataset):
                     image = self.transforms(image)
             else:
                 # Default: convert image to tensor
-                image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
+                # image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
                 if self.return_labels:
                     # Normalize boxes back to [0,1] after transforms
                     h, w = image.shape[-2:]

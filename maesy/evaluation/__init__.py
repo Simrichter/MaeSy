@@ -9,7 +9,7 @@ from .metrics import (
     prepare_targets_for_detection_metrics,
 )
 from maesy.evaluation.infer_video import infer_video
-from .visualizer import visualize_annotations
+from .visualizer import visualize_data
 
 __all__ = [
     "Evaluator",
@@ -20,5 +20,5 @@ __all__ = [
     "decode_detr_predictions",
     "prepare_targets_for_detection_metrics",
     "infer_video",
-    "visualize_annotations",
+    "visualize_data",
 ]

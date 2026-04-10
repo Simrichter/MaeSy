@@ -2,6 +2,7 @@
 
 from typing import Optional, List, Dict
 
+import cv2
 import torch
 from torchvision.ops import box_convert
 from torchvision.utils import draw_bounding_boxes
@@ -55,19 +56,15 @@ class DetectionTrainer(BaseTrainer):
         self,
         image: torch.Tensor,
         pred_boxes: torch.Tensor,
+        pred_lines: torch.Tensor,
         pred_logits: torch.Tensor,
+        special_classes: Dict[str, int],
+        draw_no_obj: bool = False
     ) -> torch.Tensor:
         # Unnormalize to RGB uint8 so draw_bounding_boxes always renders visible overlays.
         img = image.detach().cpu()
         img = (img * self._IMAGENET_STD) + self._IMAGENET_MEAN
         img = (img.clamp(0.0, 1.0) * 255.0).to(torch.uint8)
-
-        h, w = img.shape[-2:]
-        boxes_xyxy = box_convert(pred_boxes.detach().cpu(), "cxcywh", "xyxy")
-        boxes_xyxy[:, (0, 2)] *= w
-        boxes_xyxy[:, (1, 3)] *= h
-        boxes_xyxy[:, (0, 2)] = boxes_xyxy[:, (0, 2)].clamp(0, w - 1)
-        boxes_xyxy[:, (1, 3)] = boxes_xyxy[:, (1, 3)].clamp(0, h - 1)
 
         probs = pred_logits.detach().cpu().softmax(-1)
         scores, labels = probs.max(dim=-1)
@@ -76,18 +73,65 @@ class DetectionTrainer(BaseTrainer):
         confidence_threshold = 0.3
         # filter predictions below the confidence_threshold
         keep = scores >= confidence_threshold
-        boxes_xyxy = boxes_xyxy[keep]
+        pred_boxes = pred_boxes[keep]
+        pred_lines = pred_lines[keep] # TODO: Maybe this fails if lines are deactivated??
         labels = labels[keep]
         scores = scores[keep]
 
-        rendered_labels: List[str] = []
-        colors: List[str] = []
-        for query_idx, (cls_id, score) in enumerate(zip(labels.tolist(), scores.tolist())):
-            cls_name = "NoObj" if cls_id == no_obj else f"C{cls_id}"
-            rendered_labels.append(f"{cls_name} {score:.2f}")
-            colors.append("gray" if cls_id == no_obj else "blue")
+        # Separate into bboxes and other types
+        # build boolean mask: keep boxes whose label is not in special_classes values
+        special_vals = list(special_classes.values())
+        if not draw_no_obj:
+            special_vals.append(no_obj)
 
-        drawn = draw_bounding_boxes(img, boxes_xyxy, labels=rendered_labels, colors=colors, width=1)
+        if len(special_vals) == 0:
+            bbox_idx = torch.ones(labels.shape, dtype=torch.bool)
+        else:
+            special_tensor = torch.tensor(special_vals, dtype=labels.dtype)
+            bbox_idx = ~torch.isin(labels, special_tensor)
+        boxes = pred_boxes[bbox_idx]
+        labels_bbox = labels[bbox_idx]
+
+        h, w = img.shape[-2:]
+
+        if len(boxes) > 0:
+            boxes_xyxy = box_convert(boxes.detach().cpu(), "cxcywh", "xyxy")
+            boxes_xyxy[:, (0, 2)] *= w
+            boxes_xyxy[:, (1, 3)] *= h
+            boxes_xyxy[:, (0, 2)] = boxes_xyxy[:, (0, 2)].clamp(0, w - 1)
+            boxes_xyxy[:, (1, 3)] = boxes_xyxy[:, (1, 3)].clamp(0, h - 1)
+
+            rendered_labels: List[str] = []
+            colors: List[str] = []
+            for query_idx, (cls_id, score) in enumerate(zip(labels_bbox.tolist(), scores.tolist())):
+                cls_name = "NoObj" if cls_id == no_obj else f"C{cls_id}"
+                rendered_labels.append(f"{cls_name} {score:.2f}")
+                colors.append("gray" if cls_id == no_obj else "blue")
+
+            drawn = draw_bounding_boxes(img, boxes_xyxy, labels=rendered_labels, colors=colors, width=1)
+        else:
+            print("No Boxes in Image, directly using drawn=img and converting to uint8")
+            drawn = img.detach().cpu().clamp(0, 255).to(torch.uint8)
+            # print("Drawn: ", drawn)
+            # print("Drawn.shape: ", drawn.shape)
+
+        # TODO: Maybe problem is dtype? draw_bounding_boxes takes uint8 or float, but returns uint8!
+
+        drawn = drawn.permute(1, 2, 0).contiguous().numpy()
+        for k, v in special_classes.items():
+            special_ids = labels == v
+            objs = pred_lines[special_ids]
+
+            if k == "line_class_id":
+                for line in objs:
+                    x1, y1, x2, y2 = line.detach().cpu()
+                    x1 = int(x1.item() * w)
+                    y1 = int(y1.item() * h)
+                    x2 = int(x2.item() * w)
+                    y2 = int(y2.item() * h)
+                    cv2.line(drawn, (x1, y1), (x2, y2), color=(255, 0, 255), thickness=2) # cv2.line draws in-place !!!
+        drawn = torch.from_numpy(drawn).permute(2, 0, 1).contiguous()
+
         return drawn.float() / 255.0
 
     def _render_target_boxes(self, image: torch.Tensor, target: Dict[str, torch.Tensor]) -> torch.Tensor:
@@ -148,7 +192,9 @@ class DetectionTrainer(BaseTrainer):
             losses["img_queries_all"] = self._render_all_query_predictions(
                 image=images[0],
                 pred_boxes=predictions["pred_boxes"][0],
+                pred_lines=predictions["pred_lines"][0],
                 pred_logits=predictions["pred_logits"][0],
+                special_classes ={"line_class_id": self.model.config.line_class_id}
             )
             # losses["img_targets"] = self._render_target_boxes(images[0], targets[0])
 

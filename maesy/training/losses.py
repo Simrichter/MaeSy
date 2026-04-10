@@ -203,8 +203,24 @@ class DetectionLoss(BaseLoss):
                 src_lines_for_loss = src_lines[line_mask]
                 tgt_lines_for_loss = target_lines
                 assert src_lines_for_loss.shape[0] == tgt_lines_for_loss.shape[0]
-                loss_line = F.l1_loss(src_lines_for_loss, tgt_lines_for_loss, reduction='none')
-                loss_line = loss_line.sum() / max(num_line_matches, 1)
+                # loss_line = F.l1_loss(src_lines_for_loss, tgt_lines_for_loss, reduction='none')
+                # loss_line = loss_line.sum() / max(num_line_matches, 1)
+
+                # Accounting for order invariance of line keypoints
+                pred = src_lines_for_loss
+                gt = tgt_lines_for_loss
+
+                gt_swapped = torch.cat([gt[:, 2:], gt[:, :2]], dim=-1)
+
+                loss1 = torch.abs(pred - gt).sum(dim=-1)
+                loss2 = torch.abs(pred - gt_swapped).sum(dim=-1)
+
+                loss_line = torch.min(loss1, loss2)
+
+                if num_line_matches > 0:
+                    loss_line = loss_line.sum() / num_line_matches
+                else:
+                    loss_line = torch.tensor(0.0, device=pred_logits.device)
             else:
                 loss_line = torch.tensor(0.0, device=pred_logits.device)
         else:
@@ -392,7 +408,16 @@ class DetectionLoss(BaseLoss):
                 # and len(tgt_lines) == len(tgt_ids)
             ):
                 assert tgt_ids.shape[0] == len(tgt_bbox) + len(tgt_lines) # Check if assumption of labels including ALL classes is fulfilled
-                cost_line[:, len(tgt_bbox):] = torch.cdist(pred_lines[i], tgt_lines, p=1)
+                pred_l = pred_lines[i]  # [num_queries, 4]
+                tgt_l = tgt_lines  # [num_lines, 4]
+
+                tgt_l_swapped = torch.cat([tgt_l[:, 2:], tgt_l[:, :2]], dim=-1)
+
+                dist1 = torch.cdist(pred_l, tgt_l, p=1)
+                dist2 = torch.cdist(pred_l, tgt_l_swapped, p=1)
+
+                cost_line[:, len(tgt_bbox):] = torch.min(dist1, dist2)
+                # cost_line[:, len(tgt_bbox):] = torch.cdist(pred_lines[i], tgt_lines, p=1)
 
             # L1 cost bboxes
             cost_bbox = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)

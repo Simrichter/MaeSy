@@ -116,7 +116,7 @@ def train_vit_detector(
     freeze: bool,
     continue_from_checkpoint: bool,
     enable_wandb: bool,
-    detector_arch: str = "rt_detr",
+    # detector_arch: str = "rt_detr",
     enable_denoising: bool = False,
     denoising_num_queries: int = 0,
     denoising_label_noise_ratio: float = 0.2,
@@ -206,7 +206,11 @@ def train_vit_detector(
 
     if model_info.lower() in known_architectures:
         config = read_yaml(f"cfg/{model_info.lower()}.yaml")
-        config["line_class_id"] = train_dataset.get_special_classes()["line_class_id"]
+        if enable_line_detection:
+            config["line_class_id"] = train_dataset.get_special_classes()["line_class_id"]
+            config["enable_line_detection"] = True
+        else:
+            config["enable_line_detection"] = False
         model = create_model_from_config(config)
     elif not model_info.endswith(".pth"):
         raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
@@ -242,7 +246,7 @@ def infer_vit_detector(
     out_path: str,
     visualize: bool,
     device: torch.device,
-    detector_arch: str | None = None,
+    # detector_arch: str | None = None,
 ) -> None:
     """
     Run inference with a trained object detection model.
@@ -253,7 +257,7 @@ def infer_vit_detector(
         :param out_path: Path to save inference results (predicted bounding boxes and labels)
         :param visualize: Whether to save visualizations of predictions (e.g., images with predicted boxes drawn)
         :param device: Device to run inference on (e.g., "cuda" or "cpu")
-        :param detector_arch: The architecture to be used (e.g., "detr" or "rt_detr")
+        # :param detector_arch: The architecture to be used (e.g., "detr" or "rt_detr")
     """
     print("=" * 60)
     print("Running Inference")
@@ -309,7 +313,7 @@ def export_vit_detector(
     Args:
         :param checkpoint_path: Path to trained model checkpoint
         :param output_path: Path to save the exported ONNX model
-        :param detector_arch: Architecture of the model. If None, the architecture will be inferred from the checkpoint. (e.g., "detr" or "rt_detr")
+        # :param detector_arch: Architecture of the model. If None, the architecture will be inferred from the checkpoint. (e.g., "detr" or "rt_detr")
     """
     device = torch.device("cpu") # For exporting no GPU is required
 

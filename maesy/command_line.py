@@ -30,28 +30,28 @@ def main():
     # scratch_parser.add_argument("--output", type=str, default="./od_checkpoints", help="Output directory for checkpoints")
 
     od_parser = train_parser.add_parser("od", help="Train with MAE pretrained backbone")
+    od_parser.add_argument("model", type=str,
+                           help="Either a model architecture like [rt-detr, detr, mae] or a path to a training checkpoint")
     od_parser.add_argument("--dataset", type=str, help="Path to dataset root directory or yaml file")
     od_parser.add_argument("--freeze", action="store_true",
                            help="Do not freeze backbone during training (default: False, i.e. backbone is frozen)")
-    od_parser.add_argument("model", type=str,
-                           help="Either a model architecture like [rt-detr, detr, mae] or a path to a training checkpoint")
     od_parser.add_argument("--output", type=str, default="./od_checkpoints", help="Output directory for checkpoints")
     od_parser.add_argument("--resume", action="store_true",
                            help="Whether to resume training from an existing OD checkpoint (instead of starting from a pretrained MAE checkpoint)")
     od_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
-    od_parser.add_argument(
-        "--detector",
-        type=str,
-        choices=["detr", "rt_detr"],
-        default="rt_detr",
-        help="Detection architecture to train (default: rt_detr)",
-    )
+    # od_parser.add_argument(
+    #     "--detector",
+    #     type=str,
+    #     choices=["detr", "rt_detr"],
+    #     default="rt_detr",
+    #     help="Detection architecture to train (default: rt_detr)",
+    # )
     od_parser.add_argument("--enable-denoising", action="store_true", help="Enable RT-DETR denoising training branch (default: False)")
     od_parser.add_argument("--dn-queries", type=int, default=5, help="Number of denoising queries when denoising is enabled (default: 5)")
     od_parser.add_argument("--dn-label-noise", type=float, default=0.2, help="Label corruption ratio for denoising branch (default: 0.2)")
     od_parser.add_argument("--dn-box-noise", type=float, default=0.4, help="Box/line noise scale for denoising branch (default: 0.4)")
     od_parser.add_argument("--enable-line-detection", action="store_true", help="Enable optional line endpoint prediction branch")
-    od_parser.add_argument("--line-class-id", type=int, default=-1, help="Class id that should be treated as a line target (x1 y1 x2 y2)")
+    # od_parser.add_argument("--line-class-id", type=int, default=-1, help="Class id that should be treated as a line target (x1 y1 x2 y2)")
 
 
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")
@@ -155,8 +155,9 @@ def main():
     # Command: maesy dataset convert
     dataset_convert_parser = data_subs.add_parser('convert', help="Convert between dataset formats")
     dataset_convert_parser.add_argument("path", help="Path to the root of the dataset")
-    dataset_convert_parser.add_argument("--input_format", help="Current format of the dataset", choices=["datumaro"], default="datumaro")
-    dataset_convert_parser.add_argument("--output_format", help="Desired format of the dataset", choices=["devilsyolo"], default="devilsyolo")
+    dataset_convert_parser.add_argument("-i", "--input-format", help="Current format of the dataset", choices=["datumaro", "robert"], default="datumaro")
+    # dataset_convert_parser.add_argument("--output_format", help="Desired format of the dataset", choices=["devilsyolo"], default="devilsyolo")
+    dataset_convert_parser.add_argument("-o", "--output-path", help="Output path for the created .txt label files", default="")
 
     args = parser.parse_args()
     # args = sys.argv[1:]

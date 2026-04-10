@@ -12,7 +12,7 @@ def main(args):
             args.freeze,
             enable_wandb=args.wandb,
             continue_from_checkpoint=args.resume,
-            detector_arch=args.detector,
+            # detector_arch=args.detector,
             enable_denoising=getattr(args, "enable_denoising", False),
             denoising_num_queries=getattr(args, "dn_queries", 100),
             denoising_label_noise_ratio=getattr(args, "dn_label_noise", 0.2),

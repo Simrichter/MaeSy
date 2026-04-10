@@ -154,17 +154,23 @@ class MaesyDataset(Dataset):
                             canvas_size=(img_height, img_width)  # (H, W)
                         )
                         labels_list.extend([box.cls_id for box in boxes_list])
-                    if len(line_points_list) > 0:
-                        labels_list.extend([self.line_class_id] * len(line_points_list))
-                    labels = torch.tensor(labels_list, dtype=torch.long)
-
-                    # Basically an else to the two above
-                    if len(boxes_list) <= 0 and len(line_points_list) <= 0:
+                    else:
                         coords = torchvision.tv_tensors.BoundingBoxes(
                             torch.empty((0, 4), dtype=torch.float32),
                             format="CXCYWH",
                             canvas_size=(img_height, img_width)
                         )
+                    if len(line_points_list) > 0:
+                        labels_list.extend([self.line_class_id] * len(line_points_list))
+                    labels = torch.tensor(labels_list, dtype=torch.long)
+
+                    # Basically an "combined" else to the two above
+                    if len(boxes_list) <= 0 and len(line_points_list) <= 0:
+                        # coords = torchvision.tv_tensors.BoundingBoxes(
+                        #     torch.empty((0, 4), dtype=torch.float32),
+                        #     format="CXCYWH",
+                        #     canvas_size=(img_height, img_width)
+                        # )
                         labels = torch.empty((0,), dtype=torch.long)
 
                     if len(line_points_list) > 0:

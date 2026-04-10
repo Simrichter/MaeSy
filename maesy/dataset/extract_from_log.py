@@ -7,7 +7,7 @@ import yaml
 from sensor_msgs.msg import Image
 
 try:
-    # Ignore Unresolved Reference Errors, as this only works if Ros2 is sourced in executing terminal
+    # Catch Unresolved Reference Errors, as this only works if Ros2 is sourced in executing terminal
     from rclpy.serialization import deserialize_message
     from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions
 except ModuleNotFoundError:

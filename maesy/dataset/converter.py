@@ -1,7 +1,88 @@
 import json
 import os
+from pathlib import Path
 
 from tqdm import tqdm
+
+def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
+    """
+        Convert Image annotations from Robert's Unity simulator outputs to devils_yolo format.
+
+        Args:
+            :param labels_path: Path to the labels folder (only .txt is considered)
+            :param out_path: Path to the output folder (if not specified, a subfolder "DevilsYolo" is created)
+    """
+
+    name_to_id = {
+        "Trionda Ball 2026(Clone)": 0,
+        "K1(Clone)": 1,
+        "PenaltyCross": 2,
+        "Line": 3,
+    }
+
+    print("="*60)
+    print(f"Converting Robert's Unity Simulator annotations to DevilsYolo format")
+    print(f"Labels path: {labels_path}")
+    print("=" * 60)
+
+
+    labels_path: Path = Path(labels_path)
+    splits = [f for f in os.listdir(labels_path) if f in ["train", "val", "test"]]
+    print(f"Found {len(splits)} splits: {splits}")
+    for split in splits:
+        print(f"Handling {split}...")
+        path = labels_path/split/"labels"
+        if not os.path.exists(path):
+            raise ValueError(f"Could not find '{split}/labels' Folder in dataset root!!")
+        out_path: Path = Path(path)/"DevilsYolo" if out_path == "" else Path(out_path)
+        out_path.mkdir(exist_ok=True)
+
+        txts = [t for t in os.listdir(path) if t.endswith(".txt")]
+        for label_file in tqdm(txts):
+            with open(os.path.join(path, label_file), 'r') as f:
+                lines = f.readlines()
+            new_lines = []
+            current_cat = None
+            for line in lines:
+                cat = line.strip().removesuffix(":")
+                if cat in ["BoundingBoxes", "GoalPosts", "CenterCircle", "PenaltyPoints", "Lines"]:
+                    current_cat = cat
+                    continue
+                match current_cat:
+                    case "BoundingBoxes":
+                        class_id, coords = line.strip().split(":")
+                        parts = coords.strip().split()
+                        if len(parts) != 4:
+                            print(f"Skipping BoundingBox line in file {label_file} due to incorrect format: {line}")
+                            continue
+                        cx, cy, w, h = parts
+                        cx, cy, w, h = float(cx), float(cy), float(w), float(h) # Explicit cast to ensure datatype compatibility
+                        new_lines.append(f"{name_to_id[class_id]} {cx} {cy} {w} {h}\n")
+                    case "Lines":
+                        line_parts = line.strip().split(", ")
+                        if len(line_parts) == 4: # Subtype: Line
+                            x1, y1, x2, y2 = [float(lp.lstrip("(").rstrip("),")) for lp in line_parts]
+                            x1, x2 = x1/544, x2/544
+                            y1, y2 = y1/448, y2/448
+                            new_lines.append(f"{name_to_id['Line']} {x1} {y1} {x2} {y2}\n") # Class ID 1 for lines, can be changed if needed
+                        else: # Subtype: CornerArc
+                            ... # TODO
+                    case "PenaltyPoints":
+                        parts = line.strip().split()
+                        if len(parts) != 4:
+                            print(f"Skipping PenaltyPoint line in file {label_file} due to incorrect format: {line}")
+                            continue
+                        cx, cy, w, h = parts
+                        cx, cy, w, h = float(cx), float(cy), float(w), float(h)  # Explicit cast to ensure datatype compatibility
+                        new_lines.append(f"{name_to_id['PenaltyCross']} {cx} {cy} {w} {h}\n")
+                    case "CenterCircle":
+                        ... # TODO
+                    case _:
+                        # ignore other categories for now
+                        ...
+
+            with open(os.path.join(out_path, label_file), 'w') as f:
+                f.writelines(new_lines)
 
 
 def datumaro_to_devils_yolo(datumaro_dir: str):

@@ -14,7 +14,12 @@ def main(args):
             from .extract_from_log import extract_mcap
             extract_mcap(args.bag_path, args.topic_name, args.output_dir, args.exact)
         case "convert":
-            from .converter import datumaro_to_devils_yolo
-            datumaro_to_devils_yolo(args.path)
+            match args.input_format:
+                case "datumaro":
+                    from .converter import datumaro_to_devils_yolo
+                    datumaro_to_devils_yolo(args.path)
+                case "robert":
+                    from .converter import robert_to_devils_yolo
+                    robert_to_devils_yolo(args.path, args.output_path)
         case _:
             print(f"Command '{args.command}' not recognized.")

@@ -80,6 +80,12 @@ class MaesyDataset(Dataset):
         self.id_to_name = {i:v for i,v in enumerate(yaml_data.get("names", []))}
         self.name_to_id = {v:k for k,v in self.id_to_name.items()}
 
+        self.num_classes = yaml_data.get("nc", -1)
+        if self.num_classes == -1 and len(self.name_to_id) > 0:
+            raise ValueError(f"Value of nc not set properly in dataset.yaml. Found {len(self.name_to_id)} classes in dataset.yaml, but no 'nc' entry")
+        elif self.num_classes != len(self.name_to_id):
+            raise ValueError(f"Mismatch in dataset.yaml\nnc: {self.num_classes}, but {len(self.name_to_id)} class names were found.")
+
         self.line_class_id = self.name_to_id.get(yaml_data.get("lines", None), -1)
 
         self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if
@@ -243,3 +249,9 @@ class MaesyDataset(Dataset):
                 A dict containing name: class_id pairs
         """
         return {"line_class_id": self.line_class_id}
+
+    def get_num_classes(self) -> int:
+        """
+        Get the number of classes according to dataset.yaml
+        """
+        return self.num_classes

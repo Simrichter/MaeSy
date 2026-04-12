@@ -226,8 +226,18 @@ class RTDETRDecoderLayer(nn.Module):
 class RTDETRHead(nn.Module):
     """Hybrid encoder + deformable decoder head"""
 
+    def create_class_heads(self):
+        """
+        Create classification heads for each decoder layer.
+        This is separated from __init__ to allow for creating new classification heads after loading pretrained weights
+        """
+        self.decoder_class_heads = nn.ModuleList(
+            [nn.Linear(self.config.embed_dim, self.config.num_classes + 1) for _ in range(self.config.num_decoder_layers)] # TODO: Change to MLP as well???
+        )
+
     def __init__(self, config: RTDETRHeadConfig):
         super().__init__()
+        self.decoder_class_heads = None
         self.type = "RTDETRHead"
         self.config = config
         if len(config.feature_channels) != config.num_feature_levels:
@@ -269,9 +279,9 @@ class RTDETRHead(nn.Module):
                 for _ in range(config.num_decoder_layers)
             ]
         )
-        self.decoder_class_heads = nn.ModuleList(
-            [nn.Linear(config.embed_dim, config.num_classes + 1) for _ in range(config.num_decoder_layers)]
-        )
+
+        self.create_class_heads()
+
         self.decoder_box_heads = nn.ModuleList(
             [MLP(config.embed_dim, config.hidden_dim_out_layers, 4) for _ in range(config.num_decoder_layers)]
         )

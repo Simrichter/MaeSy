@@ -58,55 +58,8 @@ class ODTrainingConfig(TrainingConfig):
     # Gradient clipping
     max_grad_norm: float = 1.0
 
-    # Early stopping
-    # early_stopping_patience: Optional[int] = None TODO
-
     # Mixed precision training
     use_amp: bool = True
-
-# DETR_CONFIG = DETRConfig(
-#
-#         image_size=224,
-#
-#         # Backbone parameters
-#         embed_dim=256,
-#         resnet_version="resnet50",
-#         # freeze_backbone=True,
-#
-#         # Detection head parameters
-#         num_classes=3,
-#         num_queries=30, # 100
-#         num_encoder_layers=4,
-#         num_decoder_layers=4,
-#         encoder_num_heads=4,
-#         decoder_num_heads=4,
-#         hidden_dim_out_layers=512,
-#
-#         # Loss weights
-#         bbox_loss_coef=5, #1.0,
-#         class_loss_coef=2.0,#2.0,
-#         giou_loss_coef=2.0, #1.0,
-#         eos_coef=0.05,
-#         aux_loss_coef=0.5,
-#     )
-
-# RT_DETR_CONFIG = RTDETRConfig(
-#     image_size=224,
-#     resnet_version="resnet18", #"resnet50",
-#     num_classes=11,
-#     num_queries=40,
-#     embed_dim=128, # 256
-#     num_decoder_layers=2, # 4
-#     decoder_num_heads=8,
-#     hidden_dim_out_layers=256, # 512
-#     enable_line_detection=True,
-#     bbox_loss_coef=5.0,
-#     line_loss_coef=5.0,
-#     class_loss_coef=2.0,
-#     giou_loss_coef=2.0,
-#     eos_coef=0.05,
-#     aux_loss_coef=0.5,
-# )
 
 def train_vit_detector(
     # checkpoint_path: str,
@@ -216,7 +169,19 @@ def train_vit_detector(
         raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
     else:
         model = create_model_from_checkpoint(model_info)
+
+    if continue_from_checkpoint:
+        assert model.config.num_classes == train_dataset.get_num_classes(), "Error: The number of classes in the model config does not match the number of classes in the dataset. Please make sure they match before continuing training."
         assert model.config.line_class_id == train_dataset.get_special_classes()["line_class_id"], "Error: The line_class_id in the model config does not match the line_class_id in the dataset. Please make sure they match before continuing training."
+    else:
+        if model.config.num_classes != train_dataset.get_num_classes() or model.config.line_class_id != train_dataset.get_special_classes()["line_class_id"]:
+            print(f"!!!!!!!!!!!!!!!!!!!!\nDetected different classification setup:\nModel has {model.config.num_classes} classes, dataset provides {train_dataset.get_num_classes()}\nLine class of model is {model.config.line_class_id}, dataset provides {train_dataset.get_special_classes()}\nCreating a new classification head with {train_dataset.get_num_classes()} classes.\n!!!!!!!!!!!!!!!!!!!!")
+            if not hasattr(model.head, "create_class_heads"):
+                raise AttributeError(f"\nmodel.head has no 'create_class_heads()' method that could be used to create a new classification head. Found content: {[f for f in dir(model.head) if not f.startswith('_') and callable(getattr(model.head, f))]}")
+            model.config.num_classes = train_dataset.get_num_classes()
+            model.config.line_class_id = train_dataset.get_special_classes()["line_class_id"] # TODO: Make special classes dict compatible with dataset-return
+            model.head.create_class_heads()
+
 
     # Create trainer
     trainer = DetectionTrainer(
@@ -264,7 +229,7 @@ def infer_vit_detector(
     print("=" * 60)
 
     # Load model
-    model = CheckpointHandler(device=device).load_model(checkpoint_path)
+    model = CheckpointHandler(device=device).load_model(checkpoint_path) # TODO
     model.eval()
 
     dataset = UnlabeledDataset(Path(images_path), transforms=transforms.Compose([
@@ -315,9 +280,8 @@ def export_vit_detector(
         :param output_path: Path to save the exported ONNX model
         # :param detector_arch: Architecture of the model. If None, the architecture will be inferred from the checkpoint. (e.g., "detr" or "rt_detr")
     """
-    device = torch.device("cpu") # For exporting no GPU is required
 
-    model = CheckpointHandler(device=device).load_model(checkpoint_path)
+    model = create_model_from_checkpoint(checkpoint_path)
     model.eval()
 
     example_inputs = (torch.randn(1, 3, 224, 224),)

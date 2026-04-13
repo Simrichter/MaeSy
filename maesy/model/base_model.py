@@ -27,3 +27,10 @@ class BaseModel(ABC, nn.Module):
             :param kwargs: Additional arguments for inference (e.g., confidence thresholds, etc.)
         """
         return self.forward(images, **kwargs), targets
+
+    def update_head_conf(self, *args, **kwargs) -> None:
+        """
+        Update the head configuration with new parameters (e.g., number of classes, line class ID, etc.) and recreate the head's classification layers if necessary.
+        Subclasses may specify their own arguments instead of kwargs
+        """
+        raise NotImplementedError("update_head_conf method was called, but is not implemented in specific model.")

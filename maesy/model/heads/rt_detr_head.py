@@ -232,7 +232,8 @@ class RTDETRHead(nn.Module):
         This is separated from __init__ to allow for creating new classification heads after loading pretrained weights
         """
         self.decoder_class_heads = nn.ModuleList(
-            [nn.Linear(self.config.embed_dim, self.config.num_classes + 1) for _ in range(self.config.num_decoder_layers)] # TODO: Change to MLP as well???
+            # [nn.Linear(self.config.embed_dim, self.config.num_classes + 1) for _ in range(self.config.num_decoder_layers)] # TODO: Change to MLP as well???
+            [MLP(self.config.embed_dim, self.config.hidden_dim_out_layers, self.config.num_classes+1) for _ in range(self.config.num_decoder_layers)]
         )
 
     def __init__(self, config: RTDETRHeadConfig):

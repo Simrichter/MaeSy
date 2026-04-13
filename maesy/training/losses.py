@@ -79,7 +79,6 @@ class DetectionLoss(BaseLoss):
         self.device = device
 
         self.reset_metrics()
-
         # Adjust weights for class imbalance
         empty_weight = torch.ones(num_classes + 1)
         empty_weight[-1] = eos_coef
@@ -161,7 +160,6 @@ class DetectionLoss(BaseLoss):
         idx = self._get_src_permutation_idx(indices)
         target_classes[idx] = target_classes_o
         # Now, target_classes has shape [B, num_queries], where all non-used entries get class "None" and the matched entries get their correct class.
-
         loss_ce = F.cross_entropy(
             pred_logits.transpose(1, 2),
             target_classes,

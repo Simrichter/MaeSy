@@ -82,7 +82,7 @@ def train_vit_detector(
 
     Args:
         # :param checkpoint_path: Path to a checkpoint (pretrained or full OD checkpoint)
-        :param model: String that specifies the model configuration to be used. Either a path to a checkpoint, or a model architecture like "rt-detr"
+        :param model_info: String that specifies the model configuration to be used. Either a path to a checkpoint, or a model architecture like "rt-detr"
         :param dataset_path: Path to object detection dataset
         :param output_dir: Directory to save checkpoints
         :param freeze: Whether to freeze the backbone
@@ -159,7 +159,13 @@ def train_vit_detector(
 
     if model_info.lower() in known_architectures:
         config = read_yaml(f"cfg/{model_info.lower()}.yaml")
+        if config["num_classes"] != -1 and config["num_classes"] != train_dataset.get_num_classes():
+            raise ValueError("num_classes parameter in model config does not match the datasets 'nc' parameter. Leave value in config on '-1' to enable auto-detect.")
+        config["num_classes"] = train_dataset.get_num_classes()
         if enable_line_detection:
+            if config["line_class_id"] != -1 and config["line_class_id"] != train_dataset.get_special_classes()["line_class_id"]:
+                raise ValueError(
+                    "line_class_id parameter in model config does not match the datasets 'nc' parameter. Leave value in config on '-1' to enable auto-detect.")
             config["line_class_id"] = train_dataset.get_special_classes()["line_class_id"]
             config["enable_line_detection"] = True
         else:
@@ -178,9 +184,7 @@ def train_vit_detector(
             print(f"!!!!!!!!!!!!!!!!!!!!\nDetected different classification setup:\nModel has {model.config.num_classes} classes, dataset provides {train_dataset.get_num_classes()}\nLine class of model is {model.config.line_class_id}, dataset provides {train_dataset.get_special_classes()}\nCreating a new classification head with {train_dataset.get_num_classes()} classes.\n!!!!!!!!!!!!!!!!!!!!")
             if not hasattr(model.head, "create_class_heads"):
                 raise AttributeError(f"\nmodel.head has no 'create_class_heads()' method that could be used to create a new classification head. Found content: {[f for f in dir(model.head) if not f.startswith('_') and callable(getattr(model.head, f))]}")
-            model.config.num_classes = train_dataset.get_num_classes()
-            model.config.line_class_id = train_dataset.get_special_classes()["line_class_id"] # TODO: Make special classes dict compatible with dataset-return
-            model.head.create_class_heads()
+            model.update_head_conf(train_dataset.get_num_classes(), train_dataset.get_special_classes())
 
 
     # Create trainer

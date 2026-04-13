@@ -1,7 +1,7 @@
 """RT-DETR style detector integrated with the MaeSy BaseModel contracts."""
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Dict
 
 from .backbones import ResNetBackbone
 from .backbones.resnet_backbone import ResNetBackboneConfig
@@ -87,6 +87,23 @@ class RTDETR(BaseModel):
             f"Created RT-DETR model with backbone {self.backbone.type} and head {self.head.type}"
             # f"\n Feature channels: {self.backbone.get_feature_channels()}"
         )
+
+    def update_head_conf(self, num_classes: int = None, special_classes: Dict[str, int] = None) -> None:
+        changed = False
+        if num_classes is not None:
+            self.config.num_classes = num_classes
+            self.head.config.num_classes = num_classes
+            changed = True
+
+        if special_classes is not None:
+            line_class_id = special_classes.get("line_class_id", None)
+            if line_class_id is not None:
+                self.config.line_class_id = line_class_id
+                self.head.config.line_class_id = line_class_id
+                changed = True
+
+        if changed:
+            self.head.create_class_heads()
 
     def infer(self, images, targets, **kwargs):
         out = self.forward(images, **kwargs)

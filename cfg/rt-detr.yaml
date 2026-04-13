@@ -23,7 +23,7 @@ hidden_dim_out_layers: 256
 image_size: 224
 line_class_id: -1
 line_loss_coef: 5.0
-num_classes: 11
+num_classes: -1
 num_decoder_layers: 2
 num_deformable_points: 4
 num_queries: 40

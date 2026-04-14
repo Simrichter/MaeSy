@@ -1,8 +1,6 @@
 import shutil
 from dataclasses import dataclass
-from typing import Optional
 
-# import imgaug
 import torch
 from torch.utils.data import DataLoader
 from pathlib import Path
@@ -12,7 +10,6 @@ from tqdm import tqdm
 
 from maesy.evaluation.inferer import Inferer
 # Import models
-from maesy.model import DETR, DETRConfig, RTDETR, RTDETRConfig
 from maesy.model_tools import replace_bn_with_frozenbn, CheckpointHandler, read_yaml
 from maesy.model_tools.model_factory import create_model_from_config, known_architectures, create_model_from_checkpoint
 
@@ -21,7 +18,7 @@ from maesy.training import DetectionTrainer, TrainingConfig
 from maesy.training.utils import collate_detection_fn
 
 # Import dataset
-from maesy.dataset import ObjectDetectionDataset, UnlabeledDataset, MaesyDataset
+from maesy.dataset import UnlabeledDataset, MaesyDataset # TODO Move unlabeled dataset to MaesyDataset(Unlabeled=True)
 
 
 @dataclass

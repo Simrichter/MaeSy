@@ -8,6 +8,15 @@ from torchvision.models import resnet50, ResNet50_Weights, resnet18, ResNet18_We
 
 @dataclass
 class ResNetBackboneConfig:
+    """
+        Config class for ResNet backbones
+
+        Args:
+            :param version: ResNet version ('resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152')
+            :param image_size: Input image size (assumed square)
+            :param pretrained: Whether to use pre-trained weights
+            :param feature_scales: Specify which feature scale levels to calculate and return during forward pass
+        """
     version: str = "resnet50"
     image_size: int = 224
     pretrained: bool = True
@@ -21,9 +30,7 @@ class ResNetBackbone(nn.Module):
         Initialize ResNet backbone.
 
         Args:
-            :param version: ResNet version ('resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152')
-            :param image_size: Input image size (assumed square)
-            :param remove_layers: Number of layers to remove from the end (default: 1, removes the classification layer but keeps global average pooling)
+            :param config: ResNetBackboneConfig class that holds all necessary parameters
         """
         super().__init__()
         self.config = config
@@ -47,14 +54,12 @@ class ResNetBackbone(nn.Module):
             "resnet152": resnet152,
         }
         if config.version not in constructors:
-            raise ValueError(f"Unsupported ResNet version for RT-DETR: {config.version}")
+            raise ValueError(f"Unsupported ResNet version: {config.version}")
 
         self.calc_c3 = "c3" in self.config.feature_scales or "c4" in self.config.feature_scales or "c5" in self.config.feature_scales or "c6" in self.config.feature_scales
         self.calc_c4 = "c4" in self.config.feature_scales or "c5" in self.config.feature_scales or "c6" in self.config.feature_scales
         self.calc_c5 = "c5" in self.config.feature_scales or "c6" in self.config.feature_scales
         self.calc_c6 = "c6" in self.config.feature_scales
-
-        # self.return_idx = sorted([int(scale[1])-3 for scale in self.config.feature_scales]) # indices to select which feature_scales are returned
 
         self.feature_dim: Dict[str, int] = {"c3":128, "c4":256, "c5":512} if self.config.version in {"resnet18", "resnet34"} else {"c3":512, "c4":1024, "c5":2048}
 

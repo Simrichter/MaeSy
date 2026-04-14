@@ -195,12 +195,12 @@ class BaseTrainer(ABC):
             if self.config.use_amp:
                 self.scaler.scale(loss).backward()
                 self.scaler.unscale_(self.optimizer)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
+                total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
+                total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
                 self.optimizer.step()
 
             # Update progress bar
@@ -215,6 +215,7 @@ class BaseTrainer(ABC):
                 data = {f"train/{k}": v.item() for k, v in losses.items() if not k.startswith('img_')}
                 data['train/lr'] = self.optimizer.param_groups[-1]['lr']
                 data['train/lr_bbone'] = self.optimizer.param_groups[0]['lr']
+                data['train/gradient_norm'] = total_norm.item()
                 if self.enable_wandb: self.wandb_run.log(data=data, step=self.global_step, commit=True)
 
             self.global_step += 1
@@ -267,6 +268,8 @@ class BaseTrainer(ABC):
         print(f"Training samples: {len(self.train_loader.dataset)}")
         if self.val_loader:
             print(f"Validation samples: {len(self.val_loader.dataset)}")
+
+        # torch.autograd.set_detect_anomaly(True) # TODO: Make opt-in (as this slows down training massively)
 
         for epoch in range(self.current_epoch, self.config.num_epochs):
             self.current_epoch = epoch

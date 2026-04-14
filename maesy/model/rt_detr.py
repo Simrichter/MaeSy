@@ -5,6 +5,7 @@ from typing import Tuple, Dict
 
 from .backbones import ResNetBackbone
 from .backbones.resnet_backbone import ResNetBackboneConfig
+from .backbones.swin_backbone import SWINBackboneConfig, SWINBackbone
 from .base_model import BaseModel
 from .heads import RTDETRHead, RTDETRHeadConfig
 
@@ -13,7 +14,7 @@ from .heads import RTDETRHead, RTDETRHeadConfig
 class RTDETRConfig:
     type: str = "RT-DETR"
     image_size: int = 224
-    resnet_version: str = "resnet50"
+    backbone_version: str = "resnet50"
     backbone_pretrained: bool = True
     feature_scales: Tuple[str, str, str] = ("c3", "c4", "c5")
 
@@ -52,13 +53,24 @@ class RTDETR(BaseModel):
         super().__init__()
         self.config = config
 
-        bbone_conf = ResNetBackboneConfig(
-            version=self.config.resnet_version,
-            image_size=self.config.image_size,
-            pretrained=self.config.backbone_pretrained,
-            feature_scales=self.config.feature_scales
-        )
-        self.backbone = ResNetBackbone(bbone_conf)
+        if self.config.backbone_version.startswith("resnet"):
+            bbone_conf = ResNetBackboneConfig(
+                version=self.config.backbone_version,
+                image_size=self.config.image_size,
+                pretrained=self.config.backbone_pretrained,
+                feature_scales=self.config.feature_scales
+            )
+            self.backbone = ResNetBackbone(bbone_conf)
+        elif self.config.backbone_version.startswith("swin"):
+            bbone_conf = SWINBackboneConfig(
+                version=self.config.backbone_version,
+                image_size=self.config.image_size,
+                pretrained=self.config.backbone_pretrained,
+                feature_scales=self.config.feature_scales
+            )
+            self.backbone = SWINBackbone(bbone_conf)
+        else:
+            raise ValueError(f"Unknown backbone version {self.config.backbone_version}")
 
         head_conf = RTDETRHeadConfig(
                 feature_channels=self.backbone.get_feature_channels(), # 512, 1024, 2048

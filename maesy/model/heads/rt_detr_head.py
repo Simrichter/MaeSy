@@ -303,7 +303,7 @@ class RTDETRHead(nn.Module):
     @staticmethod
     def _inverse_sigmoid(x: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
         x = x.clamp(min=eps, max=1.0 - eps)
-        return torch.log(x / (1.0 - x))
+        return torch.log(x) - torch.log(1.0 - x) # Division-safe version of torch.log(x / (1.0 - x))
 
     def _build_positional_encoding(self, feat: torch.Tensor) -> torch.Tensor:
         b, c, h, w = feat.shape
@@ -446,6 +446,8 @@ class RTDETRHead(nn.Module):
         memory: torch.Tensor,
         spatial_shapes: List[Tuple[int, int]],
     ) -> Dict[str, List[torch.Tensor]]:
+        reference_boxes = reference_boxes.detach() # Detach from gradient graph due to instability issues.
+
         reference_logits = self._inverse_sigmoid(reference_boxes)
         line_reference_logits = self._inverse_sigmoid(reference_boxes)
 

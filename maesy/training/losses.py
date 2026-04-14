@@ -382,7 +382,7 @@ class DetectionLoss(BaseLoss):
 
         batch_size, num_queries = pred_logits.shape[:2]
         # Flatten to compute cost matrices
-        out_prob = pred_logits.flatten(0, 1).softmax(-1)  # [B*num_queries, num_classes + 1]
+        out_prob = pred_logits.float().flatten(0, 1).log_softmax(-1)  # [B*num_queries, num_classes + 1]
         out_bbox = pred_boxes.flatten(0, 1)  # [B*num_queries, 4]
         indices = []
 
@@ -433,10 +433,16 @@ class DetectionLoss(BaseLoss):
             if cost_giou.shape[1] > cost_giou.shape[0]:
                 raise ValueError(f"Hungarian matching failed, more target boxes than predictions. Cost GIoU shape: {cost_giou.shape}")
 
-            # print(f"Cost matrices for batch item {i}:")
-            # print(cost_class.mean())
-            # print(cost_bbox.mean())
-            # print(cost_giou.mean())
+            def _check(name, x):
+                if not torch.isfinite(x).all():
+                    print(f"\n🚨 {name} has NaNs/Infs")
+                    print("min:", x.min().item())
+                    print("max:", x.max().item())
+                    raise RuntimeError(name)
+
+            _check("cost_class", cost_class)
+            _check("cost_bbox", cost_bbox)
+            _check("cost_giou", cost_giou)
 
             # Final cost matrix
             C = self.bbox_loss_coef * cost_bbox + self.line_loss_coef * cost_line + self.class_loss_coef * cost_class + self.giou_loss_coef * cost_giou

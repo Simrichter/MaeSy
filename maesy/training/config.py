@@ -16,6 +16,7 @@ class TrainingConfig:
     learning_rate: float = 1e-4
     backbone_learning_rate: float = learning_rate
     weight_decay: float = 1e-4
+    label_smoothing: float = 0.0
     warmup_epochs: int = 5
     criterion: str = "None"  # e.g., DetectionLoss, MaskedMSE, etc.
     

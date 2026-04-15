@@ -42,6 +42,7 @@ class DetectionLoss(BaseLoss):
             class_loss_coef: float = 1.0,
             giou_loss_coef: float = 2.0,
             eos_coef: float = 0.1,  # Weight for no-object class
+            label_smoothing: float = 0.0,
             aux_loss_coef: float = 1.0,
             line_loss_coef: float = 2.0,
             dn_loss_coef: float = 1.0,
@@ -58,6 +59,7 @@ class DetectionLoss(BaseLoss):
             :param class_loss_coef: Coefficient for classification loss
             :param giou_loss_coef: Coefficient for GIoU loss
             :param eos_coef: Coefficient for no-object class
+            :param label_smoothing: Value for label smoothing in cross-entropy loss
             :param aux_loss_coef: Coefficient for weighting of auxiliary loss
             :param line_loss_coef: Coefficient for loss of line-detection head
             :param dn_loss_coef: Coefficient for auxiliary denoising loss
@@ -85,6 +87,8 @@ class DetectionLoss(BaseLoss):
         # empty_weight = torch.softmax(empty_weight, dim=-1) # Normalize to sum to 1 (experimental??)
         empty_weight = empty_weight.to(self.device)
         self.register_buffer('empty_weight', empty_weight)
+
+        self.label_smoothing = label_smoothing
 
     def reset_metrics(self):
         self.total_loss = 0.0
@@ -164,7 +168,7 @@ class DetectionLoss(BaseLoss):
             pred_logits.transpose(1, 2),
             target_classes,
             weight=self.empty_weight,
-            label_smoothing=0.08 # TODO: Make controllable through config
+            label_smoothing=self.label_smoothing
         )
 
         num_matched_targets = target_classes_o.shape[0]

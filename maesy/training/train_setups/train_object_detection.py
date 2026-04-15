@@ -119,12 +119,13 @@ def train_vit_detector(
     training_config = ODTrainingConfig(
         batch_size=64,
         num_epochs=500,
-        learning_rate=1e-4 if freeze else 1e-4,  # Higher LR when only training head
-        backbone_learning_rate=0.0 if freeze else 1e-5,  # Lower LR for backbone if fine-tuning, otherwise 0
+        learning_rate=1e-4 if freeze else 5e-5,  # Higher LR when only training head
+        backbone_learning_rate=0.0 if freeze else 5e-6,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler="cosine",
-        warmup_epochs=2,
+        warmup_epochs=4,
+        label_smoothing=0.0,
         save_frequency=100,
         log_frequency=50,
         save_dir=output_dir,

@@ -137,7 +137,7 @@ class BaseTrainer(ABC):
             print(f"Warning: Unknown scheduler '{self.config.lr_scheduler}'")
             return None
 
-    def _create_loss(self) -> Optional[BaseLoss]:
+    def _create_loss(self) -> BaseLoss:
         if self.config.criterion == "DetectionLoss":
             model_cfg = getattr(self.model, "config", None)
             loss = DetectionLoss(
@@ -145,6 +145,7 @@ class BaseTrainer(ABC):
                 bbox_loss_coef=getattr(model_cfg, "bbox_loss_coef", 5.0),
                 class_loss_coef=getattr(model_cfg, "class_loss_coef", 1.0),
                 giou_loss_coef=getattr(model_cfg, "giou_loss_coef", 2.0),
+                label_smoothing=self.config.label_smoothing,
                 aux_loss_coef=getattr(model_cfg, "aux_loss_coef", 0.5),
                 line_loss_coef=getattr(model_cfg, "line_loss_coef", 2.0),
                 dn_loss_coef=getattr(model_cfg, "dn_loss_coef", 1.0),
@@ -166,8 +167,7 @@ class BaseTrainer(ABC):
             from .losses import ClassificationLoss
             return ClassificationLoss()
         else:
-            print(f"Warning: Unknown loss '{self.config.criterion}'")
-            return None
+            raise ValueError(f"Warning: Unknown loss '{self.config.criterion}'")
 
     def forward_model(self, images: torch.Tensor, targets: Optional[torch.Tensor], val: bool) -> Dict[str, torch.Tensor]:
         """

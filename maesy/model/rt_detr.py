@@ -34,6 +34,7 @@ class RTDETRConfig:
     denoising_box_noise_scale: float = 0.4
     enable_line_detection: bool = False
     line_class_id: int = -1
+    ellipse_class_id: int = -1
     enable_auxiliary_losses: bool = True
 
     # Additional settings
@@ -90,6 +91,7 @@ class RTDETR(BaseModel):
                 denoising_box_noise_scale=config.denoising_box_noise_scale,
                 enable_line_detection=config.enable_line_detection,
                 line_class_id=config.line_class_id,
+                ellipse_class_id=config.ellipse_class_id,
                 enable_auxiliary_losses=config.enable_auxiliary_losses,
             )
 
@@ -101,6 +103,14 @@ class RTDETR(BaseModel):
         )
 
     def update_head_conf(self, num_classes: int = None, special_classes: Dict[str, int] = None) -> None:
+        """
+            Update the configs with new number of classes or special class IDs and create a new classification head
+
+            Args:
+                :param num_classes: Number of classes
+                :param special_classes: Dict of special class IDs to be changed. If no change desired leave entry None (Or entire dict)
+
+        """
         changed = False
         if num_classes is not None:
             self.config.num_classes = num_classes
@@ -112,6 +122,12 @@ class RTDETR(BaseModel):
             if line_class_id is not None:
                 self.config.line_class_id = line_class_id
                 self.head.config.line_class_id = line_class_id
+                changed = True
+
+            ellipse_class_id = special_classes.get("ellipse_class_id", None)
+            if ellipse_class_id is not None:
+                self.config.ellipse_class_id = ellipse_class_id
+                self.head.config.ellipse_class_id = ellipse_class_id
                 changed = True
 
         if changed:

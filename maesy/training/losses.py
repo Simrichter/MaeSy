@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, List
+from typing import Dict, List, Optional
 from scipy.optimize import linear_sum_assignment
 from abc import ABC, abstractmethod
 
@@ -33,7 +33,10 @@ class DetectionLoss(BaseLoss):
     total_loss_ce: float
     total_loss_bbox: float
     total_loss_giou: float
+    total_loss_line: float
+    total_loss_ellipse: float
     total_loss_aux: float
+    total_loss_dn: float
 
     def __init__(
             self,
@@ -45,9 +48,13 @@ class DetectionLoss(BaseLoss):
             label_smoothing: float = 0.0,
             aux_loss_coef: float = 1.0,
             line_loss_coef: float = 2.0,
+            ellipse_loss_coef: float = 2.0,
+            ellipse_frobenius_coef: float = 0.1,
             dn_loss_coef: float = 1.0,
             enable_line_detection: bool = False,
             line_class_id: int = -1,
+            enable_ellipse_detection: bool = False,
+            ellipse_class_id: int = -1,
             device: torch.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu') # TODO: Make this follow commandline-input device
     ):
         """
@@ -62,10 +69,14 @@ class DetectionLoss(BaseLoss):
             :param label_smoothing: Value for label smoothing in cross-entropy loss
             :param aux_loss_coef: Coefficient for weighting of auxiliary loss
             :param line_loss_coef: Coefficient for loss of line-detection head
+            :param ellipse_loss_coef: Coefficient for loss of ellipse-detection head
+            :param ellipse_frobenius_coef: Coefficient to downscale frobenius norm (shape-loss) of ellipses
             :param dn_loss_coef: Coefficient for auxiliary denoising loss
-            :param enable_line_detection: Wether line detection head is enabled
+            :param enable_line_detection: Whether line detection head is enabled
             :param line_class_id: The class id of the lines
-            :param device: Device to run loss computation on
+            :param enable_ellipse_detection: Whether ellipse detection head is enabled
+            :param ellipse_class_id: The class id of the ellipses
+            :param device: Device to run loss computation on (except from hungarian matching, wich must be CPU)
         """
         super().__init__()
         self.num_classes = num_classes
@@ -74,9 +85,13 @@ class DetectionLoss(BaseLoss):
         self.giou_loss_coef = giou_loss_coef
         self.aux_loss_coef = aux_loss_coef
         self.line_loss_coef = line_loss_coef
+        self.ellipse_loss_coef = ellipse_loss_coef
+        self.frobenius_coef = ellipse_frobenius_coef
         self.dn_loss_coef = dn_loss_coef
         self.enable_line_detection = enable_line_detection
         self.line_class_id = line_class_id
+        self.enable_ellipse_detection = enable_ellipse_detection
+        self.ellipse_class_id = ellipse_class_id
 
         self.device = device
 
@@ -91,12 +106,16 @@ class DetectionLoss(BaseLoss):
         self.label_smoothing = label_smoothing
 
     def reset_metrics(self):
+        """
+            Resets all internally accumulated metrics
+        """
         self.total_loss = 0.0
         self.total_loss_ce = 0.0
         self.total_loss_bbox = 0.0
         self.total_loss_giou = 0.0
         self.total_loss_aux = 0.0
         self.total_loss_line = 0.0
+        self.total_loss_ellipse = 0.0
         self.total_loss_dn = 0.0
         self.batch_count = 0
 
@@ -105,32 +124,45 @@ class DetectionLoss(BaseLoss):
             pred_logits: torch.Tensor,
             pred_boxes: torch.Tensor,
             targets: List[Dict[str, torch.Tensor]],
-            pred_lines: torch.Tensor | None = None,
-            indices: List[tuple[torch.Tensor, torch.Tensor]] | None = None,
+            pred_lines: Optional[torch.Tensor] = None,
+            pred_ellipses: Optional[torch.Tensor] = None,
+            indices: Optional[List[tuple[torch.Tensor, torch.Tensor]]]= None,
     ) -> Dict[str, torch.Tensor]:
         if indices is None:
             predictions = {"pred_logits": pred_logits, "pred_boxes": pred_boxes}
             if pred_lines is not None:
                 predictions["pred_lines"] = pred_lines
+            if pred_ellipses is not None:
+                predictions["pred_ellipses"] = pred_ellipses
             indices = self.match_predictions_to_targets(predictions, targets) # List[Tuple[Tensor, Tensor]]
 
         all_target_boxes = []
         all_target_lines = []
+        all_target_ellipses = []
         all_target_labels = []
         all_is_line = []
+        all_is_ellipse = []
 
         for t, (_, tgt_idx) in zip(targets, indices):
             num_boxes = len(t['boxes'])
+            num_lines = len(t['line_points']) if 'line_points' in t else 0
+            num_ellipses = len(t['ellipses']) if 'ellipses' in t else 0
+
+            assert len(tgt_idx) == num_boxes+num_lines+num_ellipses, "Length of matched target indices must equal total number of targets (boxes + lines + ellipses) for this target"
 
             # Identify which matched targets are lines
-            is_line = tgt_idx >= num_boxes
-            is_box = ~is_line
+            is_line = (tgt_idx >= num_boxes) & (tgt_idx < num_boxes + num_lines)
+            is_ellipse = tgt_idx >= (num_boxes + num_lines)
+            is_box = ~(is_line | is_ellipse)
 
             # BOX indices
             box_idx = tgt_idx[is_box]
 
-            # LINE indices (shift back!)
+            # LINE indices (shifted back!)
             line_idx = tgt_idx[is_line] - num_boxes
+
+            # ELLIPSE indices (shifted back!)
+            ellipse_idx = tgt_idx[is_ellipse] - (num_boxes + num_lines)
 
             # Boxes
             if is_box.any():
@@ -140,20 +172,25 @@ class DetectionLoss(BaseLoss):
             if is_line.any():
                 all_target_lines.append(t['line_points'][line_idx])
 
+            if is_ellipse.any():
+                all_target_ellipses.append(t['ellipses'][ellipse_idx])
+
             # Labels (already correct)
             all_target_labels.append(t['labels'][tgt_idx])
 
             # Mask
             all_is_line.append(is_line)
+            all_is_ellipse.append(is_ellipse)
 
         target_classes_o = torch.cat(all_target_labels)
         line_mask = torch.cat(all_is_line)
+        ellipse_mask = torch.cat(all_is_ellipse)
 
         target_boxes = torch.cat(all_target_boxes) if all_target_boxes else torch.empty(0, 4, device=pred_logits.device)
         target_lines = torch.cat(all_target_lines) if all_target_lines else torch.empty(0, 4, device=pred_logits.device)
+        target_ellipses = torch.cat(all_target_ellipses) if all_target_ellipses else torch.empty(0, 5, device=pred_logits.device)
 
         # Compute classification loss
-        # target_classes_o = torch.cat([t['labels'][J] for t, (_, J) in zip(targets, indices)])
         target_classes = torch.full(
             pred_logits.shape[:2],
             self.num_classes, # No-Object class
@@ -176,11 +213,13 @@ class DetectionLoss(BaseLoss):
             # Compute bbox losses
             src_boxes = pred_boxes[idx] # Selecting the boxes selected by the hungarian matching
             src_lines = pred_lines[idx] if pred_lines is not None else None
+            src_ellipses = pred_ellipses[idx] if pred_ellipses is not None else None
             # This selected the two chosen target boxes in correct order
 
-            box_mask = ~line_mask
+            box_mask = ~ (line_mask | ellipse_mask)
             num_box_matches = int(box_mask.sum().item())
             num_line_matches = int(line_mask.sum().item())
+            num_ellipse_matches = int(ellipse_mask.sum().item())
 
             if box_mask.any():
                 src_boxes_for_loss = src_boxes[box_mask]
@@ -225,16 +264,36 @@ class DetectionLoss(BaseLoss):
                     loss_line = torch.tensor(0.0, device=pred_logits.device)
             else:
                 loss_line = torch.tensor(0.0, device=pred_logits.device)
+
+            if ellipse_mask.any() and src_ellipses is not None:
+                pred = src_ellipses[ellipse_mask]
+                gt = target_ellipses
+                assert pred.shape[0] == gt.shape[0]
+
+
+                center_loss = torch.abs(pred[:, :2] - gt[:, :2]).sum(dim=-1)
+                shape_loss = self.frobenius_per_sample(pred[:, 2:], gt[:, 2:])
+                loss_ellipse = center_loss + self.frobenius_coef * shape_loss
+
+                if num_ellipse_matches > 0:
+                    loss_ellipse = loss_ellipse.sum() / num_ellipse_matches
+                else:
+                    loss_ellipse = torch.tensor(0.0, device=pred_logits.device)
+            else:
+                loss_ellipse = torch.tensor(0.0, device=pred_logits.device)
+
         else:
             loss_bbox = torch.tensor(0.0, device=pred_logits.device)
             loss_giou = torch.tensor(0.0, device=pred_logits.device)
             loss_line = torch.tensor(0.0, device=pred_logits.device)
+            loss_ellipse = torch.tensor(0.0, device=pred_logits.device)
 
         return {
             'loss_ce': loss_ce * self.class_loss_coef,
             'loss_bbox': loss_bbox * self.bbox_loss_coef,
             'loss_giou': loss_giou * self.giou_loss_coef,
             'loss_line': loss_line * self.line_loss_coef,
+            'loss_ellipse': loss_ellipse * self.ellipse_loss_coef,
         }
 
     def _compute_denoising_loss(self, predictions: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -264,7 +323,14 @@ class DetectionLoss(BaseLoss):
             line_mask = labels_valid == self.line_class_id
         else:
             line_mask = torch.zeros_like(labels_valid, dtype=torch.bool)
-        box_mask = ~line_mask
+
+        if self.enable_line_detection and self.ellipse_class_id >= 0:
+            ellipse_class_mask = labels_valid == self.ellipse_class_id
+        else:
+            ellipse_class_mask = torch.zeros_like(labels_valid, dtype=torch.bool)
+
+        # box_mask = ~line_mask
+        box_mask = ~(line_mask | ellipse_class_mask)
 
         if box_mask.any():
             loss_bbox = F.l1_loss(boxes_valid[box_mask], target_boxes_valid[box_mask])
@@ -301,18 +367,20 @@ class DetectionLoss(BaseLoss):
         Compute loss.
         
         Args:
-            predictions: Model predictions with 'pred_logits' and 'pred_boxes'
+            predictions: Model predictions with 'pred_logits', 'pred_boxes' and optionally pred_lines and pred_ellipses
             targets: Ground truth targets
             
         Returns:
             Dictionary of losses
         """
         main_indices = self.match_predictions_to_targets(
-            {
-                'pred_logits': predictions['pred_logits'],
-                'pred_boxes': predictions['pred_boxes'],
-                'pred_lines': predictions.get('pred_lines'),
-            },
+            # {
+            #     'pred_logits': predictions['pred_logits'],
+            #     'pred_boxes': predictions['pred_boxes'],
+            #     'pred_lines': predictions.get('pred_lines'),
+            #     'pred_ellipses': predictions.get('pred_ellipses')
+            # },
+            predictions,
             targets,
         )
         losses = self._compute_single_output_losses(
@@ -328,8 +396,7 @@ class DetectionLoss(BaseLoss):
         for aux_idx, aux_prediction in enumerate(aux_outputs):
             if aux_prediction['pred_logits'].shape[:2] != predictions['pred_logits'].shape[:2]:
                 raise ValueError(
-                    "Auxiliary outputs must use the same [batch, num_queries] shape as main predictions to "
-                    "reuse Hungarian assignments."
+                    "Auxiliary outputs must use the same [batch, num_queries] shape as main predictions to reuse Hungarian assignments."
                 )
             aux_losses = self._compute_single_output_losses(
                 pred_logits=aux_prediction['pred_logits'],
@@ -350,7 +417,7 @@ class DetectionLoss(BaseLoss):
         losses.update(dn_loss)
 
         losses['loss_aux'] = aux_total
-        losses['loss'] = losses['loss_ce'] + losses['loss_bbox'] + losses['loss_giou'] + losses['loss_line'] + aux_total + losses['loss_dn']
+        losses['loss'] = losses['loss_ce'] + losses['loss_bbox'] + losses['loss_giou'] + losses['loss_line'] + losses['loss_ellipse'] + aux_total + losses['loss_dn']
 
         # Log the sums of the losses per epoch
         self.total_loss += losses['loss'].item()
@@ -359,6 +426,7 @@ class DetectionLoss(BaseLoss):
         self.total_loss_giou += losses['loss_giou'].item()
         self.total_loss_aux += losses['loss_aux'].item()
         self.total_loss_line += losses['loss_line'].item()
+        self.total_loss_ellipse += losses['loss_ellipse'].item()
         self.total_loss_dn += losses['loss_dn'].item()
         self.batch_count += 1
 
@@ -371,7 +439,85 @@ class DetectionLoss(BaseLoss):
                 "total_loss_giou": self.total_loss_giou / self.batch_count,
                 "total_loss_aux": self.total_loss_aux / self.batch_count,
                 "total_loss_line": self.total_loss_line / self.batch_count,
+                "total_loss_ellipse": self.total_loss_ellipse / self.batch_count,
                 "total_loss_dn": self.total_loss_dn / self.batch_count}
+
+    @staticmethod
+    def build_A_flat(ellipse_logits: torch.Tensor) -> torch.Tensor:
+        """
+            Calculates cholesky decomposition matrix L from the raw ellipse prediction outputs and reconstructs the A matrix.
+            Since A is symmetric, only the values of the upper triangular matrix are returned.
+            Softplus is applied to L_11 and L_22 logits to ensure positivity.
+
+            Args:
+                 :param ellipse_logits: Tensor containing the raw parameterization of the ellipses. Shape: [N, 5]
+        """
+        # e: [N, 5]
+        a, b, c = ellipse_logits[:, 2], ellipse_logits[:, 3], ellipse_logits[:, 4]
+
+        l11 = F.softplus(a) + 1e-6
+        l21 = b
+        l22 = F.softplus(c) + 1e-6
+
+        # construct A explicitly (2x2)
+        A11 = l11 ** 2
+        A12 = l11 * l21
+        A22 = l21 ** 2 + l22 ** 2
+
+        # symmetric → store as 3-vector instead of 4
+        # [A11, A12, A22]
+        A_flat = torch.stack([A11, A12, A22], dim=-1)  # [N, 3]
+
+        return A_flat
+
+    @staticmethod
+    def frobenius_per_sample(Ap: torch.Tensor, At: torch.Tensor) -> torch.Tensor:
+        """
+            Computes the Frobenius distance between two matrices of shape [K, 3]
+            The tensors contain the upper triangular part of the A matrices of a cholesky decomposition for K predictions/targets.
+            Ap, At: [K, 3] = [A11, A12, A22]
+
+            Args:
+                :param Ap: Predicted A matrices of shape [K, 3]
+                :param At: Target A matrices of shape [K, 3]
+
+            Returns:
+                Tensor of shape [K,] containing the Frobenius distance between each pair of predicted and target A matrices.
+        """
+        w = 2 ** 0.5
+        Ap = torch.stack([Ap[:, 0], w * Ap[:, 1], Ap[:, 2]], dim=-1)
+        At = torch.stack([At[:, 0], w * At[:, 1], At[:, 2]], dim=-1)
+
+        diff = Ap - At
+        return torch.norm(diff, dim=-1)  # [K]
+
+    @staticmethod
+    def _pairwise_frobenius(Ap, At) -> torch.Tensor:
+        """
+            Compute pairwise Frobenius distances between two sets of matrices.
+            Takes the A matrices of ellipses only, no center coordinates.
+            A is represented only by A_11, A_12, A_22, so the input matrices have shape [N, 3] and [M, 3] respectively.
+
+            Args:
+                :param Ap: Predicted A matrices of shape [N, 3]
+                :param At: Target A matrices of shape [M, 3]
+
+            Returns:
+                Pairwise Frobenius distances [N, M]
+        """
+        w = 2 ** 0.5 # sqrt(2) scaling factor for correct calculation
+        Ap_scaled = torch.stack([Ap[:, 0], w * Ap[:, 1], Ap[:, 2]], dim=-1)
+        At_scaled = torch.stack([At[:, 0], w * At[:, 1], At[:, 2]], dim=-1)
+        # squared norms
+        Ap_norm = (Ap_scaled**2).sum(dim=1, keepdim=True)      # [N, 1]
+        At_norm = (At_scaled**2).sum(dim=1).unsqueeze(0)       # [1, M]
+        # inner product
+        prod = Ap @ At.t()                              # [N, M]
+        # squared distance
+        dist2 = Ap_norm + At_norm - 2 * prod             # [N, M]
+        # numerical stability
+        dist2 = torch.clamp(dist2, min=0.0)
+        return torch.sqrt(dist2 + 1e-8)
 
     @torch.no_grad()
     def match_predictions_to_targets(
@@ -379,10 +525,14 @@ class DetectionLoss(BaseLoss):
             predictions: Dict[str, torch.Tensor],
             targets: List[Dict[str, torch.Tensor]]
     ) -> List[tuple[torch.Tensor, torch.Tensor]]:
-        """Perform Hungarian matching between predictions and targets."""
+        """
+            Perform Hungarian matching between predictions and targets.
+            Expects boxes in format (cx cy w h), lines in format (x y x y) and ellipses in format (cx cy a_11 a_12 a_22)
+        """
         pred_logits = predictions['pred_logits']  # [B, num_queries, num_classes + 1]
         pred_boxes = predictions['pred_boxes']  # [B, num_queries, 4]
         pred_lines = predictions.get('pred_lines')
+        pred_ellipses = predictions.get('pred_ellipses')
 
         batch_size, num_queries = pred_logits.shape[:2]
         # Flatten to compute cost matrices
@@ -392,9 +542,10 @@ class DetectionLoss(BaseLoss):
 
 
         for i, target in enumerate(targets):
-            tgt_ids = target['labels'] # [num_target_boxes+num_target_lines,]
+            tgt_ids = target['labels'] # [num_target_boxes+num_target_lines+num_ellipses,]
             tgt_bbox = target['boxes'] # [num_target_boxes, 4]
             tgt_lines = target.get('line_points') # [num_target_lines, 4]
+            tgt_ellipses = target.get('ellipses') # [num_ellipses, 5]
 
             if len(tgt_ids) == 0:
                 indices.append((torch.tensor([], dtype=torch.int64), torch.tensor([], dtype=torch.int64)))
@@ -409,7 +560,7 @@ class DetectionLoss(BaseLoss):
                 and tgt_lines is not None
                 # and len(tgt_lines) == len(tgt_ids)
             ):
-                assert tgt_ids.shape[0] == len(tgt_bbox) + len(tgt_lines) # Check if assumption of labels including ALL classes is fulfilled
+                # assert tgt_ids.shape[0] == len(tgt_bbox) + len(tgt_lines) + len(tgt_ellipses) # Check if assumption of labels including ALL classes is fulfilled
                 pred_l = pred_lines[i]  # [num_queries, 4]
                 tgt_l = tgt_lines  # [num_lines, 4]
 
@@ -418,8 +569,20 @@ class DetectionLoss(BaseLoss):
                 dist1 = torch.cdist(pred_l, tgt_l, p=1)
                 dist2 = torch.cdist(pred_l, tgt_l_swapped, p=1)
 
-                cost_line[:, len(tgt_bbox):] = torch.min(dist1, dist2)
+                cost_line[:, len(tgt_bbox):len(tgt_bbox)+len(tgt_lines)] = torch.min(dist1, dist2)
                 # cost_line[:, len(tgt_bbox):] = torch.cdist(pred_lines[i], tgt_lines, p=1)
+
+            cost_ellipse = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)
+            if (
+                self.enable_ellipse_detection
+                and self.ellipse_class_id >= 0
+                and pred_ellipses is not None
+                and tgt_ellipses is not None
+            ):
+                pred_e = pred_ellipses[i]  # [num_queries, 5]
+                tgt_e = tgt_ellipses  # [num_ellipses, 5]
+                len_tgt_lines = 0 if tgt_lines is None else len(tgt_lines)
+                cost_ellipse[:, len(tgt_bbox)+len_tgt_lines:] = torch.cdist(pred_e[:, :2], tgt_e[:, :2], p=1) + self.frobenius_coef * self._pairwise_frobenius(pred_e[:, 2:], tgt_e[:, 2:])
 
             # L1 cost bboxes
             cost_bbox = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)
@@ -449,7 +612,7 @@ class DetectionLoss(BaseLoss):
             _check("cost_giou", cost_giou)
 
             # Final cost matrix
-            C = self.bbox_loss_coef * cost_bbox + self.line_loss_coef * cost_line + self.class_loss_coef * cost_class + self.giou_loss_coef * cost_giou
+            C = self.bbox_loss_coef * cost_bbox + self.line_loss_coef * cost_line + self.ellipse_loss_coef * cost_ellipse + self.class_loss_coef * cost_class + self.giou_loss_coef * cost_giou
             C = C.cpu().numpy()
             # Check for invalid entries in C
             if np.isnan(C).any() or np.isinf(C).any() or np.isnan(C).any():
@@ -460,14 +623,16 @@ class DetectionLoss(BaseLoss):
 
         return indices
 
-    def _get_src_permutation_idx(self, indices):
+    @staticmethod
+    def _get_src_permutation_idx(indices):
         """Get source permutation indices."""
         batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
         src_idx = torch.cat([src for (src, _) in indices])
         return batch_idx, src_idx
 
 # TODO: Move this util stuff to bounding_box.py
-    def _box_cxcywh_to_xyxy(self, boxes: torch.Tensor) -> torch.Tensor:
+    @staticmethod
+    def _box_cxcywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
         """Convert boxes from [cx, cy, w, h] to [x1, y1, x2, y2]."""
         cx, cy, w, h = boxes.unbind(-1)
         x1 = cx - 0.5 * w
@@ -476,7 +641,8 @@ class DetectionLoss(BaseLoss):
         y2 = cy + 0.5 * h
         return torch.stack([x1, y1, x2, y2], dim=-1)
 
-    def _generalized_box_iou(self, boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+    @staticmethod
+    def _generalized_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
         """
         Compute Generalized IoU.
         

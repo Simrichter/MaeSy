@@ -27,6 +27,8 @@ class RTDETRHeadConfig:
     denoising_box_noise_scale: float = 0.4
     enable_line_detection: bool = False
     line_class_id: int = -1
+    enable_ellipse_detection: bool = False
+    ellipse_class_id: int = -1
     enable_auxiliary_losses: bool = True
 
 
@@ -286,12 +288,10 @@ class RTDETRHead(nn.Module):
         self.decoder_box_heads = nn.ModuleList(
             [MLP(config.embed_dim, config.hidden_dim_out_layers, 4) for _ in range(config.num_decoder_layers)]
         )
-        if config.enable_line_detection:
-            self.decoder_line_heads = nn.ModuleList(
-                [MLP(config.embed_dim, config.hidden_dim_out_layers, 4) for _ in range(config.num_decoder_layers)]
-            )
-        else:
-            self.decoder_line_heads = None
+
+        self.decoder_line_heads = nn.ModuleList([MLP(config.embed_dim, config.hidden_dim_out_layers, 4) for _ in range(config.num_decoder_layers)]) if config.enable_line_detection else None
+
+        self.decoder_ellipse_heads = nn.ModuleList([MLP(config.embed_dim, config.hidden_dim_out_layers, 5) for _ in range(config.num_decoder_layers)]) if config.enable_ellipse_detection else None
 
         if config.enable_denoising and config.denoising_num_queries > 0:
             self.dn_query_content = nn.Embedding(config.denoising_num_queries, config.embed_dim)
@@ -449,11 +449,13 @@ class RTDETRHead(nn.Module):
         reference_boxes = reference_boxes.detach() # Detach from gradient graph due to instability issues.
 
         reference_logits = self._inverse_sigmoid(reference_boxes)
-        line_reference_logits = self._inverse_sigmoid(reference_boxes)
+        line_reference_logits = reference_logits # self._inverse_sigmoid(reference_boxes) TODO: Maybe use 3 dense heads instead??
+        ellipse_reference_logits = reference_logits
 
         logits_per_layer: List[torch.Tensor] = []
         boxes_per_layer: List[torch.Tensor] = []
         lines_per_layer: List[torch.Tensor] = []
+        ellipses_per_layer: List[torch.Tensor] = []
 
         for layer_idx, (layer, cls_head, box_head) in enumerate(zip(self.decoder_layers, self.decoder_class_heads, self.decoder_box_heads)):
             query_pos = self.reference_point_proj(reference_boxes[..., :2])
@@ -477,6 +479,12 @@ class RTDETRHead(nn.Module):
                 lines_per_layer.append(pred_lines)
                 line_reference_logits = tmp_line_pred.detach() + line_reference_logits.detach()
 
+            if self.decoder_ellipse_heads is not None:
+                tmp_ellipse_pred = self.decoder_ellipse_heads[layer_idx](query)
+                pred_ellipses = (tmp_ellipse_pred + ellipse_reference_logits).sigmoid()
+                ellipses_per_layer.append(pred_ellipses)
+                ellipse_reference_logits = tmp_ellipse_pred.detach() + ellipse_reference_logits.detach()
+
             reference_logits = tmp_box_pred.detach() + reference_logits.detach()
             reference_boxes = pred_boxes.detach()
 
@@ -486,9 +494,22 @@ class RTDETRHead(nn.Module):
         }
         if len(lines_per_layer) > 0:
             decoded["pred_lines"] = lines_per_layer
+
+        if len(ellipses_per_layer) > 0:
+            decoded["pred_ellipses"] = ellipses_per_layer
+
         return decoded
 
     def forward(self, features: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
+        """
+            Forward pass of the rt-detr head
+
+            Args:
+                :param features: Dict that contains the multiscale features from the backbone. Expects B, C, H, W format. Keys should be in the form of c{level} (e.g. c3, c4, c5)
+
+            Returns:
+             outputs: Dict containing raw outputs
+        """
         fused = self._hybrid_encode(features)
         memory, spatial_shapes = self._flatten_memory(fused)
 
@@ -497,6 +518,7 @@ class RTDETRHead(nn.Module):
         logits_per_layer = main_decoded["pred_logits"]
         boxes_per_layer = main_decoded["pred_boxes"]
         lines_per_layer = main_decoded.get("pred_lines", [])
+        ellipses_per_layer = main_decoded.get("pred_ellipses", [])
 
         outputs: Dict[str, Union[torch.Tensor, List[Dict[str, torch.Tensor]]]] = {
             "pred_logits": logits_per_layer[-1],
@@ -504,13 +526,17 @@ class RTDETRHead(nn.Module):
         }
         if len(lines_per_layer) > 0:
             outputs["pred_lines"] = lines_per_layer[-1]
+        if len(ellipses_per_layer) > 0:
+            outputs["pred_ellipses"] = ellipses_per_layer[-1]
 
         if self.config.enable_auxiliary_losses and len(logits_per_layer) > 1:
             aux_outputs: List[Dict[str, torch.Tensor]] = []
-            for aux_idx, (cls, box) in enumerate(zip(logits_per_layer[:-1], boxes_per_layer[:-1])):
+            for aux_idx, (cls, box) in enumerate(zip(logits_per_layer[:-1], boxes_per_layer[:-1])): # TODO: Simplify this?? Should just be a copy of the lists??
                 aux_output = {"pred_logits": cls, "pred_boxes": box}
                 if len(lines_per_layer) > aux_idx:
                     aux_output["pred_lines"] = lines_per_layer[aux_idx]
+                if len(ellipses_per_layer) > aux_idx:
+                    aux_output["pred_ellipses"] = ellipses_per_layer[aux_idx]
                 aux_outputs.append(aux_output)
             outputs["aux_outputs"] = aux_outputs
 

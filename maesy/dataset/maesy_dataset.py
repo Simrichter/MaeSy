@@ -87,6 +87,7 @@ class MaesyDataset(Dataset):
             raise ValueError(f"Mismatch in dataset.yaml\nnc: {self.num_classes}, but {len(self.name_to_id)} class names were found.")
 
         self.line_class_id = self.name_to_id.get(yaml_data.get("lines", None), -1)
+        self.ellipse_class_id = self.name_to_id.get(yaml_data.get("ellipses", None), -1)
 
         self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if
                                    img.endswith((".jpg", ".jpeg", ".png"))][start_index::step] * repeat_factor
@@ -119,7 +120,7 @@ class MaesyDataset(Dataset):
             :param idx: Index
 
         Returns:
-            Dictionary containing the image and target annotations as a List[BoundingBox]
+            Dictionary containing the image and target annotations as a List[Object]
         """
         image_path = os.path.join(self.images_dir, self.images[idx])
         # Load image
@@ -128,26 +129,24 @@ class MaesyDataset(Dataset):
                 img_width, img_height = image.size
                 annotation_path = os.path.join(self.annotations_dir, self.annotations[idx])
                 if annotation_path.split("/")[-1].split(".")[0] != image_path.split("/")[-1].split(".")[0]:
-                    print(
-                        "\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(
-                            annotation_path, image_path))
+                    print("\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(annotation_path, image_path))
                 with open(annotation_path, "r") as f:
                     boxes_list: List[BoundingBox] = []
                     line_points_list: List[List[float]] = []
+                    ellipse_points_list: List[List[float]] = []
                     for raw_line in f.readlines():
                         splits = raw_line.split()
-                        if len(splits) != 5:
-                            raise ValueError(
-                                f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. "
-                                f"Expected 5 columns: 'class value1 value2 value3 value4'."
-                            )
                         cls_id = int(splits[0])
-                        v1, v2, v3, v4 = map(float, splits[1:])
                         if self.line_class_id is not None and cls_id == self.line_class_id:
-                            x1, y1, x2, y2 = v1, v2, v3, v4
-                            line_points_list.append([x1, y1, x2, y2])
+                            assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'line': 'class x1 y1 x2 y2'."
+                            line_points_list.append([*map(float, splits[1:])])
+                        elif self.ellipse_class_id is not None and cls_id == self.ellipse_class_id:
+                            assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'ellipse': 'class center_x center_y L_11 L_12 L_22' (cholesky decomposition)."
+                            ellipse_points_list.append([*map(float, splits[1:])])
                         else:
-                            box = BoundingBox.from_xywh(cls_id, v1, v2, v3, v4, normalized=True)
+                            assert len(
+                                splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'BoundingBox': 'class cx cy w h'."
+                            box = BoundingBox.from_xywh(cls_id, *map(float, splits[1:]), normalized=True)
                             boxes_list.append(box)
                     for box in boxes_list:
                         box.scale_to_size(img_width, img_height)  # TODO: Ugly
@@ -172,9 +171,11 @@ class MaesyDataset(Dataset):
                         )
                     if len(line_points_list) > 0:
                         labels_list.extend([self.line_class_id] * len(line_points_list))
+                    if len(ellipse_points_list) > 0:
+                        labels_list.extend([self.ellipse_class_id] * len(ellipse_points_list))
                     labels = torch.tensor(labels_list, dtype=torch.long)
 
-                    # Basically an "combined" else to the two above
+                    # Basically a "combined" else to the three above
                     if len(boxes_list) <= 0 and len(line_points_list) <= 0:
                         # coords = torchvision.tv_tensors.BoundingBoxes(
                         #     torch.empty((0, 4), dtype=torch.float32),
@@ -188,7 +189,12 @@ class MaesyDataset(Dataset):
                     else:
                         line_points = torch.empty((0, 4), dtype=torch.float32)
 
-                    target = {"boxes": coords, "labels": labels, "line_points": line_points}
+                    if len(ellipse_points_list) > 0:
+                        ellipses = torch.tensor(ellipse_points_list, dtype=torch.float32)
+                    else:
+                        ellipses = torch.empty((0, 5), dtype=torch.float32)
+
+                    target = {"boxes": coords, "labels": labels, "line_points": line_points, "ellipses": ellipses}
             image = torchvision.tv_tensors.Image(image) / 255.0
 
             if self.transforms is not None:
@@ -208,8 +214,9 @@ class MaesyDataset(Dataset):
                     if target["line_points"].shape[0] > 0:
                         valid_mask = torch.cat((valid_mask, torch.ones((target["line_points"].shape[0],), dtype=torch.bool,
                                                                        device=valid_mask.device)))  # Keep all line targets in labels
+                    if target["ellipses"].shape[0] > 0:
+                        valid_mask = torch.cat((valid_mask, torch.ones((target["ellipses"].shape[0],), dtype=torch.bool, device=valid_mask.device))) # Keep all ellipse targets in labels
                     target["labels"] = labels[valid_mask]
-                    # target["line_points"] = target["line_points"][valid_mask]
 
                     # Normalize boxes back to [0,1]
                     h, w = image.shape[-2:]
@@ -227,6 +234,8 @@ class MaesyDataset(Dataset):
 
             if self.return_labels and len(target["line_points"]) > 0:
                 target["line_points"] = target["line_points"].clamp(0.0, 1.0).to(dtype=torch.float32)
+            if self.return_labels and len(target["ellipses"]) > 0:
+                target["ellipses"][:, :2] = target["ellipses"][:, :2].clamp(0.0, 1.0).to(dtype=torch.float32)
             return image, target if self.return_labels else image
 
     def get_image_path(self, idx: int) -> Path:
@@ -248,7 +257,7 @@ class MaesyDataset(Dataset):
             Returns:
                 A dict containing name: class_id pairs
         """
-        return {"line_class_id": self.line_class_id}
+        return {"line_class_id": self.line_class_id, "ellipse_class_id": self.ellipse_class_id}
 
     def get_num_classes(self) -> int:
         """

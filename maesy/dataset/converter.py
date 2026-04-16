@@ -1,8 +1,46 @@
+import ast
 import json
 import os
 from pathlib import Path
 
+import numpy as np
+from skimage.measure import EllipseModel
 from tqdm import tqdm
+
+def ellipse_to_cholesky(cx: float, cy: float, a: float, b: float, theta: float):
+    """
+    Convert ellipse parameters (center, axes, angle) to a Cholesky-like representation suitable for regression.
+    The output format is [xc, yc, l11, l21, l22]
+
+    Args:
+        :param cx: x-coordinate of ellipse center
+        :param cy: y-coordinate of ellipse center
+        :param a: Length of one diagonal
+        :param b: Length of other diagonal
+        :param theta: Rotation angle of main diagonal
+    """
+    # optional safety (recommended)
+    a = np.clip(a, 1e-6, None)
+    b = np.clip(b, 1e-6, None)
+
+    c = np.cos(theta)
+    s = np.sin(theta)
+
+    inv_a2 = 1.0 / (a * a)
+    inv_b2 = 1.0 / (b * b)
+
+    A11 = c*c * inv_a2 + s*s * inv_b2
+    A12 = c*s * (inv_a2 - inv_b2)
+    A22 = s*s * inv_a2 + c*c * inv_b2
+
+    l11 = np.sqrt(A11)
+    l21 = A12 / l11
+
+    # numerical stability
+    tmp = A22 - l21*l21
+    l22 = np.sqrt(np.clip(tmp, 1e-8, None))
+
+    return np.stack([cx, cy, l11, l21, l22], axis=-1)
 
 def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
     """
@@ -18,6 +56,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
         "K1(Clone)": 1,
         "PenaltyCross": 2,
         "Line": 3,
+        "CenterCircle": 4,
     }
 
     print("="*60)
@@ -38,6 +77,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
         out_path.mkdir(exist_ok=True)
 
         txts = [t for t in os.listdir(path) if t.endswith(".txt")]
+        model = EllipseModel()
         for label_file in tqdm(txts):
             with open(os.path.join(path, label_file), 'r') as f:
                 lines = f.readlines()
@@ -76,7 +116,15 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                         cx, cy, w, h = float(cx), float(cy), float(w), float(h)  # Explicit cast to ensure datatype compatibility
                         new_lines.append(f"{name_to_id['PenaltyCross']} {cx} {cy} {w} {h}\n")
                     case "CenterCircle":
-                        ... # TODO
+                        points = np.array(ast.literal_eval(f"[{line}]"))
+                        points[::2] = points[::2]/544
+                        points[1::2] = points[1::2]/448
+                        if model.estimate(points):
+                            cx, cy, a, b, theta = model.params
+                            # TODO: Convert to cholesky
+                            new_lines.append(f"{name_to_id['CenterCircle']} {cx} {cy} {a} {b} {theta}\n")
+                        else:
+                            print(f"Failed to estimate ellipse from line '{line}' in file {label_file}")
                     case _:
                         # ignore other categories for now
                         ...

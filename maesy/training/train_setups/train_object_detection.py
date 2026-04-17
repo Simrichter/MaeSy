@@ -72,6 +72,7 @@ def train_vit_detector(
     denoising_label_noise_ratio: float = 0.2,
     denoising_box_noise_scale: float = 0.4,
     enable_line_detection: bool = True,
+    enable_ellipse_detection: bool = True,
     seed: int = 42
 ):
     """
@@ -99,7 +100,7 @@ def train_vit_detector(
         transforms.Resize((224, 224)),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
     ]
-    if not enable_line_detection:
+    if not (enable_line_detection or enable_ellipse_detection):
         train_transform_steps.append(transforms.RandomAffine(degrees=8, translate=(0.15, 0.15), scale=(0.95, 1.05)))
         # TODO: Affine should be possible with lines as well?
     train_transform_steps.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
@@ -163,11 +164,19 @@ def train_vit_detector(
         if enable_line_detection:
             if config["line_class_id"] != -1 and config["line_class_id"] != train_dataset.get_special_classes()["line_class_id"]:
                 raise ValueError(
-                    "line_class_id parameter in model config does not match the datasets 'nc' parameter. Leave value in config on '-1' to enable auto-detect.")
+                    f"line_class_id parameter in model config ({config['line_class_id']}) does not match the datasets line_class_id parameter ({train_dataset.get_special_classes()['line_class_id']}). Leave value in config on '-1' to enable auto-detect.")
             config["line_class_id"] = train_dataset.get_special_classes()["line_class_id"]
             config["enable_line_detection"] = True
         else:
             config["enable_line_detection"] = False
+        if enable_ellipse_detection:
+            if config["ellipse_class_id"] != -1 and config["ellipse_class_id"] != train_dataset.get_special_classes()["ellipse_class_id"]:
+                raise ValueError(
+                    f"ellipse_class_id parameter in model config ({config['ellipse_class_id']}) does not match the datasets ellipse_class_id parameter ({train_dataset.get_special_classes()['ellipse_class_id']}). Leave value in config on '-1' to enable auto-detect.")
+            config["ellipse_class_id"] = train_dataset.get_special_classes()["ellipse_class_id"]
+            config["enable_ellipse_detection"] = True
+        else:
+            config["enable_ellipse_detection"] = False
         model = create_model_from_config(config)
     elif not model_info.endswith(".pth"):
         raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
@@ -178,8 +187,8 @@ def train_vit_detector(
         assert model.config.num_classes == train_dataset.get_num_classes(), "Error: The number of classes in the model config does not match the number of classes in the dataset. Please make sure they match before continuing training."
         assert model.config.line_class_id == train_dataset.get_special_classes()["line_class_id"], "Error: The line_class_id in the model config does not match the line_class_id in the dataset. Please make sure they match before continuing training."
     else:
-        if model.config.num_classes != train_dataset.get_num_classes() or model.config.line_class_id != train_dataset.get_special_classes()["line_class_id"]:
-            print(f"!!!!!!!!!!!!!!!!!!!!\nDetected different classification setup:\nModel has {model.config.num_classes} classes, dataset provides {train_dataset.get_num_classes()}\nLine class of model is {model.config.line_class_id}, dataset provides {train_dataset.get_special_classes()}\nCreating a new classification head with {train_dataset.get_num_classes()} classes.\n!!!!!!!!!!!!!!!!!!!!")
+        if model.config.num_classes != train_dataset.get_num_classes() or model.config.line_class_id != train_dataset.get_special_classes()["line_class_id"] or model.config.ellipse_class_id != train_dataset.get_special_classes()["ellipse_class_id"]:
+            print(f"!!!!!!!!!!!!!!!!!!!!\nDetected different classification setup:\nModel has {model.config.num_classes} classes, dataset provides {train_dataset.get_num_classes()}\nLine class of model is {model.config.line_class_id} and Ellipse class is {model.config.ellipse_class_id}, dataset provides {train_dataset.get_special_classes()}\nCreating a new classification head with {train_dataset.get_num_classes()} classes.\n!!!!!!!!!!!!!!!!!!!!")
             if not hasattr(model.head, "create_class_heads"):
                 raise AttributeError(f"\nmodel.head has no 'create_class_heads()' method that could be used to create a new classification head. Found content: {[f for f in dir(model.head) if not f.startswith('_') and callable(getattr(model.head, f))]}")
             model.update_head_conf(train_dataset.get_num_classes(), train_dataset.get_special_classes())

@@ -189,7 +189,6 @@ class DetectionLoss(BaseLoss):
         target_boxes = torch.cat(all_target_boxes) if all_target_boxes else torch.empty(0, 4, device=pred_logits.device)
         target_lines = torch.cat(all_target_lines) if all_target_lines else torch.empty(0, 4, device=pred_logits.device)
         target_ellipses = torch.cat(all_target_ellipses) if all_target_ellipses else torch.empty(0, 5, device=pred_logits.device)
-
         # Compute classification loss
         target_classes = torch.full(
             pred_logits.shape[:2],
@@ -214,8 +213,7 @@ class DetectionLoss(BaseLoss):
             src_boxes = pred_boxes[idx] # Selecting the boxes selected by the hungarian matching
             src_lines = pred_lines[idx] if pred_lines is not None else None
             src_ellipses = pred_ellipses[idx] if pred_ellipses is not None else None
-            # This selected the two chosen target boxes in correct order
-
+            # This selected the two chosen target boxes in correct order)
             box_mask = ~ (line_mask | ellipse_mask)
             num_box_matches = int(box_mask.sum().item())
             num_line_matches = int(line_mask.sum().item())
@@ -388,6 +386,7 @@ class DetectionLoss(BaseLoss):
             pred_boxes=predictions['pred_boxes'],
             targets=targets,
             pred_lines=predictions.get('pred_lines'),
+            pred_ellipses=predictions.get('pred_ellipses'),
             indices=main_indices,
         )
 

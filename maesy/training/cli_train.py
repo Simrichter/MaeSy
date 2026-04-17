@@ -18,6 +18,7 @@ def main(args):
             denoising_label_noise_ratio=getattr(args, "dn_label_noise", 0.2),
             denoising_box_noise_scale=getattr(args, "dn_box_noise", 0.4),
             enable_line_detection=getattr(args, "enable_line_detection", False),
+            enable_ellipse_detection=getattr(args, "enable_ellipse_detection", False),
         )
     elif args.mode == "mae":
         train_mae(dataset_path=args.dataset, checkpoint=args.checkpoint, enable_wandb=args.wandb)

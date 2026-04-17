@@ -34,6 +34,7 @@ class RTDETRConfig:
     denoising_box_noise_scale: float = 0.4
     enable_line_detection: bool = False
     line_class_id: int = -1
+    enable_ellipse_detection: bool = False
     ellipse_class_id: int = -1
     enable_auxiliary_losses: bool = True
 
@@ -91,6 +92,7 @@ class RTDETR(BaseModel):
                 denoising_box_noise_scale=config.denoising_box_noise_scale,
                 enable_line_detection=config.enable_line_detection,
                 line_class_id=config.line_class_id,
+                enable_ellipse_detection=config.enable_ellipse_detection,
                 ellipse_class_id=config.ellipse_class_id,
                 enable_auxiliary_losses=config.enable_auxiliary_losses,
             )

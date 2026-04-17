@@ -51,6 +51,7 @@ def main():
     od_parser.add_argument("--dn-label-noise", type=float, default=0.2, help="Label corruption ratio for denoising branch (default: 0.2)")
     od_parser.add_argument("--dn-box-noise", type=float, default=0.4, help="Box/line noise scale for denoising branch (default: 0.4)")
     od_parser.add_argument("--enable-line-detection", action="store_true", help="Enable optional line endpoint prediction branch")
+    od_parser.add_argument("--enable-ellipse-detection", action="store_true", help="Enable optional Ellipse prediction branch")
     # od_parser.add_argument("--line-class-id", type=int, default=-1, help="Class id that should be treated as a line target (x1 y1 x2 y2)")
 
 

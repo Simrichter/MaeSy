@@ -117,12 +117,13 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                         new_lines.append(f"{name_to_id['PenaltyCross']} {cx} {cy} {w} {h}\n")
                     case "CenterCircle":
                         points = np.array(ast.literal_eval(f"[{line}]"))
-                        points[::2] = points[::2]/544
-                        points[1::2] = points[1::2]/448
+                        points[:,::2] = points[:,::2]/544
+                        points[:,1::2] = 1-points[:,1::2]/448
                         if model.estimate(points):
                             cx, cy, a, b, theta = model.params
-                            # TODO: Convert to cholesky
-                            new_lines.append(f"{name_to_id['CenterCircle']} {cx} {cy} {a} {b} {theta}\n")
+                            # Convert to cholesky representation
+                            cx, cy, l11, l12, l22 = ellipse_to_cholesky(cx, cy, a, b, theta)
+                            new_lines.append(f"{name_to_id['CenterCircle']} {cx} {cy} {l11} {l12} {l22}\n")
                         else:
                             print(f"Failed to estimate ellipse from line '{line}' in file {label_file}")
                     case _:

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List
 
 import cv2
+import numpy as np
 import torch
 from PIL.ImageColor import getrgb
 from torch.utils.data import DataLoader
@@ -61,7 +62,7 @@ def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = 
     """
 
     for idx, (img, targets) in tqdm(enumerate(dataset)):
-        drawn = draw_objects_in_tensor((img*255).to(torch.uint8), targets["boxes"], targets["labels"][:len(targets["boxes"])], targets["line_points"])
+        drawn = draw_objects_in_tensor((img*255).to(torch.uint8), targets["boxes"], targets["labels"][:len(targets["boxes"])], targets["line_points"], targets["ellipses"])
         out_path = os.path.join(output_dir, dataset.get_image_path(idx).name)
         save_image(drawn/255, out_path)
         # save_image(img, out_path)
@@ -246,11 +247,66 @@ def _draw_lines_in_tensor(img: torch.Tensor, lines: torch.Tensor, color: str="pi
         x2 = int(x2.item() * w)
         y2 = int(y2.item() * h)
         cv2.line(drawn, (x1, y1), (x2, y2), color=getrgb(color), thickness=1)  # cv2.line draws in-place !!!
-    drawn = torch.from_numpy(drawn).permute(2, 0, 1).contiguous()
+    drawn = torch.from_numpy(drawn).permute(2, 0, 1).contiguous().float()
+    return drawn
 
-    return drawn.float()
+def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: str="red") -> torch.Tensor:
+    """
+        Draws ellipses in image tensor using cv2
 
-def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, lines: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None) -> torch.Tensor:
+        Args:
+            :param img: The image as a torch.Tensor in format [C, H, W] (pixel range: [0,255], dtype=torch.uint8)
+            :param ellipses: Tensor containing the ellipses in normalized cxcylll format, shape [ne, 5]
+            :param color: The color to draw the lines with. Default is pink. !Expects
+
+        returns:
+            img: The tensor with drawn bounding boxes, in format [C, H, W] (pixel range: [0,1])
+    """
+
+    def _ellipse_to_points(params, num=100):
+        """
+        Convert ellipse in cholesky representation to points in normalized xy format
+        Args:
+            :param params: [N, 5] = [N, (cx, cy, l11, l21, l22)]
+            :param num: Number of points to Sample per ellipse
+        returns: Tensor [N, num, 2]
+        """
+        cx, cy, l11, l21, l22 = params.unbind(-1)
+        # build L: [N, 2, 2]
+        zeros = torch.zeros_like(l11)
+        L = torch.stack([
+            torch.stack([l11, zeros], dim=-1),
+            torch.stack([l21, l22], dim=-1)
+        ], dim=-2)
+
+        # unit circle
+        t = torch.linspace(0, 2 * torch.pi, num, device=params.device, dtype=params.dtype)
+        circle = torch.stack([torch.cos(t),torch.sin(t)], dim=0)  # [2, num]
+
+        # expand for batch
+        circle = circle.unsqueeze(0).expand(params.shape[0], -1, -1)  # [N, 2, num]
+
+        # solve L x = circle  → x = L^{-1} circle
+        pts = torch.linalg.solve(L.transpose(-1, -2), circle)  # [N, 2, num]
+
+        # add center
+        pts[:, 0, :] += cx.unsqueeze(-1)
+        pts[:, 1, :] += cy.unsqueeze(-1)
+
+        return pts.permute(0, 2, 1)  # [N, num, 2]
+
+    h, w = img.shape[-2:]
+    if ellipses.shape[0] == 0:
+        return img
+    pts = _ellipse_to_points(ellipses, num=100).squeeze(0).numpy()
+    pts[:, ::2] = pts[:, ::2] * w
+    pts[:, 1::2] = pts[:, 1::2] * h
+    pts = pts.reshape(-1, 1, 2).astype(np.int32)
+    drawn = cv2.polylines(img.detach().cpu().clamp(0, 255).to(torch.uint8).permute(1, 2, 0).contiguous().numpy(), [pts], isClosed=True, color=getrgb(color), thickness=2)
+    drawn = torch.from_numpy(drawn).permute(2, 0, 1).contiguous().float()
+    return drawn
+
+def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, lines: torch.Tensor, ellipses: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None) -> torch.Tensor:
     """
         Draws bounding boxes and lines on the image.
 
@@ -259,12 +315,14 @@ def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch
             :param boxes: Tensor of bounding boxes in normalized cxcywh format, shape [nb, 4]
             :param labels: Tensor of bbox labels, shape [nb, ]
             :param lines: Tensor of lines in normalized xyxy format, shape [nl, 4]
+            :param ellipses: Tensor of ellipses in normalized cxcylll format, shape [ne, 5]
             :param name_coding: Optional dict to translate from class id to label name
             :param color_coding: Optional dict to translate from class id to color
 
     """
     img = _draw_boxes_in_tensor(img, boxes, labels, name_coding, color_coding)
     img = _draw_lines_in_tensor(img, lines)
+    img = _draw_ellipses_in_tensor(img, ellipses)
     return img
 
 

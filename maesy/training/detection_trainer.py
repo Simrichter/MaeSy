@@ -173,15 +173,20 @@ class DetectionTrainer(BaseTrainer):
         losses = self.loss(predictions, targets)
 
         if val and targets is not None:
-            line_class_id = getattr(self.model.config, "line_class_id", None)
+            line_class_id: int | None = getattr(self.model.config, "line_class_id", None)
             if line_class_id is not None and line_class_id < 0:
                 line_class_id = None
+            ellipse_class_id: int | None = getattr(self.model.config, "ellipse_class_id", None)
+            if ellipse_class_id is not None and ellipse_class_id < 0:
+                ellipse_class_id = None
 
             predictions = decode_detr_predictions( # TODO: Move this to postprocessing of rt-detr
                 pred_logits=predictions["pred_logits"],
                 pred_boxes=predictions["pred_boxes"],
                 pred_lines=predictions.get("pred_lines"),
+                pred_ellipses=predictions.get("pred_ellipses"),
                 line_class_id=line_class_id,
+                ellipse_class_id=ellipse_class_id,
                 no_object_class=predictions["pred_logits"].shape[-1] - 1,
                 score_threshold=0.3,
             )
@@ -204,6 +209,6 @@ class DetectionTrainer(BaseTrainer):
             img = images[0].detach().cpu()
             img = (img * self._IMAGENET_STD) + self._IMAGENET_MEAN
             img = (img.clamp(0.0, 1.0) * 255.0).to(torch.uint8)
-            losses["img_predictions"] = draw_objects_in_tensor(img, predictions[0]["boxes"], predictions[0]["labels"], predictions[0]["line_points"])/255
+            losses["img_predictions"] = draw_objects_in_tensor(img, predictions[0]["boxes"], predictions[0]["labels"], predictions[0]["line_points"], predictions[0]["ellipses"])/255
 
         return losses

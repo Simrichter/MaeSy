@@ -141,7 +141,7 @@ class MaesyDataset(Dataset):
                             assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'line': 'class x1 y1 x2 y2'."
                             line_points_list.append([*map(float, splits[1:])])
                         elif self.ellipse_class_id is not None and cls_id == self.ellipse_class_id:
-                            assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'ellipse': 'class center_x center_y L_11 L_12 L_22' (cholesky decomposition)."
+                            assert len(splits) == 6, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'ellipse': 'class center_x center_y L_11 L_12 L_22' (cholesky decomposition)."
                             ellipse_points_list.append([*map(float, splits[1:])])
                         else:
                             assert len(
@@ -234,8 +234,8 @@ class MaesyDataset(Dataset):
 
             if self.return_labels and len(target["line_points"]) > 0:
                 target["line_points"] = target["line_points"].clamp(0.0, 1.0).to(dtype=torch.float32)
-            if self.return_labels and len(target["ellipses"]) > 0:
-                target["ellipses"][:, :2] = target["ellipses"][:, :2].clamp(0.0, 1.0).to(dtype=torch.float32)
+            # if self.return_labels and len(target["ellipses"]) > 0:
+            #     target["ellipses"][:, :2] = target["ellipses"][:, :2].clamp(0.0, 1.0).to(dtype=torch.float32)
             return image, target if self.return_labels else image
 
     def get_image_path(self, idx: int) -> Path:

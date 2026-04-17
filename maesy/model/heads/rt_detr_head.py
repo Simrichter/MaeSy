@@ -19,6 +19,7 @@ class RTDETRHeadConfig:
     decoder_mlp_ratio: float = 4.0
     decoder_dropout: float = 0.1
     hidden_dim_out_layers: int = 256
+    hidden_dim_dense_heads: int = 256
     num_feature_levels: int = 3
     num_deformable_points: int = 4
     enable_denoising: bool = False
@@ -264,8 +265,10 @@ class RTDETRHead(nn.Module):
             dropout=config.decoder_dropout,
         )
 
-        self.encoder_class_head = nn.Linear(config.embed_dim, config.num_classes + 1)
-        self.encoder_box_head = MLP(config.embed_dim, config.hidden_dim_out_layers, 4)
+        self.encoder_class_head = nn.Linear(config.embed_dim, config.num_classes + 1) # dense head for query selection
+        self.encoder_box_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 4) # dense head for reference boxes
+        self.encoder_line_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 4) # dense head for reference lines
+        self.encoder_ellipse_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 5) # dense head for reference ellipses
 
         self.query_content = nn.Embedding(config.num_queries, config.embed_dim)
         self.reference_point_proj = MLP(2, config.embed_dim, config.embed_dim, num_layers=2)
@@ -362,21 +365,28 @@ class RTDETRHead(nn.Module):
 
         return torch.cat(tokens, dim=1), spatial_shapes
 
-    def _select_queries(self, memory: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _select_queries(self, memory: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        references: Dict[str, torch.Tensor] = {}
         enc_logits = self.encoder_class_head(memory)
-        enc_boxes = self.encoder_box_head(memory).sigmoid()
 
         foreground_scores = enc_logits[..., :-1].sigmoid().amax(dim=-1)
-        topk = torch.topk(foreground_scores, k=self.config.num_queries, dim=1)
+        topk_idx = torch.topk(foreground_scores, k=self.config.num_queries, dim=1).indices.unsqueeze(-1)
 
-        gather_idx = topk.indices.unsqueeze(-1).expand(-1, -1, memory.shape[-1])
+        gather_idx = topk_idx.expand(-1, -1, memory.shape[-1])
         selected_memory = torch.gather(memory, dim=1, index=gather_idx)
 
-        box_idx = topk.indices.unsqueeze(-1).expand(-1, -1, 4)
-        reference_boxes = torch.gather(enc_boxes, dim=1, index=box_idx)
+        selected_refs = topk_idx.expand(-1, -1, 4)
+        enc_boxes = self.encoder_box_head(memory)#.sigmoid()
+        references["reference_boxes"] = torch.gather(enc_boxes, dim=1, index=selected_refs)
+        if self.config.enable_line_detection:
+            enc_lines = self.encoder_line_head(memory)#.sigmoid()
+            references["reference_lines"] = torch.gather(enc_lines, dim=1, index=selected_refs)
+        if self.config.enable_ellipse_detection:
+            enc_ellipses = self.encoder_ellipse_head(memory)  # ! NO sigmoid since ellipses are not [0,1] bound
+            references["reference_ellipses"] = torch.gather(enc_ellipses, dim=1, index=topk_idx.expand(-1, -1, 5))
 
         query = selected_memory + self.query_content.weight.unsqueeze(0)
-        return query, reference_boxes
+        return query, references
 
     def _build_denoising_queries(
         self,
@@ -442,15 +452,15 @@ class RTDETRHead(nn.Module):
     def _decode_queries(
         self,
         query: torch.Tensor,
-        reference_boxes: torch.Tensor,
+        references: Dict[str, torch.Tensor],
         memory: torch.Tensor,
         spatial_shapes: List[Tuple[int, int]],
     ) -> Dict[str, List[torch.Tensor]]:
-        reference_boxes = reference_boxes.detach() # Detach from gradient graph due to instability issues.
+        reference_boxes = references["reference_boxes"].detach() # Detach from gradient graph due to instability issues.
 
-        reference_logits = self._inverse_sigmoid(reference_boxes)
-        line_reference_logits = reference_logits # self._inverse_sigmoid(reference_boxes) TODO: Maybe use 3 dense heads instead??
-        ellipse_reference_logits = reference_logits
+        reference_logits = reference_boxes # self._inverse_sigmoid(reference_boxes) #TODO: Cleanup if this works
+        line_reference_logits = references["reference_lines"] # self._inverse_sigmoid(reference_boxes) TODO: Maybe use 3 dense heads instead?? Done :)
+        ellipse_reference_logits = references["reference_ellipses"]
 
         logits_per_layer: List[torch.Tensor] = []
         boxes_per_layer: List[torch.Tensor] = []
@@ -481,7 +491,7 @@ class RTDETRHead(nn.Module):
 
             if self.decoder_ellipse_heads is not None:
                 tmp_ellipse_pred = self.decoder_ellipse_heads[layer_idx](query)
-                pred_ellipses = (tmp_ellipse_pred + ellipse_reference_logits).sigmoid()
+                pred_ellipses = (tmp_ellipse_pred + ellipse_reference_logits)
                 ellipses_per_layer.append(pred_ellipses)
                 ellipse_reference_logits = tmp_ellipse_pred.detach() + ellipse_reference_logits.detach()
 
@@ -513,8 +523,8 @@ class RTDETRHead(nn.Module):
         fused = self._hybrid_encode(features)
         memory, spatial_shapes = self._flatten_memory(fused)
 
-        query, reference_boxes = self._select_queries(memory)
-        main_decoded = self._decode_queries(query, reference_boxes, memory, spatial_shapes)
+        query, references = self._select_queries(memory)
+        main_decoded = self._decode_queries(query, references, memory, spatial_shapes)
         logits_per_layer = main_decoded["pred_logits"]
         boxes_per_layer = main_decoded["pred_boxes"]
         lines_per_layer = main_decoded.get("pred_lines", [])

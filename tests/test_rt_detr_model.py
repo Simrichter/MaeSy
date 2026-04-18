@@ -6,7 +6,7 @@ from maesy.model import RTDETR, RTDETRConfig
 def test_rt_detr_forward_matches_detection_contract():
     config = RTDETRConfig(
         image_size=64,
-        resnet_version="resnet18",
+        backbone_version="resnet18",
         backbone_pretrained=False,
         num_classes=3,
         num_queries=20,
@@ -23,8 +23,11 @@ def test_rt_detr_forward_matches_detection_contract():
 
     assert "pred_logits" in outputs
     assert "pred_boxes" in outputs
+    assert "enc_outputs" in outputs
     assert outputs["pred_logits"].shape == (2, 20, 4)
     assert outputs["pred_boxes"].shape == (2, 20, 4)
+    assert outputs["enc_outputs"]["pred_logits"].shape == (2, 20, 4)
+    assert outputs["enc_outputs"]["pred_boxes"].shape == (2, 20, 4)
     assert torch.all(outputs["pred_boxes"] >= 0.0)
     assert torch.all(outputs["pred_boxes"] <= 1.0)
 
@@ -38,7 +41,7 @@ def test_rt_detr_forward_matches_detection_contract():
 def test_rt_detr_optional_line_head_outputs_pred_lines():
     config = RTDETRConfig(
         image_size=64,
-        resnet_version="resnet18",
+        backbone_version="resnet18",
         backbone_pretrained=False,
         num_classes=3,
         num_queries=12,
@@ -59,7 +62,7 @@ def test_rt_detr_optional_line_head_outputs_pred_lines():
 def test_rt_detr_denoising_outputs_emitted_only_in_training_with_targets():
     config = RTDETRConfig(
         image_size=64,
-        resnet_version="resnet18",
+        backbone_version="resnet18",
         backbone_pretrained=False,
         num_classes=3,
         num_queries=10,

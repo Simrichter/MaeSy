@@ -147,6 +147,7 @@ class BaseTrainer(ABC):
                 giou_loss_coef=getattr(self.config, "giou_loss_coef", 2.0),
                 label_smoothing=getattr(self.config, "label_smoothing", 0.0),
                 aux_loss_coef=getattr(self.config, "aux_loss_coef", 0.5),
+                enc_loss_coef=getattr(self.config, "enc_loss_coef", 1.0),
                 line_loss_coef=getattr(self.config, "line_loss_coef", 2.0),
                 dn_loss_coef=getattr(self.config, "dn_loss_coef", 1.0),
                 enable_line_detection=getattr(self.model.config, "enable_line_detection", False),

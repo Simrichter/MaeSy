@@ -158,3 +158,35 @@ def test_detection_loss_reuses_main_hungarian_matching_for_aux_and_dn():
     assert losses["loss_dn"] >= 0
 
 
+def test_detection_loss_applies_separate_hungarian_matching_for_encoder_dense_outputs():
+    loss_fn = DetectionLoss(num_classes=2, enc_loss_coef=0.75, device=torch.device("cpu"))
+
+    predictions = {
+        "pred_logits": torch.tensor([[[6.0, -6.0, -8.0], [-4.0, 4.0, -8.0]]], dtype=torch.float32),
+        "pred_boxes": torch.tensor([[[0.50, 0.50, 0.20, 0.20], [0.10, 0.10, 0.10, 0.10]]], dtype=torch.float32),
+        "enc_outputs": {
+            "pred_logits": torch.tensor([[[5.0, -5.0, -8.0], [-3.0, 3.0, -8.0]]], dtype=torch.float32),
+            "pred_boxes": torch.tensor([[[0.48, 0.52, 0.22, 0.18], [0.15, 0.15, 0.10, 0.10]]], dtype=torch.float32),
+        },
+    }
+    targets = [{
+        "labels": torch.tensor([0], dtype=torch.long),
+        "boxes": torch.tensor([[0.50, 0.50, 0.20, 0.20]], dtype=torch.float32),
+    }]
+
+    with patch.object(
+        loss_fn,
+        "match_predictions_to_targets",
+        wraps=loss_fn.match_predictions_to_targets,
+    ) as matcher_spy:
+        losses = loss_fn(predictions, targets)
+
+    assert matcher_spy.call_count == 2
+    assert losses["loss_enc"] > 0
+    assert losses["loss_ce_enc"] >= 0
+    assert torch.isclose(
+        losses["loss"],
+        losses["loss_ce"] + losses["loss_bbox"] + losses["loss_giou"] + losses["loss_line"] + losses["loss_ellipse"] + losses["loss_aux"] + losses["loss_dn"] + losses["loss_enc"],
+    )
+
+

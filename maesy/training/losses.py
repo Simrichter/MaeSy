@@ -37,6 +37,7 @@ class DetectionLoss(BaseLoss):
     total_loss_ellipse: float
     total_loss_aux: float
     total_loss_dn: float
+    total_loss_enc: float
 
     def __init__(
             self,
@@ -47,6 +48,7 @@ class DetectionLoss(BaseLoss):
             eos_coef: float = 0.1,  # Weight for no-object class
             label_smoothing: float = 0.0,
             aux_loss_coef: float = 1.0,
+            enc_loss_coef: float = 1.0,
             line_loss_coef: float = 2.0,
             ellipse_loss_coef: float = 2.0,
             ellipse_frobenius_coef: float = 0.1,
@@ -84,6 +86,7 @@ class DetectionLoss(BaseLoss):
         self.class_loss_coef = class_loss_coef
         self.giou_loss_coef = giou_loss_coef
         self.aux_loss_coef = aux_loss_coef
+        self.enc_loss_coef = enc_loss_coef
         self.line_loss_coef = line_loss_coef
         self.ellipse_loss_coef = ellipse_loss_coef
         self.frobenius_coef = ellipse_frobenius_coef
@@ -117,6 +120,7 @@ class DetectionLoss(BaseLoss):
         self.total_loss_line = 0.0
         self.total_loss_ellipse = 0.0
         self.total_loss_dn = 0.0
+        self.total_loss_enc = 0.0
         self.batch_count = 0
 
     def _compute_single_output_losses(
@@ -356,6 +360,67 @@ class DetectionLoss(BaseLoss):
         ) * self.dn_loss_coef
         return {"loss_dn": combined}
 
+    def _compute_encoder_dense_loss(
+            self,
+            predictions: Dict[str, torch.Tensor],
+            targets: List[Dict[str, torch.Tensor]],
+    ) -> Dict[str, torch.Tensor]:
+        enc_outputs = predictions.get("enc_outputs")
+        zero = torch.tensor(0.0, device=predictions['pred_logits'].device)
+        if not isinstance(enc_outputs, dict):
+            return {
+                "loss_ce_enc": zero,
+                "loss_bbox_enc": zero,
+                "loss_giou_enc": zero,
+                "loss_line_enc": zero,
+                "loss_ellipse_enc": zero,
+                "loss_enc": zero,
+            }
+
+        pred_logits = enc_outputs.get("pred_logits")
+        pred_boxes = enc_outputs.get("pred_boxes")
+        if pred_logits is None or pred_boxes is None:
+            return {
+                "loss_ce_enc": zero,
+                "loss_bbox_enc": zero,
+                "loss_giou_enc": zero,
+                "loss_line_enc": zero,
+                "loss_ellipse_enc": zero,
+                "loss_enc": zero,
+            }
+
+        enc_indices = self.match_predictions_to_targets(
+            {
+                "pred_logits": pred_logits,
+                "pred_boxes": pred_boxes,
+                "pred_lines": enc_outputs.get("pred_lines"),
+                "pred_ellipses": enc_outputs.get("pred_ellipses"),
+            },
+            targets,
+        )
+        enc_losses = self._compute_single_output_losses(
+            pred_logits=pred_logits,
+            pred_boxes=pred_boxes,
+            targets=targets,
+            pred_lines=enc_outputs.get("pred_lines"),
+            pred_ellipses=enc_outputs.get("pred_ellipses"),
+            indices=enc_indices,
+        )
+
+        loss_ce_enc = enc_losses['loss_ce'] * self.enc_loss_coef
+        loss_bbox_enc = enc_losses['loss_bbox'] * self.enc_loss_coef
+        loss_giou_enc = enc_losses['loss_giou'] * self.enc_loss_coef
+        loss_line_enc = enc_losses['loss_line'] * self.enc_loss_coef
+        loss_ellipse_enc = enc_losses['loss_ellipse'] * self.enc_loss_coef
+        return {
+            "loss_ce_enc": loss_ce_enc,
+            "loss_bbox_enc": loss_bbox_enc,
+            "loss_giou_enc": loss_giou_enc,
+            "loss_line_enc": loss_line_enc,
+            "loss_ellipse_enc": loss_ellipse_enc,
+            "loss_enc": loss_ce_enc + loss_bbox_enc + loss_giou_enc + loss_line_enc + loss_ellipse_enc,
+        }
+
     def forward(
             self,
             predictions: Dict[str, torch.Tensor],
@@ -415,8 +480,14 @@ class DetectionLoss(BaseLoss):
         dn_loss = self._compute_denoising_loss(predictions)
         losses.update(dn_loss)
 
+        enc_loss = self._compute_encoder_dense_loss(predictions, targets)
+        losses.update(enc_loss)
+
         losses['loss_aux'] = aux_total
-        losses['loss'] = losses['loss_ce'] + losses['loss_bbox'] + losses['loss_giou'] + losses['loss_line'] + losses['loss_ellipse'] + aux_total + losses['loss_dn']
+        losses['loss'] = (
+            losses['loss_ce'] + losses['loss_bbox'] + losses['loss_giou'] + losses['loss_line'] + losses['loss_ellipse']
+            + aux_total + losses['loss_dn'] + losses['loss_enc']
+        )
 
         # Log the sums of the losses per epoch
         self.total_loss += losses['loss'].item()
@@ -427,6 +498,7 @@ class DetectionLoss(BaseLoss):
         self.total_loss_line += losses['loss_line'].item()
         self.total_loss_ellipse += losses['loss_ellipse'].item()
         self.total_loss_dn += losses['loss_dn'].item()
+        self.total_loss_enc += losses['loss_enc'].item()
         self.batch_count += 1
 
         return losses
@@ -439,7 +511,8 @@ class DetectionLoss(BaseLoss):
                 "total_loss_aux": self.total_loss_aux / self.batch_count,
                 "total_loss_line": self.total_loss_line / self.batch_count,
                 "total_loss_ellipse": self.total_loss_ellipse / self.batch_count,
-                "total_loss_dn": self.total_loss_dn / self.batch_count}
+                "total_loss_dn": self.total_loss_dn / self.batch_count,
+                "total_loss_enc": self.total_loss_enc / self.batch_count}
 
     @staticmethod
     def build_A_flat(ellipse_logits: torch.Tensor) -> torch.Tensor:

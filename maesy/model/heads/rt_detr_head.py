@@ -365,8 +365,9 @@ class RTDETRHead(nn.Module):
 
         return torch.cat(tokens, dim=1), spatial_shapes
 
-    def _select_queries(self, memory: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def _select_queries(self, memory: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         references: Dict[str, torch.Tensor] = {}
+        enc_outputs: Dict[str, torch.Tensor] = {}
         enc_logits = self.encoder_class_head(memory)
 
         foreground_scores = enc_logits[..., :-1].sigmoid().amax(dim=-1)
@@ -374,19 +375,29 @@ class RTDETRHead(nn.Module):
 
         gather_idx = topk_idx.expand(-1, -1, memory.shape[-1])
         selected_memory = torch.gather(memory, dim=1, index=gather_idx)
+        enc_outputs["pred_logits"] = torch.gather(
+            enc_logits,
+            dim=1,
+            index=topk_idx.expand(-1, -1, enc_logits.shape[-1]),
+        )
 
         selected_refs = topk_idx.expand(-1, -1, 4)
         enc_boxes = self.encoder_box_head(memory)#.sigmoid()
         references["reference_boxes"] = torch.gather(enc_boxes, dim=1, index=selected_refs)
+        enc_outputs["pred_boxes"] = references["reference_boxes"].sigmoid()
         if self.config.enable_line_detection:
             enc_lines = self.encoder_line_head(memory)#.sigmoid()
             references["reference_lines"] = torch.gather(enc_lines, dim=1, index=selected_refs)
+            enc_outputs["pred_lines"] = references["reference_lines"].sigmoid()
         if self.config.enable_ellipse_detection:
             enc_ellipses = self.encoder_ellipse_head(memory)  # ! NO sigmoid since ellipses are not [0,1] bound
             references["reference_ellipses"] = torch.gather(enc_ellipses, dim=1, index=topk_idx.expand(-1, -1, 5))
+            enc_outputs["pred_ellipses"] = references["reference_ellipses"]
+
+        enc_outputs["selected_indices"] = topk_idx.squeeze(-1)
 
         query = selected_memory + self.query_content.weight.unsqueeze(0)
-        return query, references
+        return query, references, enc_outputs
 
     def _build_denoising_queries(
         self,
@@ -459,8 +470,8 @@ class RTDETRHead(nn.Module):
         reference_boxes = references["reference_boxes"] #.detach() # Detach from gradient graph due to instability issues.
 
         reference_logits = reference_boxes # self._inverse_sigmoid(reference_boxes) #TODO: Cleanup if this works
-        line_reference_logits = references["reference_lines"] # self._inverse_sigmoid(reference_boxes) TODO: Maybe use 3 dense heads instead?? (Done :) )
-        ellipse_reference_logits = references["reference_ellipses"]
+        line_reference_logits = references.get("reference_lines") # self._inverse_sigmoid(reference_boxes) TODO: Maybe use 3 dense heads instead?? (Done :) )
+        ellipse_reference_logits = references.get("reference_ellipses")
 
         logits_per_layer: List[torch.Tensor] = []
         boxes_per_layer: List[torch.Tensor] = []
@@ -483,13 +494,13 @@ class RTDETRHead(nn.Module):
             logits_per_layer.append(pred_logits)
             boxes_per_layer.append(pred_boxes)
 
-            if self.decoder_line_heads is not None:
+            if self.decoder_line_heads is not None and line_reference_logits is not None:
                 tmp_line_pred = self.decoder_line_heads[layer_idx](query)
                 pred_lines = (tmp_line_pred + line_reference_logits).sigmoid()
                 lines_per_layer.append(pred_lines)
                 line_reference_logits = tmp_line_pred.detach() + line_reference_logits.detach()
 
-            if self.decoder_ellipse_heads is not None:
+            if self.decoder_ellipse_heads is not None and ellipse_reference_logits is not None:
                 tmp_ellipse_pred = self.decoder_ellipse_heads[layer_idx](query)
                 pred_ellipses = (tmp_ellipse_pred + ellipse_reference_logits)
                 ellipses_per_layer.append(pred_ellipses)
@@ -510,7 +521,7 @@ class RTDETRHead(nn.Module):
 
         return decoded
 
-    def forward(self, features: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
+    def forward(self, features: Dict[str, torch.Tensor], **kwargs) -> Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor], List[Dict[str, torch.Tensor]]]]:
         """
             Forward pass of the rt-detr head
 
@@ -523,16 +534,17 @@ class RTDETRHead(nn.Module):
         fused = self._hybrid_encode(features)
         memory, spatial_shapes = self._flatten_memory(fused)
 
-        query, references = self._select_queries(memory)
+        query, references, enc_outputs = self._select_queries(memory)
         main_decoded = self._decode_queries(query, references, memory, spatial_shapes)
         logits_per_layer = main_decoded["pred_logits"]
         boxes_per_layer = main_decoded["pred_boxes"]
         lines_per_layer = main_decoded.get("pred_lines", [])
         ellipses_per_layer = main_decoded.get("pred_ellipses", [])
 
-        outputs: Dict[str, Union[torch.Tensor, List[Dict[str, torch.Tensor]]]] = {
+        outputs: Dict[str, Union[torch.Tensor, Dict[str, torch.Tensor], List[Dict[str, torch.Tensor]]]] = {
             "pred_logits": logits_per_layer[-1],
             "pred_boxes": boxes_per_layer[-1],
+            "enc_outputs": enc_outputs,
         }
         if len(lines_per_layer) > 0:
             outputs["pred_lines"] = lines_per_layer[-1]
@@ -559,7 +571,10 @@ class RTDETRHead(nn.Module):
                 dtype=memory.dtype,
             )
             if dn_pack is not None:
-                dn_decoded = self._decode_queries(dn_pack["dn_query"], dn_pack["dn_boxes"], memory, spatial_shapes)
+                dn_references: Dict[str, torch.Tensor] = {"reference_boxes": dn_pack["dn_boxes"]}
+                if self.decoder_line_heads is not None:
+                    dn_references["reference_lines"] = dn_pack["dn_lines"]
+                dn_decoded = self._decode_queries(dn_pack["dn_query"], dn_references, memory, spatial_shapes)
                 dn_output: Dict[str, torch.Tensor] = {
                     "pred_logits": dn_decoded["pred_logits"][-1],
                     "pred_boxes": dn_decoded["pred_boxes"][-1],

@@ -43,6 +43,16 @@ class ODTrainingConfig(TrainingConfig):
     lr_step_size: int = 30  # For step scheduler
     lr_gamma: float = 0.1  # For step scheduler
 
+    # Loss coefficients
+    bbox_loss_coef: float = 5.0,
+    class_loss_coef: float = 1.0,
+    giou_loss_coef: float = 2.0
+    eos_coef: float = 0.1
+    aux_loss_coef: float = 1.0
+    line_loss_coef: float = 2.0
+    ellipse_loss_coef: float = 2.0
+    dn_loss_coef: float = 1.0
+
     # Checkpoint and logging
     save_dir: str = "./checkpoints"
     save_frequency: int = 10  # Save every n epochs
@@ -119,9 +129,9 @@ def train_vit_detector(
     # Create training configuration
     training_config = ODTrainingConfig(
         batch_size=64,
-        num_epochs=500,
-        learning_rate=1e-4 if freeze else 5e-5,  # Higher LR when only training head
-        backbone_learning_rate=0.0 if freeze else 5e-6,  # Lower LR for backbone if fine-tuning, otherwise 0
+        num_epochs=100,
+        learning_rate=1e-4 if freeze else 1e-5,  # Higher LR when only training head
+        backbone_learning_rate=0.0 if freeze else 1e-6,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler="cosine",
@@ -132,7 +142,14 @@ def train_vit_detector(
         save_dir=output_dir,
         criterion="DetectionLoss",  # "YOLOv8Loss", #
         use_amp=True,
-        # device=torch.device("cpu")
+        bbox_loss_coef = 5.0,
+        class_loss_coef = 1.0,
+        giou_loss_coef = 2.0,
+        eos_coef = 0.1,
+        aux_loss_coef = 1.0,
+        line_loss_coef = 2.0,
+        ellipse_loss_coef = 2.0,
+        dn_loss_coef = 1.0,
     )
 
     # Create dataloaders with custom collate function

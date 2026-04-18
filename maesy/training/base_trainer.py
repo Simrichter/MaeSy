@@ -139,19 +139,21 @@ class BaseTrainer(ABC):
 
     def _create_loss(self) -> BaseLoss:
         if self.config.criterion == "DetectionLoss":
-            model_cfg = getattr(self.model, "config", None)
+
             loss = DetectionLoss(
-                num_classes=getattr(model_cfg, "num_classes", 1),
-                bbox_loss_coef=getattr(model_cfg, "bbox_loss_coef", 5.0),
-                class_loss_coef=getattr(model_cfg, "class_loss_coef", 1.0),
-                giou_loss_coef=getattr(model_cfg, "giou_loss_coef", 2.0),
-                label_smoothing=self.config.label_smoothing,
-                aux_loss_coef=getattr(model_cfg, "aux_loss_coef", 0.5),
-                line_loss_coef=getattr(model_cfg, "line_loss_coef", 2.0),
-                dn_loss_coef=getattr(model_cfg, "dn_loss_coef", 1.0),
-                enable_line_detection=getattr(model_cfg, "enable_line_detection", False),
-                line_class_id=getattr(model_cfg, "line_class_id", -1),
-                eos_coef=getattr(model_cfg, "eos_coef", 0.1),
+                num_classes=getattr(self.model.config, "num_classes", 1),
+                bbox_loss_coef=getattr(self.config, "bbox_loss_coef", 5.0),
+                class_loss_coef=getattr(self.config, "class_loss_coef", 1.0),
+                giou_loss_coef=getattr(self.config, "giou_loss_coef", 2.0),
+                label_smoothing=getattr(self.config, "label_smoothing", 0.0),
+                aux_loss_coef=getattr(self.config, "aux_loss_coef", 0.5),
+                line_loss_coef=getattr(self.config, "line_loss_coef", 2.0),
+                dn_loss_coef=getattr(self.config, "dn_loss_coef", 1.0),
+                enable_line_detection=getattr(self.model.config, "enable_line_detection", False),
+                enable_ellipse_detection=getattr(self.model.config, "enable_ellipse_detection", False),
+                line_class_id=getattr(self.model.config, "line_class_id", -1),
+                ellipse_class_id=getattr(self.model.config, "ellipse_class_id", -1),
+                eos_coef=getattr(self.config, "eos_coef", 0.1),
                 device=self.device
             )
             return loss

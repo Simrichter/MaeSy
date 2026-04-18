@@ -38,16 +38,6 @@ class RTDETRConfig:
     ellipse_class_id: int = -1
     enable_auxiliary_losses: bool = True
 
-    # Additional settings
-    bbox_loss_coef: float = 5.0
-    class_loss_coef: float = 1.0
-    giou_loss_coef: float = 2.0
-    eos_coef: float = 0.1
-    aux_loss_coef: float = 1.0
-    line_loss_coef: float = 2.0
-    dn_loss_coef: float = 1.0
-
-
 class RTDETR(BaseModel):
     """RT-DETR style detector with the same output contract as DETR."""
 

@@ -456,10 +456,10 @@ class RTDETRHead(nn.Module):
         memory: torch.Tensor,
         spatial_shapes: List[Tuple[int, int]],
     ) -> Dict[str, List[torch.Tensor]]:
-        reference_boxes = references["reference_boxes"].detach() # Detach from gradient graph due to instability issues.
+        reference_boxes = references["reference_boxes"] #.detach() # Detach from gradient graph due to instability issues.
 
         reference_logits = reference_boxes # self._inverse_sigmoid(reference_boxes) #TODO: Cleanup if this works
-        line_reference_logits = references["reference_lines"] # self._inverse_sigmoid(reference_boxes) TODO: Maybe use 3 dense heads instead?? Done :)
+        line_reference_logits = references["reference_lines"] # self._inverse_sigmoid(reference_boxes) TODO: Maybe use 3 dense heads instead?? (Done :) )
         ellipse_reference_logits = references["reference_ellipses"]
 
         logits_per_layer: List[torch.Tensor] = []

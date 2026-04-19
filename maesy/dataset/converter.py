@@ -2,6 +2,7 @@ import ast
 import json
 import os
 from pathlib import Path
+from typing import Tuple
 
 import numpy as np
 from skimage.measure import EllipseModel
@@ -77,7 +78,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
         out_path.mkdir(exist_ok=True)
 
         txts = [t for t in os.listdir(path) if t.endswith(".txt")]
-        model = EllipseModel()
+        ellipse_model = EllipseModel()
         for label_file in tqdm(txts):
             with open(os.path.join(path, label_file), 'r') as f:
                 lines = f.readlines()
@@ -119,8 +120,8 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                         points = np.array(ast.literal_eval(f"[{line}]"))
                         points[:,::2] = points[:,::2]/544
                         points[:,1::2] = 1-points[:,1::2]/448
-                        if model.estimate(points):
-                            cx, cy, a, b, theta = model.params
+                        if ellipse_model.estimate(points):
+                            cx, cy, a, b, theta = ellipse_model.params
                             # Convert to cholesky representation
                             cx, cy, l11, l12, l22 = ellipse_to_cholesky(cx, cy, a, b, theta)
                             new_lines.append(f"{name_to_id['CenterCircle']} {cx} {cy} {l11} {l12} {l22}\n")
@@ -134,14 +135,21 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                 f.writelines(new_lines)
 
 
-def datumaro_to_devils_yolo(datumaro_dir: str):
+def datumaro_to_devils_yolo(datumaro_dir: str) -> Tuple[str, int, list, dict]:
         """
         Convert Image annotations exported from cvat in datumaro JSON format into DevilsYolo format.
         Lines are represented by their two endpoint coordinates in xyxy format.
         All coordinates are normalized
+        Returns number of classes, class_names and special_classes dict (for create dataset)
 
         Args:
             :param datumaro_dir: Path to the datumaro dataset root folder (the one that contains the annotations folder and the images folder)
+
+        Returns:
+            path: Path to images and labels
+            nc: Number of classes
+            class_names: List of class names
+            special_classes: Dict of special classes (lines, ellipses)
         """
 
         print("="*60)
@@ -165,8 +173,7 @@ def datumaro_to_devils_yolo(datumaro_dir: str):
                                 if not (p1[0] == p2[0] and p1[1] == p2[1]):  # Check for zero-length vector
                                     anns_to_be_added.append(new_ann)
                                 else:
-                                    print(
-                                        f"Skipping double point for annotation {ann_i} in file {img_dat['id']} ({img_i}) due to zero-length vector: {p1} and {p2}")
+                                    print(f"Skipping double point for annotation {ann_i} in file {img_dat['id']} ({img_i}) due to zero-length vector: {p1} and {p2}")
 
                             annot['points'] = anns_to_be_added[0]['points']
                             anns_to_be_added = anns_to_be_added[1:]
@@ -179,6 +186,9 @@ def datumaro_to_devils_yolo(datumaro_dir: str):
         _fix_multipoint_line(data)
 
         img_dir = f"{datumaro_dir}/images/default"
+        ellipse_model = EllipseModel()
+
+        id_to_name = {i: label["name"] for i, label in enumerate(data["categories"]["label"]["labels"])}
 
         print("Writing .txt annotations...")
         for img_ind, img_data in enumerate(tqdm(data['items'])):
@@ -186,7 +196,7 @@ def datumaro_to_devils_yolo(datumaro_dir: str):
                 normalize = img_data["image"]["size"]
                 normalize.reverse() # datumaro saves height, width
                 for ann_ind, ann in enumerate(img_data['annotations']):
-                    if ann['type'] == "bbox":
+                    if ann['type'] == "bbox": # BoundingBoxes
                         cx = ann['bbox'][0] / normalize[0]
                         cy = ann['bbox'][1] / normalize[1]
                         w = ann['bbox'][2] / normalize[0]
@@ -194,11 +204,29 @@ def datumaro_to_devils_yolo(datumaro_dir: str):
                         cx += 0.5 * w
                         cy += 0.5 * h
                         f.write(f"{ann['label_id']} {cx} {cy} {w} {h}\n")
-                    elif ann['type'] == "polyline":
+                    elif ann['type'] == "polyline": # FieldLines
                         p = ann['points']
                         if len(p) != 4:
                             print(
                                 f"Warning: Skipping annotation in file {img_data['id']} due to incorrect number of points: {p}")
                             continue
                         f.write(f"{ann['label_id']} {p[0]/normalize[0]} {p[1]/normalize[1]} {p[2]/normalize[0]} {p[3]/normalize[1]}\n")
+                    elif ann['type'] == "polygon" and id_to_name[ann['label_id']] in ["CenterCircle"]: # Ellipses
+                        p = ann['points']
+                        # reshape to N, 2 with every two consecutive values grouped in last dimension
+                        points = np.array([p[::2], p[1::2]]).T
+                        points[:, ::2] = points[:, ::2] / normalize[0]
+                        points[:, 1::2] = points[:, 1::2] / normalize[1]
+                        if ellipse_model.estimate(points):
+                            cx, cy, a, b, theta = ellipse_model.params
+                            # Convert to cholesky representation
+                            cx, cy, l11, l12, l22 = ellipse_to_cholesky(cx, cy, a, b, theta)
+                            f.write(f"{ann['label_id']} {cx} {cy} {l11} {l12} {l22}\n")
         print("Conversion finished successfully!")
+
+        if data['items'][0]['id'].count("/") > 0: # Check if datumaro exported with subfolders (e.g. "train/default/faiss/img1.jpg", etc.)
+            folder_path = os.path.join(img_dir, "/".join(data['items'][0]['id'].split("/")[:-1])) # Fix for datumaro exporting with subfolders (e.g. "train/default/faiss/img1.jpg", etc.)
+        else:
+            folder_path = img_dir
+
+        return folder_path, len(id_to_name), list(id_to_name.values()), {"lines": "Lines", "ellipses": "CenterCircle"}

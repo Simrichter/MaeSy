@@ -22,7 +22,7 @@ class MaesyDataset(Dataset):
             self,
             dataset_dir: str,
             split: str,
-            dataset_type: str,
+            annotation_type: str,
             transforms: Optional[Callable] = None,
             start_index: int = 0,
             step: int = 1,
@@ -33,15 +33,11 @@ class MaesyDataset(Dataset):
         Initialize ObjectDetectionDataset.
 
         Args:
-            :param dataset_dir:
+            :param dataset_dir: Path to the MaesyDataset root directory
             :param split: The split to be used (i.e. "train", "val", "test", etc.)
-            :param dataset_type: The type of dataset, choice of ["detection", "classification", "None"]
+            :param annotation_type: The type of dataset, choice of ["detection", "classification", "None"]
             :param transforms: Optional transforms to apply
         """
-
-        print("-"*60)
-        print(f"Loading {split} data...")
-        print("-" * 60)
 
         if not os.path.exists(dataset_dir):
             raise ValueError(f"Path '{dataset_dir}' does not exist.")
@@ -75,7 +71,7 @@ class MaesyDataset(Dataset):
         assert self.images_dir.exists()
         assert self.annotations_dir.exists()
         self.transforms = transforms
-        self.return_labels = dataset_type != "None"
+        self.return_labels = annotation_type != "None"
 
         self.id_to_name = {i:v for i,v in enumerate(yaml_data.get("names", []))}
         self.name_to_id = {v:k for k,v in self.id_to_name.items()}
@@ -103,6 +99,9 @@ class MaesyDataset(Dataset):
         if use_first_n is not None:
             self.images = self.images[:use_first_n]
             self.annotations = self.annotations[:use_first_n]
+
+        print(f"Loaded {split} data...")
+        print("-" * 30)
 
     def __len__(self) -> int:
         """Return number of images in dataset."""

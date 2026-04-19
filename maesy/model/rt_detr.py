@@ -131,5 +131,7 @@ class RTDETR(BaseModel):
         out["pred_boxes"] = out["pred_boxes"].detach()
         if "pred_lines" in out:
             out["pred_lines"] = out["pred_lines"].detach()
+        if "pred_boxes" in out:
+            out["pred_boxes"] = out["pred_boxes"].detach()
         return out, targets
 

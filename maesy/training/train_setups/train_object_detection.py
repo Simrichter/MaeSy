@@ -237,7 +237,7 @@ def train_vit_detector(
 
 def infer_vit_detector(
     checkpoint_path: str,
-    images_path: str,
+    dataset_path: str,
     out_path: str,
     visualize: bool,
     device: torch.device,
@@ -248,7 +248,7 @@ def infer_vit_detector(
 
     Args:
         :param checkpoint_path: Path to trained model checkpoint
-        :param images_path: Path to input image for inference
+        :param dataset_path: Path to input image for inference
         :param out_path: Path to save inference results (predicted bounding boxes and labels)
         :param visualize: Whether to save visualizations of predictions (e.g., images with predicted boxes drawn)
         :param device: Device to run inference on (e.g., "cuda" or "cpu")
@@ -259,16 +259,23 @@ def infer_vit_detector(
     print("=" * 60)
 
     # Load model
-    model = CheckpointHandler(device=device).load_model(checkpoint_path) # TODO
+    model = create_model_from_checkpoint(checkpoint_path) #CheckpointHandler(device=device).load_model(checkpoint_path)
     model.eval()
 
-    dataset = UnlabeledDataset(Path(images_path), transforms=transforms.Compose([
+    # dataset = UnlabeledDataset(Path(images_path), transforms=transforms.Compose([
+    #     transforms.ToImage(),
+    #     transforms.ToDtype(torch.float32, scale=True),
+    #     transforms.Resize((224, 224)),
+    #     # transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    # ])) #, use_first_n=30 # , step=50
+    dataset = MaesyDataset(dataset_path, split, "None", transforms=transforms.Compose([
         transforms.ToImage(),
         transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
         # transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])) #, use_first_n=30 # , step=50
+    ]))
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
     inferer = Inferer(model=model, data_loader=dataloader, device=device)
     preds, _ = inferer.infer() # List[Dict] with keys "pred_boxes" (B X num_querys X 4) and "pred_logits" (B X num_queries)

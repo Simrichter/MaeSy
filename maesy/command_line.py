@@ -147,8 +147,8 @@ def main():
                                         help="Step size for sampling images from folders")
     dataset_creator_parser.add_argument("-i", "--start-index", type=int, default=0,
                                         help="Start index for sampling images from folders")
-    dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "resnet_faiss"],
-                                        default=None, help="Clustering method to use for dataset creation")
+    dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "resnet_faiss"], default=None, help="Clustering method to use for dataset creation")
+    dataset_creator_parser.add_argument("--convert", type=str, choices=["datumaro"], default=None, help="Convert data from a different dataset type before clustering/dataset creation currently only works with single folder datapaths")
     dataset_creator_parser.add_argument("-o", "--output-path", type=str, default="./data", help="Directory, in which the dataset will be saved (default: ./data)")
     dataset_creator_parser.add_argument("--left-right", "-lr", action="store_true", default=False, help="If set, expects matching images from stereo cameras. Assumes data_paths to lead to right images and expects 'left' folder next to 'right' folder")
 

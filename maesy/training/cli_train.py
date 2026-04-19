@@ -27,4 +27,4 @@ def main(args):
         from maesy.training.train_setups.pretrain_classification import train_classification
         train_classification(dataset_path=args.dataset, enable_wandb=args.wandb)
     else:
-        raise ValueError(f"Invalid training mode: {args.mode}. Supported modes are 'od' and 'mae'.")
+        raise ValueError(f"Invalid training mode: {args.mode}. Supported modes are 'od', 'mae' and 'cl'.")

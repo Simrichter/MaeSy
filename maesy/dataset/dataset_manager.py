@@ -9,6 +9,8 @@ from math import ceil
 import requests
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
+
+import yaml
 from tqdm import tqdm
 import tarfile
 import random
@@ -153,6 +155,37 @@ class DatasetManager:
                 if label_file.exists():
                     shutil.copy(label_file, target_path) #/ label_file.name
 
+    @staticmethod
+    def _create_yaml(dataset_dir: Path, splits: List[str], num_classes: Optional[int] = None, class_names: Optional[List[str]] = None, special_classes: Optional[Dict[str, str]] = None):
+        """
+            Create a dataset.yaml file in MaesyDataset format.
+
+            Args:
+                :param dataset_dir: Root directory of the (newly) created dataset
+                :param splits: List of strings specifying the existing splits
+                :param num_classes: Number of classes in the dataset
+                :param class_names: List of strings specifying the class names (ordered by class-id)
+                :param special_classes: Dict of strings, where keys are from ["lines", "ellipses"] and values are from class_names
+        """
+        if num_classes is None:
+            if class_names is None:
+                num_classes = 0
+            else:
+                num_classes = len(class_names)
+
+        yaml_content = {
+            'path' : str(dataset_dir),
+            'nc': num_classes,
+            'names': class_names if class_names is not None else [f'class_{i}' for i in range(num_classes)]
+        }
+        for split in splits:
+            yaml_content[split] = str(split)
+        if special_classes is not None:
+            yaml_content.update(special_classes)
+        yaml_path = dataset_dir / 'dataset.yaml'
+        with open(yaml_path, 'w') as f:
+            yaml.dump(yaml_content, f)
+
     def create_dataset(self,
                        folder_names: list[str],
                        chosen_paths: list[str],
@@ -164,7 +197,11 @@ class DatasetManager:
                        start_index: int,
                        del_folders: bool,  # TODO: Add functionality
                        cluster_method: str,
-                       left_right: bool
+                       left_right: bool,
+                       convert: Optional[str] = None,
+                       nc: int = None,
+                       class_names: Optional[List[str]] = None,
+                       special_classes: Optional[Dict[str, str]] = None,
                        ) -> Path:
         """
         Combines multiple folders with images into a single dataset
@@ -181,6 +218,10 @@ class DatasetManager:
             :param del_folders: Whether to delete the original folders after use
             :param cluster_method: If specified, use clustering_method to select images. Default=None
             :param left_right: If active, expects matching images from stereo cameras. Assumes chosen_paths to lead to right images and expects "left" folder next to "right" folder
+            :param convert: Optional choice of ["datumaro", "robert"]. Triggers automatic conversion in DevilsYolo format before dataset creation.
+            :param nc: Optional number of classes (for dataset.yaml)
+            :param class_names: Optional List of strings that specify class names in class_id order (for dataset.yaml)
+            :param special_classes: Optional Dict of strings with keys in ['lines', 'ellipses'] and values in class_names (for dataset.yaml)
 
         Returns:
             Path to final dataset
@@ -194,18 +235,18 @@ class DatasetManager:
             split_percentages = [p / 100.0 for p in split_percentages]
 
         # Set up dataset folder structure
-        # Always assuming YOLO-Style dataset structure (with train/val/test top-level folders and images/labels subfolders)
+        # Always using YOLO-Style dataset structure (with train/val/test top-level folders and images/labels subfolders)
         # only creating the split folders that are actually needed based on split_percentages
         dataset_dir = self.data_root / dataset_name
-        split_paths = [dataset_dir / split for i, split in enumerate(["train", "val", "test"]) if
-                       split_percentages[i] > 0]
+        splits = [s for i, s in enumerate(["train", "val", "test"]) if split_percentages[i] > 0.0]
+        split_paths = [dataset_dir / split for split in splits]
         os.makedirs(dataset_dir, exist_ok=True)
         for split_path in split_paths:
             os.makedirs(split_path / "images", exist_ok=True)
             if with_labels:
                 os.makedirs(split_path / "labels", exist_ok=True)
 
-        def get_paths():  # folder_names, cluster_method, start_index=0, step=1
+        def _get_paths():  # folder_names, cluster_method, start_index=0, step=1
             img_paths = []
             if cluster_method is None:
                 for folder in folder_names:
@@ -228,10 +269,18 @@ class DatasetManager:
                 image_paths = [f for f in folder_path if
                                f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
                 if len(image_paths) == 0:
-                    raise ValueError(f"WARNING: No image files found after clustering. Exiting...")
+                    raise ValueError(f"No image files found after clustering. Exiting...")
                 return image_paths
 
-        image_files = get_paths()
+        if convert is not None and convert !="":
+            match convert:
+                case "datumaro":
+                    if len(folder_names) != 1:
+                        raise ValueError(f"Currently dataset conversion only works for single folders, but {len(folder_names)} folders are given.")
+                    from maesy.dataset import datumaro_to_devils_yolo
+                    img_dir, nc, class_names, special_classes = datumaro_to_devils_yolo(folder_names[0])
+                    folder_names = [img_dir]
+        image_files = _get_paths()
         num_images = len(image_files)
 
         # Calculate split indices
@@ -256,11 +305,11 @@ class DatasetManager:
             2]) / f"images/Left/{img_file.name}" for i, img_file in enumerate(image_files)]
             self._copy_resize(image_files, target_paths, resize, target_paths_lbls)
 
+        print("Creating dataset.yaml")
+        if nc is None or class_names is None or special_classes is None:
+            print(f"!!!\nWarning: Not all parameters for dataset.yaml specified. Manual corrections required in {dataset_dir/'dataset.yaml'}\n!!!")
+        self._create_yaml(dataset_dir, num_classes=nc, splits=splits, class_names=class_names, special_classes=special_classes)
 
-        # if del_folders:
-        #     print("Deleting original folder:", folder_path)
-        #     shutil.rmtree(folder_path)
-        # os.rmdir(folder_path) TODO
         return dataset_dir
 
     def list_datasets(self) -> list:

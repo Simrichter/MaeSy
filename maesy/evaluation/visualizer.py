@@ -88,19 +88,17 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
     for split in ["train", "val", "test"]:
         try:
             datasets.append(MaesyDataset(input_dir, split, "detection"))
-        except AssertionError:
-            ...
-        except ValueError:
-            ...
-        except FileNotFoundError:
-            ...
+        except AssertionError as e:
+            print(e)
+        except ValueError as e:
+            print(e)
+        except FileNotFoundError as e:
+            print(e)
     if len(datasets) >= 0:
         for d in datasets:
             visualize_dataset(d, output_dir)
     else:
         print("No MaesyDataset detected, assuming standard image folder with annotations (txt files with same name as images).")
-
-
 
     # TODO: Line visualization not working!! Probably because line class id not known
 

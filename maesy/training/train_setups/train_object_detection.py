@@ -130,14 +130,14 @@ def train_vit_detector(
     # Create training configuration
     training_config = ODTrainingConfig(
         batch_size=64,
-        num_epochs=500,
-        learning_rate=1e-4 if freeze else 1e-4,  # Higher LR when only training head
-        backbone_learning_rate=0.0 if freeze else 1e-5,  # Lower LR for backbone if fine-tuning, otherwise 0
+        num_epochs=100,
+        learning_rate=1e-4 if freeze else 5e-5,  # Higher LR when only training head
+        backbone_learning_rate=0.0 if freeze else 5e-6,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4, # TODO: Only apply to certain groups!
         optimizer="adamw",
         lr_scheduler="cosine",
         warmup_epochs=4,
-        label_smoothing=0.0,
+        label_smoothing=0.2,
         save_frequency=100,
         log_frequency=50,
         save_dir=output_dir,
@@ -146,7 +146,7 @@ def train_vit_detector(
         bbox_loss_coef = 5.0,
         class_loss_coef = 1.0,
         giou_loss_coef = 2.0,
-        eos_coef = 0.1,
+        eos_coef = 0.15,
         aux_loss_coef = 0.5,
         enc_loss_coef = 0.3,
         line_loss_coef = 2.0,

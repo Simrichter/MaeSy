@@ -188,7 +188,7 @@ class DetectionTrainer(BaseTrainer):
                 line_class_id=line_class_id,
                 ellipse_class_id=ellipse_class_id,
                 no_object_class=predictions["pred_logits"].shape[-1] - 1,
-                score_threshold=0.3,
+                score_threshold=0.5,
             )
             losses["__decoded_predictions"] = predictions
 

@@ -133,7 +133,7 @@ def train_vit_detector(
         num_epochs=100,
         learning_rate=1e-4 if freeze else 5e-5,  # Higher LR when only training head
         backbone_learning_rate=0.0 if freeze else 5e-6,  # Lower LR for backbone if fine-tuning, otherwise 0
-        weight_decay=1e-4, # TODO: Only apply to certain groups!
+        weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler="cosine",
         warmup_epochs=4,
@@ -248,7 +248,7 @@ def infer_vit_detector(
 
     Args:
         :param checkpoint_path: Path to trained model checkpoint
-        :param dataset_path: Path to input image for inference
+        :param dataset_path: Path to input images for inference
         :param out_path: Path to save inference results (predicted bounding boxes and labels)
         :param visualize: Whether to save visualizations of predictions (e.g., images with predicted boxes drawn)
         :param device: Device to run inference on (e.g., "cuda" or "cpu")
@@ -269,7 +269,7 @@ def infer_vit_detector(
     #     # transforms.ToTensor(),
     #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     # ])) #, use_first_n=30 # , step=50
-    dataset = MaesyDataset(dataset_path, split, "None", transforms=transforms.Compose([
+    dataset = MaesyDataset(dataset_path, split, "None", transforms=transforms.Compose([ # TODO: make blank image folder possible again
         transforms.ToImage(),
         transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
@@ -344,11 +344,11 @@ if __name__ == "__main__":
     # parser.add_argument("--device", type=str, default="cuda:0", help="Device to run inference on")
     #
     # args = parser.parse_args
-    checkpoint = "" # "/home/simon/Desktop/maesy-training/od_checkpoints/scarlet-plant-57/latest_model.pth"
-    dataset = "/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)" #r"/home/simon/Desktop/maesy-training/data/"
+    checkpoint = "/home/simon/Desktop/maesy-training/od_checkpoints/super-moon-127/final_model.pth" # ""
+    dataset = "/home/simon/Desktop/maesy-training/data/CvatLE" # r"/home/simon/Desktop/maesy-training/data/"
     output = r"/home/simon/Desktop/maesy-training/od_checkpoints"
     resume = checkpoint != ""
-    train_vit_detector(checkpoint, dataset, output, True, resume, False)
+    train_vit_detector(checkpoint, dataset, output, True, continue_from_checkpoint=False, enable_wandb=False, enable_line_detection=True, enable_ellipse_detection=True)
 
     # checkpoint = r"/home/simon/Desktop/maesy-training/od_checkpoints/leafy-music-38/best_model.pth"
     # images = r"/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)/train/images"

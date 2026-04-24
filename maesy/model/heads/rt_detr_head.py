@@ -34,12 +34,16 @@ class RTDETRHeadConfig:
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3, custom_init = False):
         super().__init__()
         layers: List[nn.Module] = []
         in_dim = input_dim
         for idx in range(num_layers - 1):
-            layers.append(nn.Linear(in_dim, hidden_dim))
+            lin_layer = nn.Linear(in_dim, hidden_dim)
+            if custom_init: # TODO: Check if this is useful
+                torch.nn.init.normal_(lin_layer.weight, std=0.01)
+                torch.nn.init.constant_(lin_layer.bias, 0)
+            layers.append(lin_layer)
             layers.append(nn.ReLU())
             in_dim = hidden_dim
         layers.append(nn.Linear(in_dim, output_dim))
@@ -235,13 +239,17 @@ class RTDETRHead(nn.Module):
         This is separated from __init__ to allow for creating new classification heads after loading pretrained weights
         """
         self.decoder_class_heads = nn.ModuleList(
-            # [nn.Linear(self.config.embed_dim, self.config.num_classes + 1) for _ in range(self.config.num_decoder_layers)] # TODO: Change to MLP as well???
-            [MLP(self.config.embed_dim, self.config.hidden_dim_out_layers, self.config.num_classes+1) for _ in range(self.config.num_decoder_layers)]
+            # [nn.Linear(self.config.embed_dim, self.config.num_classes + 1) for _ in range(self.config.num_decoder_layers)]
+            [MLP(self.config.embed_dim, self.config.hidden_dim_out_layers, self.config.num_classes+1, custom_init=True) for _ in range(self.config.num_decoder_layers)]
         )
+
+        self.encoder_class_head = MLP(self.config.embed_dim, self.config.hidden_dim_dense_heads, self.config.num_classes + 1) # dense head for query selection
+        # self.encoder_class_head = nn.Linear(self.config.embed_dim, self.config.num_classes + 1)
 
     def __init__(self, config: RTDETRHeadConfig):
         super().__init__()
-        self.decoder_class_heads = None
+        self.encoder_class_head: MLP = None
+        self.decoder_class_heads: nn.ModuleList = None
         self.type = "RTDETRHead"
         self.config = config
         if len(config.feature_channels) != config.num_feature_levels:
@@ -265,7 +273,8 @@ class RTDETRHead(nn.Module):
             dropout=config.decoder_dropout,
         )
 
-        self.encoder_class_head = nn.Linear(config.embed_dim, config.num_classes + 1) # dense head for query selection
+        # self.encoder_class_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, config.num_classes+1)# nn.Linear(config.embed_dim, config.num_classes + 1) # dense head for query selection
+        # encoder_class_head is instantiated in create_class_heads() method!
         self.encoder_box_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 4) # dense head for reference boxes
         self.encoder_line_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 4) # dense head for reference lines
         self.encoder_ellipse_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 5) # dense head for reference ellipses
@@ -488,9 +497,9 @@ class RTDETRHead(nn.Module):
                 query_pos=query_pos,
             )
             pred_logits = cls_head(query)
+            assert torch.isfinite(pred_logits).all(), pred_logits
             tmp_box_pred = box_head(query)
             pred_boxes = (tmp_box_pred + reference_logits).sigmoid()
-
             logits_per_layer.append(pred_logits)
             boxes_per_layer.append(pred_boxes)
 

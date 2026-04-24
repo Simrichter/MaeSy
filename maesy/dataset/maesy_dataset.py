@@ -64,7 +64,7 @@ class MaesyDataset(Dataset):
         dataset_dir = yaml_data.get("path", dataset_dir)
 
         split_path = Path(dataset_dir) / yaml_data.get(split, split)
-        assert split_path.exists(), f"Requested split {split} does not exist in dataset at {dataset_dir}"
+        assert split_path.exists(), f"Requested split '{split}' does not exist in dataset at {dataset_dir}"
 
         self.images_dir = split_path / "images"
         self.annotations_dir = split_path / "labels"

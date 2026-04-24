@@ -22,6 +22,19 @@ from ..model_tools.checkpoint_handler import CheckpointHandler
 
 class BaseTrainer(ABC):
 
+    _NORM_MODULE_TYPES = (
+        nn.BatchNorm1d,
+        nn.BatchNorm2d,
+        nn.BatchNorm3d,
+        nn.SyncBatchNorm,
+        nn.GroupNorm,
+        nn.LayerNorm,
+        nn.InstanceNorm1d,
+        nn.InstanceNorm2d,
+        nn.InstanceNorm3d,
+        nn.LocalResponseNorm,
+    )
+
     def __init__(
             self,
             model: BaseModel,
@@ -92,10 +105,9 @@ class BaseTrainer(ABC):
     def _create_optimizer(self) -> torch.optim.Optimizer:
         """Create optimizer."""
         if self.config.optimizer.lower() == "adamw":
-            params = [{"params": self.model.backbone.parameters(), "lr": self.config.backbone_learning_rate},
-                      {"params": self.model.head.parameters(), "lr": self.config.learning_rate}]
+            params = self._build_adamw_param_groups()
             return torch.optim.AdamW(
-                params, #self.model.parameters()
+                params,
                 lr=self.config.learning_rate,
                 weight_decay=self.config.weight_decay
             )
@@ -114,6 +126,47 @@ class BaseTrainer(ABC):
             )
         else:
             raise ValueError(f"Unknown optimizer: {self.config.optimizer}")
+
+    def _build_adamw_param_groups(self) -> list[dict[str, Any]]:
+        """Create AdamW groups with no weight decay on bias, norms, and embeddings."""
+
+        def split_params(module: nn.Module) -> tuple[list[nn.Parameter], list[nn.Parameter]]:
+            module_lookup = dict(module.named_modules())
+            decay_params: list[nn.Parameter] = []
+            no_decay_params: list[nn.Parameter] = []
+
+            for full_name, param in module.named_parameters():
+                if not param.requires_grad:
+                    continue
+
+                module_name, _, param_name = full_name.rpartition(".")
+                owner_module = module_lookup.get(module_name, module)
+
+                has_decay = (
+                    param_name == "weight"
+                    and not isinstance(owner_module, self._NORM_MODULE_TYPES)
+                    and not isinstance(owner_module, (nn.Embedding, nn.EmbeddingBag))
+                )
+
+                if has_decay:
+                    decay_params.append(param)
+                else:
+                    no_decay_params.append(param)
+
+            return decay_params, no_decay_params
+
+        param_groups: list[dict[str, Any]] = []
+        for module, lr in (
+            (self.model.backbone, self.config.backbone_learning_rate),
+            (self.model.head, self.config.learning_rate),
+        ):
+            decay_params, no_decay_params = split_params(module)
+            if decay_params:
+                param_groups.append({"params": decay_params, "lr": lr, "weight_decay": self.config.weight_decay})
+            if no_decay_params:
+                param_groups.append({"params": no_decay_params, "lr": lr, "weight_decay": 0.0})
+
+        return param_groups
 
     def _create_scheduler(self):
         """Create learning rate scheduler."""

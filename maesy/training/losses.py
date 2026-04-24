@@ -389,14 +389,15 @@ class DetectionLoss(BaseLoss):
                 "loss_enc": zero,
             }
 
+        # pred_dict = {
+        #         "pred_logits": pred_logits,
+        #         "pred_boxes": pred_boxes,
+        #         "pred_lines": enc_outputs.get("pred_lines"),
+        #         "pred_ellipses": enc_outputs.get("pred_ellipses"),
+        #     }
         enc_indices = self.match_predictions_to_targets(
-            {
-                "pred_logits": pred_logits,
-                "pred_boxes": pred_boxes,
-                "pred_lines": enc_outputs.get("pred_lines"),
-                "pred_ellipses": enc_outputs.get("pred_ellipses"),
-            },
-            targets,
+            enc_outputs,
+            targets
         )
         enc_losses = self._compute_single_output_losses(
             pred_logits=pred_logits,
@@ -608,7 +609,7 @@ class DetectionLoss(BaseLoss):
 
         batch_size, num_queries = pred_logits.shape[:2]
         # Flatten to compute cost matrices
-        out_prob = pred_logits.float().flatten(0, 1).log_softmax(-1)  # [B*num_queries, num_classes + 1]
+        out_prob = pred_logits.float().flatten(0, 1).clamp(-20, 20).log_softmax(-1)  # [B*num_queries, num_classes + 1]
         out_bbox = pred_boxes.flatten(0, 1)  # [B*num_queries, 4]
         indices = []
 

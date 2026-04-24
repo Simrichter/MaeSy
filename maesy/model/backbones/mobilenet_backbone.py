@@ -11,6 +11,7 @@ from wandb.util import downsample
 @dataclass
 class MobileNetBackboneConfig:
     version: str
+    image_size: int
 
 class MobileNetBackbone(nn.Module):
     """ResNet Backbone for feature extraction."""

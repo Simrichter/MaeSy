@@ -16,7 +16,7 @@ class ResNetBackboneConfig:
             :param image_size: Input image size (assumed square)
             :param pretrained: Whether to use pre-trained weights
             :param feature_scales: Specify which feature scale levels to calculate and return during forward pass
-        """
+    """
     version: str = "resnet50"
     image_size: int = 224
     pretrained: bool = True
@@ -25,7 +25,7 @@ class ResNetBackboneConfig:
 class ResNetBackbone(nn.Module):
     """ResNet Backbone for feature extraction."""
 
-    def __init__(self, config: ResNetBackboneConfig, remove_layers: int = 1):
+    def __init__(self, config: ResNetBackboneConfig):
         """
         Initialize ResNet backbone.
 
@@ -113,7 +113,7 @@ class ResNetBackbone(nn.Module):
         """
         return {k: torch.Size((self.feature_dim[k], self.spatial_feature_size[k], self.spatial_feature_size[k])) for k in self.config.feature_scales}
 
-    def get_feature_channels(self) -> Tuple[int, int, int]:
+    def get_feature_channels(self) -> Tuple[int, ...]:
         """
             Return the number of channels for each feature scale as a tuple
         """

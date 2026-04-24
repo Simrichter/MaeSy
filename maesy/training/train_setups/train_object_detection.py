@@ -1,7 +1,9 @@
 import shutil
 from dataclasses import dataclass
+from typing import List, Any
 
 import torch
+import torchvision
 from torch.utils.data import DataLoader
 from pathlib import Path
 
@@ -98,6 +100,8 @@ def train_vit_detector(
         :param continue_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
         :param enable_wandb: Whether to enable Weights & Biases logging
         :param seed: Random seed for reproducibility (default: 42)
+        :param enable_line_detection: Whether to enable line detection (if the dataset contains line annotations and the model supports it)
+        :param enable_ellipse_detection: Whether to enable ellipse detection (if the dataset contains ellipse annotations and the model supports it)
     """
     print("=" * 60)
     print("Starting object detection training")
@@ -105,7 +109,7 @@ def train_vit_detector(
 
     torch.manual_seed(seed)
 
-    train_transform_steps = [
+    train_transform_steps: List[Any] = [
         transforms.ToImage(),
         transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),
@@ -130,14 +134,14 @@ def train_vit_detector(
     # Create training configuration
     training_config = ODTrainingConfig(
         batch_size=64,
-        num_epochs=100,
-        learning_rate=1e-4 if freeze else 5e-5,  # Higher LR when only training head
-        backbone_learning_rate=0.0 if freeze else 5e-6,  # Lower LR for backbone if fine-tuning, otherwise 0
+        num_epochs=750,
+        learning_rate=1e-4 if freeze else 1e-4,  # Higher LR when only training head
+        backbone_learning_rate=0.0 if freeze else 1e-5,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler="cosine",
         warmup_epochs=4,
-        label_smoothing=0.2,
+        label_smoothing=0.1,
         save_frequency=100,
         log_frequency=50,
         save_dir=output_dir,

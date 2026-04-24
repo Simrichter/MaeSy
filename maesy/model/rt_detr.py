@@ -3,9 +3,7 @@
 from dataclasses import dataclass
 from typing import Tuple, Dict
 
-from .backbones import ResNetBackbone
-from .backbones.resnet_backbone import ResNetBackboneConfig
-from .backbones.swin_backbone import SWINBackboneConfig, SWINBackbone
+from .backbones import ResNetBackbone, ResNetBackboneConfig, MobileNetBackbone, MobileNetBackboneConfig, SWINBackbone, SWINBackboneConfig
 from .base_model import BaseModel
 from .heads import RTDETRHead, RTDETRHeadConfig
 
@@ -61,6 +59,14 @@ class RTDETR(BaseModel):
                 feature_scales=self.config.feature_scales
             )
             self.backbone = SWINBackbone(bbone_conf)
+        elif self.config.backbone_version.startswith("mobilenet"):
+            bbone_conf = MobileNetBackboneConfig(
+                version=self.config.backbone_version,
+                image_size=self.config.image_size,
+                pretrained=self.config.backbone_pretrained,
+                feature_scales=self.config.feature_scales
+            )
+            self.backbone = MobileNetBackbone(bbone_conf)
         else:
             raise ValueError(f"Unknown backbone version {self.config.backbone_version}")
 

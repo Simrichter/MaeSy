@@ -21,5 +21,5 @@ num_classes: -1
 num_decoder_layers: 2
 num_deformable_points: 8
 num_queries: 40
-backbone_version: swin_tiny #resnet18
+backbone_version: mobilenetv2 #swin_tiny #resnet18
 type: RT-DETR

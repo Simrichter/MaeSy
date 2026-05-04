@@ -21,7 +21,7 @@ def main(args):
             enable_ellipse_detection=getattr(args, "enable_ellipse_detection", False),
         )
     elif args.mode == "mae":
-        train_mae(dataset_path=args.dataset, checkpoint=args.checkpoint, enable_wandb=args.wandb)
+        train_mae(args.model, dataset_path=args.dataset, enable_wandb=args.wandb)
         #TODO: Add further parameters for mae training (image size, batch size, num epochs, mask ratio)...
     elif args.mode == "cl":
         from maesy.training.train_setups.pretrain_classification import train_classification

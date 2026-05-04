@@ -38,8 +38,8 @@ class BaseTrainer(ABC):
     def __init__(
             self,
             model: BaseModel,
-            train_loader: DataLoader,
             project_name: str,
+            train_loader: DataLoader,
             val_loader: Optional[DataLoader] = None,
             config: Optional[TrainingConfig] = None,
             enable_wandb: bool = True

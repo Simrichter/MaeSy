@@ -5,7 +5,7 @@ from ..components import TransformerBlock, Utils
 
 
 @dataclass
-class DecoderHeadConfig:
+class MaeDecoderHeadConfig:
     embed_dim: int
     num_patches: int
     patch_size: int
@@ -17,8 +17,8 @@ class DecoderHeadConfig:
     in_channels: int
 
 
-class DecoderHead(nn.Module):
-    def __init__(self, config: DecoderHeadConfig):
+class MaeDecoderHead(nn.Module):
+    def __init__(self, config: MaeDecoderHeadConfig):
         super().__init__()
         self.type = "DecoderHead"
         self.config = config

@@ -56,9 +56,11 @@ def main():
 
 
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")
+    mae_parser.add_argument("model", type=str,
+                           help="Either a model architecture like [rt-detr, detr, mae] or a path to a training checkpoint")
     mae_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
-    mae_parser.add_argument("--checkpoint", type=str, default="",
-                            help="Path to checkpoint to continue training from (default: none)")
+    # mae_parser.add_argument("--checkpoint", type=str, default="",
+    #                         help="Path to checkpoint to continue training from (default: none)")
     mae_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
 
     cl_parser = train_parser.add_parser("cl", help="Train a backbone with Classification")

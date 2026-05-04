@@ -1,0 +1,19 @@
+type: mae-multiscale
+image_size: 224
+patch_size: 16
+in_channels: 3
+feature_scales: !!python/tuple
+- c3
+- c4
+- c5
+
+backbone_version: "swin_tiny" # "resnet50"
+backbone_pretrained: True
+use_decoder_skip_connections: True
+decoder_embed_dim: 384
+decoder_num_layers: 4
+decoder_num_heads: 6
+decoder_mlp_ratio: 4.0
+decoder_dropout: 0.1
+decoder_attention_dropout: 0.1
+decoder_window_size: 7

@@ -4,6 +4,7 @@ from .config import ModelConfig
 from .base_model import BaseModel
 from .resnet_featureextractor import ResnetFeatureExtractor
 from maesy.model.mae_model import MaskedAutoencoderViT, MAEConfig
+from maesy.model.mae_multiscale import MaskedAutoencoderMultiscale, MaeMultiscaleConfig
 from maesy.model.vit_detector import ViTDetector, ViTDetectorConfig
 from maesy.model.classification_CNN_model import ClassificationCNN, ClassificationCNNConfig
 from maesy.model.DETR import DETR, DETRConfig
@@ -14,6 +15,8 @@ __all__ = [
     "BaseModel",
     "MaskedAutoencoderViT",
     "MAEConfig",
+    "MaskedAutoencoderMultiscale",
+    "MaeMultiscaleConfig",
     "ResnetFeatureExtractor",
     "ViTDetector",
     "ViTDetectorConfig",

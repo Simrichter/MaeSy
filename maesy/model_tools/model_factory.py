@@ -4,10 +4,20 @@ from typing import Dict
 import torch
 import yaml
 
-from maesy.model import BaseModel, DETRConfig, DETR, RTDETR, RTDETRConfig, MaskedAutoencoderViT, MAEConfig
+from maesy.model import (
+    BaseModel,
+    DETR,
+    DETRConfig,
+    MAEConfig,
+    RTDETR,
+    RTDETRConfig,
+    MaeMultiscaleConfig,
+    MaskedAutoencoderMultiscale,
+    MaskedAutoencoderViT,
+)
 from maesy.model_tools import CheckpointHandler
 
-known_architectures = ["rt-detr", "detr", "maesy"]
+known_architectures = ["rt-detr", "detr", "mae", "mae-multiscale"]
 
 def _print_model_info(model: BaseModel):
     """Utility function to print model information."""
@@ -28,6 +38,8 @@ def create_model_from_config(config: Dict) -> BaseModel:
     match config.get("type", "").lower():
         case "mae":
             return MaskedAutoencoderViT(config=MAEConfig(**config))
+        case "mae-multiscale":
+            return MaskedAutoencoderMultiscale(config=MaeMultiscaleConfig(**config))
         case "vit":
             raise ValueError("model type 'vit' is not supported")
         case "detr":
@@ -35,7 +47,7 @@ def create_model_from_config(config: Dict) -> BaseModel:
         case "rt-detr":
             return RTDETR(RTDETRConfig(**config))
         case _:
-            raise ValueError(f"Model type '{config.get('type', '')}' not recognized. Supported types: ['mae', 'detr', 'rt_detr']")
+            raise ValueError(f"Model type '{config.get('type', '')}' not recognized. Supported types: ['mae', 'mae-multiscale', 'detr', 'rt_detr']")
 
 def create_model_from_checkpoint(checkpoint: str) -> BaseModel:
     """
@@ -86,6 +98,12 @@ def create_model(model: str, config) -> BaseModel:
         if not isinstance(config, MAEConfig):
             raise TypeError(f"Model 'mae' expects config type MAEConfig, got {type(config).__name__}")
         instance = MaskedAutoencoderViT(config=config)
+    elif model == "mae_multiscale":
+        from maesy.model import MaskedAutoencoderMultiscale, MaeMultiscaleConfig
+
+        if not isinstance(config, MaeMultiscaleConfig):
+            raise TypeError(f"Model 'mae_multiscale' expects config type MaeMultiscaleConfig, got {type(config).__name__}")
+        instance = MaskedAutoencoderMultiscale(config=config)
     elif model == "ViTDetector":
         from maesy.model import ViTDetector, ViTDetectorConfig
 
@@ -105,7 +123,7 @@ def create_model(model: str, config) -> BaseModel:
             raise TypeError(f"Model 'rt_detr' expects config type RTDETRConfig, got {type(config).__name__}")
         instance = RTDETR(config=config)
     else:
-        raise ValueError(f"Model {model} not recognized. Available models: ['mae', 'ViTDetector', 'detr', 'rt_detr']")
+        raise ValueError(f"Model {model} not recognized. Available models: ['mae', 'mae_multiscale', 'ViTDetector', 'detr', 'rt_detr']")
 
     _print_model_info(instance)
     return instance

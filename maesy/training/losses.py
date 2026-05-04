@@ -761,15 +761,43 @@ class MaskedMSE(BaseLoss):
     def get_metrics(self) -> dict[str, float]:
         return {"total_loss": self.total_loss / self.batch_count}
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor = None) -> Dict[str, torch.Tensor]:
+    # def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor = None) -> Dict[str, torch.Tensor]:
+    #     """
+    #     Loss calculation. Calculates Pixel-level MSE with masking on patch level
+    #     !Expects pred and target in patchified format!
+    #
+    #     Args:
+    #         :param pred: prediction of the model in patchified shape [B, np, c*ps**2] (np = num_patches, ps = patch_size)
+    #         :param target: correct target in patchified shape [B, np, c*ps**2] (np = num_patches, ps = patch_size)
+    #         :param mask: Patch-level mask with '1' for every patch that should be considered in loss and '0' otherwise, shape [B, np]
+    #     """
+    #     dist = (pred - target) ** 2
+    #     md = dist.mean(dim=-1)  # [B, N], mean loss per patch
+    #     tmd = (md if mask is None else (md * mask)).sum() / mask.sum()  # mean loss (on unmasked patches only for more focussed training)
+    #     self.total_loss += tmd.item()
+    #     self.batch_count += 1
+    #     return {'loss': tmd}
 
+    def forward(self, pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor = None) -> Dict[str, torch.Tensor]:
+        """
+        Loss calculation. Calculates Pixel-level MSE with masking on pixel level
+        All inputs are expected in [B, C, H, W] format.
+        The mask is expected in [B, C, H, W] format as well !!! (often, the channels will be identical, but channel-level masking in possible)
+
+        Args:
+            :param pred: prediction of the model of shape [B, C, H, W]
+            :param target: correct target in patchified shape [B, C, H, W]
+            :param mask: Pixel-level mask with '1' for every pixel that should be considered in loss and '0' otherwise, shape [B, C, H, W]
+        """
         dist = (pred - target) ** 2
-        md = dist.mean(dim=-1)  # [B, N], mean loss per patch
-        tmd = (md if mask is None else (
-                    md * mask)).sum() / mask.sum()  # mean loss (on unmasked patches only for more focussed training)
-        self.total_loss += tmd.item()
+        if mask is not None:
+            masked_dist = dist * mask
+            mean = masked_dist.sum() / mask.sum()
+        else:
+            mean = dist.mean()
+        self.total_loss += mean.item()
         self.batch_count += 1
-        return {'loss': tmd}
+        return {'loss': mean}
 
 class ClassificationLoss(BaseLoss):
 

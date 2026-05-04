@@ -48,18 +48,6 @@ class TrainingConfig:
     use_amp: bool = True
 
 @dataclass
-class MAEPretrainingConfig(TrainingConfig):
-    """Configuration for Masked Autoencoder pretraining."""
-    criterion: str = "MaskedMSE"
-
-    # MAE specific parameters
-    mask_ratio: float = 0.75  # Ratio of patches to mask
-
-    # Checkpoint and logging
-    save_dir: str = "./MAEpretrain_checkpoints"
-    output_predicted_images: bool = False # Whether to save predicted images during validation
-
-@dataclass
 class ClassificationPretrainingConfig(TrainingConfig):
     """Configuration for Classification pretraining."""
     criterion: str = "ClassificationLoss"

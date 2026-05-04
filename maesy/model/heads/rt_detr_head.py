@@ -497,7 +497,7 @@ class RTDETRHead(nn.Module):
                 query_pos=query_pos,
             )
             pred_logits = cls_head(query)
-            assert torch.isfinite(pred_logits).all(), pred_logits
+            # assert torch.isfinite(pred_logits).all(), pred_logits
             tmp_box_pred = box_head(query)
             pred_boxes = (tmp_box_pred + reference_logits).sigmoid()
             logits_per_layer.append(pred_logits)

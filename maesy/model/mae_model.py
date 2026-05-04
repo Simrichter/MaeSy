@@ -6,7 +6,7 @@ import torch
 from .base_model import BaseModel
 from .backbones import TransformerBackbone, TransformerBackboneConfig
 from .components import Utils
-from .heads import DecoderHead, DecoderHeadConfig
+from .heads import MaeDecoderHead, MaeDecoderHeadConfig
 
 @dataclass
 class MAEConfig:
@@ -70,7 +70,7 @@ class MaskedAutoencoderViT(BaseModel):
         )
         self.backbone = TransformerBackbone(backbone_config)
 
-        head_config = DecoderHeadConfig(
+        head_config = MaeDecoderHeadConfig(
             embed_dim=config.decoder_embed_dim,
             num_patches=backbone_config.num_patches,
             patch_size=config.patch_size,
@@ -81,7 +81,7 @@ class MaskedAutoencoderViT(BaseModel):
             num_layers=config.decoder_num_layers,
             in_channels=config.in_channels
         )
-        self.head = DecoderHead(head_config)
+        self.head = MaeDecoderHead(head_config)
 
     def forward(self, x, **kwargs):
         x = Utils.patchify(x, self.config.image_size, self.config.patch_size)

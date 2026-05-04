@@ -63,7 +63,7 @@ class ODTrainingConfig(TrainingConfig):
 
     # Device
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
-    # num_workers: int = 4
+    num_workers: int = 4
 
     # Gradient clipping
     max_grad_norm: float = 1.0
@@ -163,7 +163,7 @@ def train_vit_detector(
         train_dataset,
         batch_size=training_config.batch_size,
         shuffle=True,
-        num_workers=8,
+        num_workers=training_config.num_workers,
         persistent_workers=True,
         collate_fn=collate_detection_fn,
         pin_memory=True,
@@ -172,7 +172,7 @@ def train_vit_detector(
     val_loader = DataLoader(
         val_dataset,
         batch_size=training_config.batch_size,
-        num_workers=4,
+        num_workers=training_config.num_workers,
         persistent_workers=True,
         collate_fn=collate_detection_fn,
         shuffle=True,
@@ -273,7 +273,7 @@ def infer_vit_detector(
     #     # transforms.ToTensor(),
     #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     # ])) #, use_first_n=30 # , step=50
-    dataset = MaesyDataset(dataset_path, split, "None", transforms=transforms.Compose([ # TODO: make blank image folder possible again
+    dataset = MaesyDataset(dataset_path, "val", "None", transforms=transforms.Compose([ # TODO: make blank image folder possible again, "auto-infer" split? Maybe through 'None' -> All splits
         transforms.ToImage(),
         transforms.ToDtype(torch.float32, scale=True),
         transforms.Resize((224, 224)),

@@ -102,7 +102,14 @@ class MaeTrainer(BaseTrainer):
         losses = self.loss(out, images, additional_data["mask"])
 
         if val:
-            img_prediction = out[0] # torch.cat((model_out[0], images[0]), dim=-1)
-            losses["img_out"] = img_prediction
+            img_prediction = out[0].detach() # torch.cat((model_out[0], images[0]), dim=-1)
+            tgt_img = images[0].detach()
+            img_prediction = (img_prediction * self._IMAGENET_STD) + self._IMAGENET_MEAN
+            tgt_img = (tgt_img * self._IMAGENET_STD) + self._IMAGENET_MEAN
+
+            img_prediction = img_prediction * pixel_mask[0] + tgt_img * (1.0 - pixel_mask[0])  # Mask out the known squares (since there is no training signal anyways)
+            img_prediction = img_prediction.clamp(0.0, 1.0)
+            losses["img_out"] = torch.cat((img_prediction, tgt_img), dim=-1).cpu() #.to(torch.uint8).cpu()
+
 
         return losses

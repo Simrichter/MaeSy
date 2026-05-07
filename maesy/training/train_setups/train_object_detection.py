@@ -72,14 +72,13 @@ class ODTrainingConfig(TrainingConfig):
     use_amp: bool = True
 
 def train_vit_detector(
-    # checkpoint_path: str,
     model_info: str,
     dataset_path: str,
     output_dir: str,
     freeze: bool,
-    continue_from_checkpoint: bool,
+    continue_training_from_checkpoint: bool,
+    pretrained_backbone: str,
     enable_wandb: bool,
-    # detector_arch: str = "rt_detr",
     enable_denoising: bool = False,
     denoising_num_queries: int = 0,
     denoising_label_noise_ratio: float = 0.2,
@@ -92,12 +91,12 @@ def train_vit_detector(
     Train an object detection model with the selected detector architecture.
 
     Args:
-        # :param checkpoint_path: Path to a checkpoint (pretrained or full OD checkpoint)
         :param model_info: String that specifies the model configuration to be used. Either a path to a checkpoint, or a model architecture like "rt-detr"
         :param dataset_path: Path to object detection dataset
         :param output_dir: Directory to save checkpoints
         :param freeze: Whether to freeze the backbone
-        :param continue_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
+        :param continue_training_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
+        :param pretrained_backbone: Path to a checkpoint that contains a backbone to be reused in od training
         :param enable_wandb: Whether to enable Weights & Biases logging
         :param seed: Random seed for reproducibility (default: 42)
         :param enable_line_detection: Whether to enable line detection (if the dataset contains line annotations and the model supports it)
@@ -127,8 +126,12 @@ def train_vit_detector(
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    train_dataset = MaesyDataset(dataset_path, "train", "detection", train_transforms)
-    val_dataset = MaesyDataset(dataset_path, "val", "detection", val_transforms)
+    # None activates auto-infer, -1 deactivates class in MaesyDataset
+    special_class_deactivation_dict = {'line_class_id': None if enable_line_detection else -1,
+                                       'ellipse_class_id': None if enable_ellipse_detection else -1}
+
+    train_dataset = MaesyDataset(dataset_path, "train", "detection", train_transforms, enable_lines=enable_line_detection, enable_ellipses=enable_ellipse_detection)
+    val_dataset = MaesyDataset(dataset_path, "val", "detection", val_transforms, enable_lines=enable_line_detection, enable_ellipses=enable_ellipse_detection)
     assert train_dataset.get_special_classes() == val_dataset.get_special_classes(), "Error, train and val datasets must have same special classes!"
 
     # Create training configuration
@@ -206,15 +209,15 @@ def train_vit_detector(
     else:
         model = create_model_from_checkpoint(model_info)
 
-    if continue_from_checkpoint:
-        assert model.config.num_classes == train_dataset.get_num_classes(), "Error: The number of classes in the model config does not match the number of classes in the dataset. Please make sure they match before continuing training."
-        assert model.config.line_class_id == train_dataset.get_special_classes()["line_class_id"], "Error: The line_class_id in the model config does not match the line_class_id in the dataset. Please make sure they match before continuing training."
-    else:
-        if model.config.num_classes != train_dataset.get_num_classes() or model.config.line_class_id != train_dataset.get_special_classes()["line_class_id"] or model.config.ellipse_class_id != train_dataset.get_special_classes()["ellipse_class_id"]:
-            print(f"!!!!!!!!!!!!!!!!!!!!\nDetected different classification setup:\nModel has {model.config.num_classes} classes, dataset provides {train_dataset.get_num_classes()}\nLine class of model is {model.config.line_class_id} and Ellipse class is {model.config.ellipse_class_id}, dataset provides {train_dataset.get_special_classes()}\nCreating a new classification head with {train_dataset.get_num_classes()} classes.\n!!!!!!!!!!!!!!!!!!!!")
-            if not hasattr(model.head, "create_class_heads"):
-                raise AttributeError(f"\nmodel.head has no 'create_class_heads()' method that could be used to create a new classification head. Found content: {[f for f in dir(model.head) if not f.startswith('_') and callable(getattr(model.head, f))]}")
-            model.update_head_conf(train_dataset.get_num_classes(), train_dataset.get_special_classes())
+    if pretrained_backbone is not "":
+        print(f"Loading pretrained backbone weights from {pretrained_backbone}...")
+        CheckpointHandler(device=training_config.device).load_backbone(pretrained_backbone, model)
+
+    if not continue_training_from_checkpoint and (model.config.num_classes != train_dataset.get_num_classes() or (enable_line_detection and model.config.line_class_id != train_dataset.get_special_classes()["line_class_id"]) or (enable_ellipse_detection and model.config.ellipse_class_id != train_dataset.get_special_classes()["ellipse_class_id"])):
+        print(f"!!!!!!!!!!!!!!!!!!!!\nDetected different classification setup:\nModel has {model.config.num_classes} classes, dataset provides {train_dataset.get_num_classes()}\nLine class of model is {model.config.line_class_id} and Ellipse class is {model.config.ellipse_class_id}, dataset provides {train_dataset.get_special_classes()}\nCreating a new classification head with {train_dataset.get_num_classes()} classes and matching special classes.\n!!!!!!!!!!!!!!!!!!!!")
+        if not hasattr(model.head, "create_class_heads"):
+            raise AttributeError(f"\nmodel.head has no 'create_class_heads()' method that could be used to create a new classification head. Found content: {[f for f in dir(model.head) if not f.startswith('_') and callable(getattr(model.head, f))]}")
+        model.update_head_conf(train_dataset.get_num_classes(), train_dataset.get_special_classes())
 
 
     # Create trainer
@@ -227,14 +230,13 @@ def train_vit_detector(
         enable_wandb=enable_wandb
     )
 
-    # if checkpoint_path != "":
-    #     # Transfer backbone weights
-    #     trainer.load_checkpoint(checkpoint_path, model_only=not continue_from_checkpoint)
-
     replace_bn_with_frozenbn(trainer.model.backbone)
 
     # Train
-    if continue_from_checkpoint:
+    if continue_training_from_checkpoint:
+        assert model.config.num_classes == train_dataset.get_num_classes(), "Error: The number of classes in the model config does not match the number of classes in the dataset. Please make sure they match before continuing training."
+        assert model.config.line_class_id == train_dataset.get_special_classes()[
+            "line_class_id"], "Error: The line_class_id in the model config does not match the line_class_id in the dataset. Please make sure they match before continuing training."
         trainer.resume(model_info)
     else:
         trainer.train()
@@ -352,7 +354,7 @@ if __name__ == "__main__":
     dataset = "/home/simon/Desktop/maesy-training/data/CvatLE" # r"/home/simon/Desktop/maesy-training/data/"
     output = r"/home/simon/Desktop/maesy-training/od_checkpoints"
     resume = checkpoint != ""
-    train_vit_detector(checkpoint, dataset, output, True, continue_from_checkpoint=False, enable_wandb=False, enable_line_detection=True, enable_ellipse_detection=True)
+    train_vit_detector(checkpoint, dataset, output, True, continue_training_from_checkpoint=False, enable_wandb=False, enable_line_detection=True, enable_ellipse_detection=True)
 
     # checkpoint = r"/home/simon/Desktop/maesy-training/od_checkpoints/leafy-music-38/best_model.pth"
     # images = r"/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)/train/images"

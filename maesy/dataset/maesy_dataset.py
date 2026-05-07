@@ -27,6 +27,8 @@ class MaesyDataset(Dataset):
             start_index: int = 0,
             step: int = 1,
             repeat_factor: int = 1,
+            enable_lines=False,
+            enable_ellipses=False,
             use_first_n: int = None
     ):
         """
@@ -82,8 +84,10 @@ class MaesyDataset(Dataset):
         elif self.num_classes != len(self.name_to_id):
             raise ValueError(f"Mismatch in dataset.yaml\nnc: {self.num_classes}, but {len(self.name_to_id)} class names were found.")
 
-        self.line_class_id = self.name_to_id.get(yaml_data.get("lines", None), -1)
-        self.ellipse_class_id = self.name_to_id.get(yaml_data.get("ellipses", None), -1)
+        self.special_classes = {'line_class_id': self.name_to_id.get(yaml_data.get("lines", None), -1),
+                                'ellipse_class_id': self.name_to_id.get(yaml_data.get("ellipses", None), -1)}
+        self.enable_lines = enable_lines
+        self.enable_ellipses = enable_ellipses
 
         self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if
                                    img.endswith((".jpg", ".jpeg", ".png"))][start_index::step] * repeat_factor
@@ -136,15 +140,16 @@ class MaesyDataset(Dataset):
                     for raw_line in f.readlines():
                         splits = raw_line.split()
                         cls_id = int(splits[0])
-                        if self.line_class_id is not None and cls_id == self.line_class_id:
-                            assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'line': 'class x1 y1 x2 y2'."
-                            line_points_list.append([*map(float, splits[1:])])
-                        elif self.ellipse_class_id is not None and cls_id == self.ellipse_class_id:
-                            assert len(splits) == 6, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'ellipse': 'class center_x center_y L_11 L_12 L_22' (cholesky decomposition)."
-                            ellipse_points_list.append([*map(float, splits[1:])])
+                        if self.special_classes['line_class_id'] is not None and cls_id == self.special_classes['line_class_id']:
+                            if self.enable_lines:
+                                assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'line': 'class x1 y1 x2 y2'."
+                                line_points_list.append([*map(float, splits[1:])])
+                        elif self.special_classes['ellipse_class_id'] is not None and cls_id == self.special_classes['ellipse_class_id']:
+                            if self.enable_ellipses:
+                                assert len(splits) == 6, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'ellipse': 'class center_x center_y L_11 L_12 L_22' (cholesky decomposition)."
+                                ellipse_points_list.append([*map(float, splits[1:])])
                         else:
-                            assert len(
-                                splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'BoundingBox': 'class cx cy w h'."
+                            assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'BoundingBox': 'class cx cy w h'."
                             box = BoundingBox.from_xywh(cls_id, *map(float, splits[1:]), normalized=True)
                             boxes_list.append(box)
                     for box in boxes_list:
@@ -169,9 +174,9 @@ class MaesyDataset(Dataset):
                             canvas_size=(img_height, img_width)
                         )
                     if len(line_points_list) > 0:
-                        labels_list.extend([self.line_class_id] * len(line_points_list))
+                        labels_list.extend([self.special_classes['line_class_id']] * len(line_points_list))
                     if len(ellipse_points_list) > 0:
-                        labels_list.extend([self.ellipse_class_id] * len(ellipse_points_list))
+                        labels_list.extend([self.special_classes['ellipse_class_id']] * len(ellipse_points_list))
                     labels = torch.tensor(labels_list, dtype=torch.long)
 
                     # Basically a "combined" else to the three above
@@ -254,9 +259,9 @@ class MaesyDataset(Dataset):
             Get all classes that are not standard axis-aligned bounding boxes.
             (This is used for multi-head training)
             Returns:
-                A dict containing name: class_id pairs
+                A dict containing {name: class_id} pairs
         """
-        return {"line_class_id": self.line_class_id, "ellipse_class_id": self.ellipse_class_id}
+        return self.special_classes #{"line_class_id": self.line_class_id, "ellipse_class_id": self.ellipse_class_id}
 
     def get_num_classes(self) -> int:
         """

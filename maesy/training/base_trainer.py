@@ -100,6 +100,9 @@ class BaseTrainer(ABC):
         self.global_step = 0
         self.best_val_loss = float('inf')
 
+        # Used for reconstruction of images for validation output # TODO: Make toggleable?
+        self._IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(3, 1, 1)
+        self._IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(3, 1, 1)
 
 
     def _create_optimizer(self) -> torch.optim.Optimizer:

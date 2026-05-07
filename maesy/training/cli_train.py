@@ -11,7 +11,8 @@ def main(args):
             args.output,
             args.freeze,
             enable_wandb=args.wandb,
-            continue_from_checkpoint=args.resume,
+            continue_training_from_checkpoint=args.resume,
+            pretrained_backbone=args.backbone,
             # detector_arch=args.detector,
             enable_denoising=getattr(args, "enable_denoising", False),
             denoising_num_queries=getattr(args, "dn_queries", 100),
@@ -21,7 +22,7 @@ def main(args):
             enable_ellipse_detection=getattr(args, "enable_ellipse_detection", False),
         )
     elif args.mode == "mae":
-        train_mae(args.model, dataset_path=args.dataset, enable_wandb=args.wandb)
+        train_mae(args.model, dataset_path=args.dataset, enable_wandb=args.wandb, continue_training_from_checkpoint=args.resume)
         #TODO: Add further parameters for mae training (image size, batch size, num epochs, mask ratio)...
     elif args.mode == "cl":
         from maesy.training.train_setups.pretrain_classification import train_classification

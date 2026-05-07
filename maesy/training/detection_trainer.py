@@ -23,8 +23,8 @@ class DetectionTrainer(BaseTrainer):
     specific to object detection models using the DetectionLoss.
     """
 
-    _IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-    _IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+    # _IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1) # TODO: Should be ok to remove since moved to BaseTrainer
+    # _IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
 
     def _validation_start(self):
         self._val_predictions: List[Dict[str, torch.Tensor]] = []
@@ -206,9 +206,9 @@ class DetectionTrainer(BaseTrainer):
             # losses["img_targets"] = self._render_target_boxes(images[0], targets[0])
 
             # Unnormalize to RGB uint8 so draw_bounding_boxes always renders visible overlays.
-            img = images[0].detach().cpu()
+            img = images[0].detach()
             img = (img * self._IMAGENET_STD) + self._IMAGENET_MEAN
-            img = (img.clamp(0.0, 1.0) * 255.0).to(torch.uint8)
+            img = (img.clamp(0.0, 1.0) * 255.0).to(torch.uint8).cpu()
             losses["img_predictions"] = draw_objects_in_tensor(img, predictions[0]["boxes"], predictions[0]["labels"], predictions[0]["line_points"], predictions[0]["ellipses"])/255
 
         return losses

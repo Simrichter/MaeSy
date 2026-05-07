@@ -35,17 +35,25 @@ def create_model_from_config(config: Dict) -> BaseModel:
         Returns:
             model: The initialized model according to the provided config
     """
+    def _from_dict(cls, data):
+        """
+        Create a MaeMultiscaleConfig instance from a dictionary, ignoring any extra keys that are not defined in the dataclass.
+        """
+        from dataclasses import fields
+        valid = {f.name for f in fields(cls) if f.init}
+        return cls(**{k: v for k, v in data.items() if k in valid})
+
     match config.get("type", "").lower():
         case "mae":
-            return MaskedAutoencoderViT(config=MAEConfig(**config))
+            return MaskedAutoencoderViT(config=_from_dict(MAEConfig, config))
         case "mae-multiscale":
-            return MaskedAutoencoderMultiscale(config=MaeMultiscaleConfig(**config))
+            return MaskedAutoencoderMultiscale(config=_from_dict(MaeMultiscaleConfig, config))
         case "vit":
             raise ValueError("model type 'vit' is not supported")
         case "detr":
-            return DETR(DETRConfig(**config))
+            return DETR(_from_dict(DETRConfig, config))
         case "rt-detr":
-            return RTDETR(RTDETRConfig(**config))
+            return RTDETR(_from_dict(RTDETRConfig, config))
         case _:
             raise ValueError(f"Model type '{config.get('type', '')}' not recognized. Supported types: ['mae', 'mae-multiscale', 'detr', 'rt_detr']")
 

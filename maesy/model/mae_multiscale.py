@@ -25,6 +25,7 @@ class MaeMultiscaleConfig:
     type: str = "mae_multiscale"
     image_size: int = 224
     patch_size: int = 16
+    num_patches: int = field(init=False) # Auto-calculated in post_init
     in_channels: int = 3
 
     backbone_version: str = "resnet50"

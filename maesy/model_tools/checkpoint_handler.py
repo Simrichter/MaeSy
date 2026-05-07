@@ -77,27 +77,36 @@ class CheckpointHandler:
             part_name="backbone",
         )
 
-    def _load_model(self, checkpoint, model):
-        if (model.backbone.type != checkpoint['backbonetype']) and (model.head.type != checkpoint['headtype']):
+    def _load_head(self, checkpoint, model):
+        if model.head.type != checkpoint['headtype']:
+            return False
+        self._check_head_configs(checkpoint, model)
+        model.head.load_state_dict(checkpoint['head'])
+        return True
+
+    def _load_backbone(self, checkpoint, model):
+        if model.backbone.type != checkpoint['backbonetype']:
+            print(f"{model.backbone.type} != {checkpoint['backbonetype']}")
+            return False
+        self._check_bb_configs(checkpoint, model)
+        model.backbone.load_state_dict(checkpoint['backbone'])
+        return True
+
+    def _autoload_model(self, checkpoint, model):
+        bb_success = self._load_backbone(checkpoint, model)
+        head_success = self._load_head(checkpoint, model)
+
+        if bb_success and head_success:
+            print(f"Model weights loaded successfully")
+        elif head_success: # Loaded Head
+                print(f"\nWarning: Could only load head weights of type {model.head.type}, NOT backbone!!!!\n")
+        elif bb_success: # Loaded Backbone
+            print(f"Loaded only backbone weights of type {model.backbone.type}")
+        else: # Load failed
             raise ValueError(
                 f"Incompatible model architecture. Checkpoint backbone type: {checkpoint['backbonetype']}, actual backbone type: {model.backbone.type}. Checkpoint head type: {checkpoint['headtype']}, actual head type: {model.head.type}.")
-        if (model.backbone.type != checkpoint['backbonetype']) or (model.head.type != checkpoint['headtype']):
-            if model.backbone.type != checkpoint['backbonetype']:
-                print(f"Warning: Loading only head of type {model.head.type}, NOT backbone!")
-                self._check_head_configs(checkpoint, model)
-                model.head.load_state_dict(checkpoint['head'])
-            else:
-                print(f"Loading only backbone of type {model.backbone.type}")
-                self._check_bb_configs(checkpoint, model)
-                model.backbone.load_state_dict(checkpoint['backbone'])
-        else:
-            self._check_head_configs(checkpoint, model)
-            self._check_bb_configs(checkpoint, model)
-            model.backbone.load_state_dict(checkpoint['backbone'])
-            model.head.load_state_dict(checkpoint['head'])
 
     def load_model(self, filepath: str, model=None) -> BaseModel:
-        from maesy.model_tools.model_factory import create_model_from_config # import here to prevent circular import error
         """
         Load model with weights.
         No optimizer or scheduler states are loaded.
@@ -111,15 +120,30 @@ class CheckpointHandler:
         checkpoint = torch.load(filepath, map_location=self.device)
 
         if model is None:
+            from maesy.model_tools.model_factory import create_model_from_config  # import here to prevent circular import error
             model = create_model_from_config(checkpoint['modelconfig'])
 
         if 'backbone' in checkpoint and 'head' in checkpoint:
-            self._load_model(checkpoint, model)
+            self._autoload_model(checkpoint, model)
         else:
             raise KeyError("'backbone' and 'head' keys not present in checkpoint. Cant load model")
 
-        print(f"Model loaded from {filepath}")
         return model
+
+    def load_backbone(self, filepath: str, model) -> None:
+        """
+        Load backbone weights into the given model.
+        Expects backbone types to match
+        Args:
+            :param filepath: Path to checkpoint file that contains a backbone
+            :param model: Model to load backbone state dict into
+        """
+        checkpoint = torch.load(filepath, map_location=self.device)
+
+        if not self._load_backbone(checkpoint, model):
+            raise KeyError(f"Cant load backbone type {checkpoint['backbonetype']} for model with backbone type {model.backbone.type}")
+
+        print(f"Backbone loaded from {filepath}")
 
     def load_training_state(self, filepath:str, optimizer=None, scheduler=None) -> Tuple[int, int, float]:
         """

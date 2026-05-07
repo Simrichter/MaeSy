@@ -10,7 +10,7 @@ from torchvision.transforms import v2 as transforms
 from maesy.model_tools import create_model_from_config
 from maesy.training import mae_trainer, TrainingConfig
 from maesy.dataset import UnlabeledDataset, MaesyDataset
-from maesy.model_tools.model_factory import create_model, known_architectures, read_yaml
+from maesy.model_tools.model_factory import create_model, known_architectures, read_yaml, create_model_from_checkpoint
 
 from maesy.training import MaeTrainer
 
@@ -54,16 +54,18 @@ class MAETrainingConfig(TrainingConfig):
 def train_mae(
     model_info,
     dataset_path,
+    continue_training_from_checkpoint: bool,
     image_size = 224,
     batch_size = 64,
     num_epochs = 200,
     mask_ratio = 0.5,
-    checkpoint = "",
     output_dir: str = "mae_checkpoints",
     enable_wandb = True,
     seed: int = 42,
 ):
-    """Main MAE pretraining function."""
+    """
+        Main MAE pretraining function.
+    """
       # TODO: Make mask_ratio scheduled
     print("=" * 60)
     print("Starting MAE pretraining")
@@ -92,22 +94,27 @@ def train_mae(
     if model_info.lower() in known_architectures:
         mae_config = read_yaml(f"cfg/{model_info.lower()}.yaml")
         model = create_model_from_config(mae_config)
+    elif not model_info.endswith(".pth"):
+        raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
     else:
-        raise ValueError(f"Unknown model_info '{model_info}'")
+        model = create_model_from_checkpoint(model_info)
+
 
     # Prepare dataset
     print("Loading datasets...")
 
     train_transforms = transforms.Compose([
-        transforms.Resize((224, 224)),
         transforms.ToImage(),
-        transforms.ToDtype(torch.float32, scale=True)
+        transforms.ToDtype(torch.float32, scale=True),
+        transforms.Resize((224, 224)),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
     val_transforms = transforms.Compose([
-        transforms.Resize((224, 224)),
         transforms.ToImage(),
-        transforms.ToDtype(torch.float32, scale=True)
+        transforms.ToDtype(torch.float32, scale=True),
+        transforms.Resize((224, 224)),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
     train_dataset = MaesyDataset(dataset_path, "train", "None", transforms=train_transforms)
@@ -143,8 +150,12 @@ def train_mae(
     )
 
     # Start pretraining
-    print("\nStarting MAE pretraining...")
-    pretrainer.train()
+    if continue_training_from_checkpoint:
+        print("Continuing training from checkpoint")
+        pretrainer.resume(model_info)
+    else:
+        print("\nStarting MAE pretraining...")
+        pretrainer.train()
 
     print("\nMAE pretraining completed!")
     print(f"Best validation loss: {pretrainer.best_val_loss:.4f}")

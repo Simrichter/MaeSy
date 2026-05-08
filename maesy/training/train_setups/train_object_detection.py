@@ -235,8 +235,10 @@ def train_vit_detector(
     # Train
     if continue_training_from_checkpoint:
         assert model.config.num_classes == train_dataset.get_num_classes(), "Error: The number of classes in the model config does not match the number of classes in the dataset. Please make sure they match before continuing training."
-        assert model.config.line_class_id == train_dataset.get_special_classes()[
-            "line_class_id"], "Error: The line_class_id in the model config does not match the line_class_id in the dataset. Please make sure they match before continuing training."
+        if enable_line_detection:
+            assert model.config.line_class_id == train_dataset.get_special_classes()["line_class_id"], f"Error: The line_class_id in the model config ({model.config.line_class_id}) does not match the line_class_id in the dataset ({train_dataset.get_special_classes()['line_class_id']}). Please make sure they match before continuing training."
+        if enable_line_detection:
+            assert model.config.ellipse_class_id == train_dataset.get_special_classes()["ellipse_class_id"], f"Error: The ellipse_class_id in the model config ({model.config.ellipse_class_id}) does not match the ellipse_class_id in the dataset ({train_dataset.get_special_classes()['ellipse_class_id']}). Please make sure they match before continuing training."
         trainer.resume(model_info)
     else:
         trainer.train()

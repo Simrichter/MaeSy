@@ -50,9 +50,9 @@ class MaesyDataset(Dataset):
             yaml_path = None
             yaml_candidates = [c for c in os.listdir(dataset_dir) if c.endswith((".yaml", ".yml"))]
             if len(yaml_candidates) < 1:
-                print(f"Warning: No dataset.yaml file found in dataset directory {dataset_dir}\nUsing default configuration")
+                raise ValueError(f"No dataset.yaml file found in dataset directory {dataset_dir}\nUsing default configuration")
             elif len(yaml_candidates) > 1:
-                print(f"Warning: Multiple dataset.yaml files found in dataset directory {dataset_dir}\nUsing default configuration\nFound yaml files: {yaml_candidates}\nSpecify the correct yaml directly as a path")
+                raise ValueError(f"Multiple dataset.yaml files found in dataset directory {dataset_dir}\nUsing default configuration\nFound yaml files: {yaml_candidates}\nSpecify the correct yaml directly as the dataset path")
             else:
                 yaml_path = f"{dataset_dir}/{yaml_candidates[0]}"
 

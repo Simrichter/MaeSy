@@ -14,7 +14,7 @@ class ClassificationTrainer(BaseTrainer):
     specific to object detection models using the DetectionLoss.
     """
 
-    def forward_model(self, images: torch.Tensor, targets: Optional[List[Dict[str, torch.Tensor]]], val: bool) -> Dict[str, torch.Tensor]:
+    def _forward_model(self, images: torch.Tensor, targets: Optional[List[Dict[str, torch.Tensor]]], val: bool) -> Dict[str, torch.Tensor]:
         """
         Forward pass through the model.
 

@@ -23,9 +23,6 @@ class DetectionTrainer(BaseTrainer):
     specific to object detection models using the DetectionLoss.
     """
 
-    # _IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1) # TODO: Should be ok to remove since moved to BaseTrainer
-    # _IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-
     def _validation_start(self):
         self._val_predictions: List[Dict[str, torch.Tensor]] = []
         self._val_targets: List[Dict[str, torch.Tensor]] = []
@@ -154,7 +151,7 @@ class DetectionTrainer(BaseTrainer):
         drawn = draw_bounding_boxes(img, boxes_xyxy, labels=rendered_labels, colors="green", width=2)
         return drawn.float() / 255.0
 
-    def forward_model(self, images: torch.Tensor, targets: Optional[List[Dict[str, torch.Tensor]]], val: bool) -> Dict[str, torch.Tensor]:
+    def _forward_model(self, images: torch.Tensor, targets: Optional[List[Dict[str, torch.Tensor]]], val: bool) -> Dict[str, torch.Tensor]:
         """
         Forward pass through the model.
 

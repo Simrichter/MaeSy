@@ -81,7 +81,7 @@ class MaeTrainer(BaseTrainer):
         pixel_mask = mask_2d.repeat_interleave(p, dim=2).repeat_interleave(p, dim=3)
         return images * (1.0 - pixel_mask)
 
-    def forward_model(self, images: torch.Tensor, targets: Optional[torch.Tensor], val: bool) -> dict[str, torch.Tensor]:
+    def _forward_model(self, images: torch.Tensor, targets: Optional[torch.Tensor], val: bool) -> dict[str, torch.Tensor]:
         """
         Forward pass through the model.
 

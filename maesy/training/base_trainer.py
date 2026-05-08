@@ -228,7 +228,7 @@ class BaseTrainer(ABC):
         else:
             raise ValueError(f"Warning: Unknown loss '{self.config.criterion}'")
 
-    def forward_model(self, images: torch.Tensor, targets: Optional[torch.Tensor], val: bool) -> Dict[str, torch.Tensor]:
+    def _forward_model(self, images: torch.Tensor, targets: Optional[torch.Tensor], val: bool) -> Dict[str, torch.Tensor]:
         """
         Manages the forward pass through the model.
         Can be overwritten to add model-specific preprocessing
@@ -245,7 +245,7 @@ class BaseTrainer(ABC):
 
             # Forward pass
             with torch.amp.autocast("cuda", enabled=self.config.use_amp):
-                losses = self.forward_model(images, targets, val=False)
+                losses = self._forward_model(images, targets, val=False)
                 loss = losses['loss']
 
             # Backward pass
@@ -298,7 +298,7 @@ class BaseTrainer(ABC):
         for batch in tqdm(self.val_loader, desc="Validation"):
             images, targets = handle_raw_batch(batch, self.device)
 
-            losses = self.forward_model(images, targets, val=True)
+            losses = self._forward_model(images, targets, val=True)
             validation_step_hook = getattr(self, "_validation_step", None)
             if callable(validation_step_hook):
                 validation_step_hook(images, targets, losses)
@@ -309,16 +309,17 @@ class BaseTrainer(ABC):
         for name, img in losses.items():
             if name.startswith('img_'):
                 save_image(img, f"{save_path}/predicted_image{self.global_step}_{name}.png")
-        metrics = self.loss.get_metrics()
+        val_out = {f"val_losses/{k}": v for k, v in self.loss.get_metrics()}
         validation_finalize_hook = getattr(self, "_validation_finalize", None)
         if callable(validation_finalize_hook):
-            metrics.update(validation_finalize_hook())
+            mets = {f"metrics/{k}": v for k, v in validation_finalize_hook()}
+            val_out.update(mets)
 
         if self.enable_wandb:
-            imgs_to_log: dict[str, Image] = {k: wandb.Image(v * 255) for k, v in losses.items() if k.startswith('img_')}
-            metrics.update(imgs_to_log)
+            imgs_to_log: dict[str, Image] = {f"img/{k}": wandb.Image(v * 255) for k, v in losses.items() if k.startswith('img_')}
+            val_out.update(imgs_to_log)
 
-        return metrics
+        return val_out
 
     def train(self) -> None:
         """Main training loop."""
@@ -341,23 +342,24 @@ class BaseTrainer(ABC):
 
             # Validate
             if self.val_loader is not None:
-                val_metrics = {f"val/{k}": v for k, v in self.validate().items()}  # Preparations for logging
-                if self.enable_wandb: self.wandb_run.log(data=val_metrics, step=self.global_step)
+                # val_metrics = {f"val/{k}": v for k, v in self.validate().items()}  # Preparations for logging
+                val_out = self.validate()
+                if self.enable_wandb: self.wandb_run.log(data=val_out, step=self.global_step)
 
                 val_msg = (f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
                            f"Train Loss: {train_metrics['total_loss']:.4f}, "
-                           f"Val Loss: {val_metrics['val/total_loss']:.4f}")
-                if 'val/mAP50' in val_metrics and 'val/mAP50_95' in val_metrics:
-                    val_msg += (f", mAP50: {val_metrics['val/mAP50']:.4f}, "
-                                f"mAP50-95: {val_metrics['val/mAP50_95']:.4f}")
-                if 'val/precision50' in val_metrics and 'val/recall50' in val_metrics:
-                    val_msg += (f", P50: {val_metrics['val/precision50']:.4f}, "
-                                f"R50: {val_metrics['val/recall50']:.4f}")
+                           f"Val Loss: {val_out['val_losses/total_loss']:.4f}")
+                if 'metrics/mAP50' in val_out and 'metrics/mAP50_95' in val_out:
+                    val_msg += (f", mAP50: {val_out['metrics/mAP50']:.4f}, "
+                                f"mAP50-95: {val_out['metrics/mAP50_95']:.4f}")
+                if 'val/precision50' in val_out and 'metrics/recall50' in val_out:
+                    val_msg += (f", P50: {val_out['metrics/precision50']:.4f}, "
+                                f"R50: {val_out['metrics/recall50']:.4f}")
                 print(val_msg)
 
                 # Save best model
-                if val_metrics['val/total_loss'] < self.best_val_loss:
-                    self.best_val_loss = val_metrics['val/total_loss']
+                if val_out['val_losses/total_loss'] < self.best_val_loss:
+                    self.best_val_loss = val_out['val_losses/total_loss']
                     self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config,  'best_model.pth', self.scheduler)
             else:
                 print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "

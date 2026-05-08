@@ -209,7 +209,7 @@ def train_vit_detector(
     else:
         model = create_model_from_checkpoint(model_info)
 
-    if pretrained_backbone is not "":
+    if pretrained_backbone != "":
         print(f"Loading pretrained backbone weights from {pretrained_backbone}...")
         CheckpointHandler(device=training_config.device).load_backbone(pretrained_backbone, model)
 
@@ -270,20 +270,17 @@ def infer_vit_detector(
     model = create_model_from_checkpoint(checkpoint_path) #CheckpointHandler(device=device).load_model(checkpoint_path)
     model.eval()
 
-    # dataset = UnlabeledDataset(Path(images_path), transforms=transforms.Compose([
-    #     transforms.ToImage(),
-    #     transforms.ToDtype(torch.float32, scale=True),
-    #     transforms.Resize((224, 224)),
-    #     # transforms.ToTensor(),
-    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    # ])) #, use_first_n=30 # , step=50
-    dataset = MaesyDataset(dataset_path, "val", "None", transforms=transforms.Compose([ # TODO: make blank image folder possible again, "auto-infer" split? Maybe through 'None' -> All splits
-        transforms.ToImage(),
-        transforms.ToDtype(torch.float32, scale=True),
-        transforms.Resize((224, 224)),
-        # transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ]))
+    # dataset = MaesyDataset(dataset_path, "val", "None", transforms=)
+    infer_transforms = transforms.Compose(
+        [  # TODO: make blank image folder possible again, "auto-infer" split? Maybe through 'None' -> All splits
+            transforms.ToImage(),
+            transforms.ToDtype(torch.float32, scale=True),
+            transforms.Resize((224, 224)),
+            # transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+    dataset = MaesyDataset(dataset_path, "val", "None", transforms=infer_transforms)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
     inferer = Inferer(model=model, data_loader=dataloader, device=device)
     preds, _ = inferer.infer() # List[Dict] with keys "pred_boxes" (B X num_querys X 4) and "pred_logits" (B X num_queries)
@@ -311,7 +308,7 @@ def infer_vit_detector(
                     f.write(f"{l.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
     if visualize:
         from maesy.evaluation import visualize_data
-        visualize_data(out_path, "")
+        visualize_data(str(out_path), "")
 
 def export_vit_detector(
     checkpoint_path: str,

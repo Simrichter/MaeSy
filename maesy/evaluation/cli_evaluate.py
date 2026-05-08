@@ -14,7 +14,7 @@ def main(args):
                 torch.device(args.device) if args.device != "" else torch.device(
                     "cuda" if torch.cuda.is_available() else "cpu"
                 ),
-                detector_arch=None if args.detector == "auto" else args.detector,
+                # detector_arch=None if args.detector == "auto" else args.detector,
             )
         case "visualize":
             from maesy.evaluation import visualize_data

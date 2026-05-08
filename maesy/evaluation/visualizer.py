@@ -87,6 +87,7 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
     datasets = []
     for split in ["train", "val", "test"]:
         try:
+            print(input_dir)
             datasets.append(MaesyDataset(input_dir, split, "detection"))
         except AssertionError as e:
             print(e)

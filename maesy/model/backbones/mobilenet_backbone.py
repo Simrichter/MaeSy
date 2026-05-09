@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from torchvision.models import MobileNet_V2_Weights
 from torchvision.models.quantization import mobilenet_v2
+import timm
 
 
 @dataclass
@@ -27,32 +28,8 @@ class MobileNetBackboneConfig:
 class MobileNetBackbone(nn.Module):
     """MobileNet Backbone for feature extraction."""
 
-    def __init__(self, config: MobileNetBackboneConfig):
-        """
-        Initialize MobileNet backbone.
-
-        Args:
-            :param config: MobileNetBackboneConfig class that holds all necessary parameters
-        """
-        super().__init__()
-        self.config = config
-        self.type = f"MobileNetBackbone_{self.config.version}"
-
-        weights = None
-        if config.pretrained:
-            weights_map = {
-                "mobilenetv2": MobileNet_V2_Weights.DEFAULT,
-            }
-            weights = weights_map.get(config.version)
-            if weights is None:
-                raise ValueError(f"Unsupported MobileNet version: {config.version}")
-
-        model = mobilenet_v2(weights=weights)
-
-        self.calc_c3 = "c3" in self.config.feature_scales or "c4" in self.config.feature_scales or "c5" in self.config.feature_scales
-        self.calc_c4 = "c4" in self.config.feature_scales or "c5" in self.config.feature_scales
-        self.calc_c5 = "c5" in self.config.feature_scales
-
+    def _init_v2(self):
+        model = mobilenet_v2(weights=MobileNet_V2_Weights.DEFAULT if self.config.pretrained else None)
         # Feature dimensions for MobileNetV2 at each scale
         self.feature_dim: Dict[str, int] = {"c3": 32, "c4": 96, "c5": 1280}
 
@@ -74,6 +51,49 @@ class MobileNetBackbone(nn.Module):
         if self.calc_c5:
             # Layers 14-18: from stride-16 to stride-32, output 1280 channels
             self.layer4 = nn.Sequential(*list(model.features.children())[14:])
+
+
+    def _init_v4(self):
+        if self.config.version == 'mobilenetv4_s':
+            model = timm.create_model('hf_hub:timm/mobilenetv4_conv_small.e2400_r224_in1k', pretrained=self.config.pretrained, features_only=True)
+            self.feature_dim: Dict[str, int] = {"c3": 64, "c4": 96, "c5": 128}
+            self.spatial_feature_size = {"c3": self.config.image_size // 8, "c4": self.config.image_size // 16, "c5": self.config.image_size // 32}
+
+        elif self.config.version == 'mobilenetv4_m':
+            model = timm.create_model('hf_hub:timm/mobilenetv4_conv_medium.e500_r256_in1k', pretrained=True, features_only=True)
+            self.feature_dim: Dict[str, int] = {"c3": 80, "c4": 160, "c5": 256}
+            self.spatial_feature_size = {"c3": self.config.image_size // 8, "c4": self.config.image_size // 16, "c5": self.config.image_size // 32}
+        else:
+            raise ValueError(f"Unknown MobileNetv4 version: {self.config.version}")
+
+        self.stem = nn.Sequential(model.conv_stem, model.bn1, model.act1)
+        if self.calc_c3:
+            self.layer2 = nn.Sequential(model.blocks[0], model.blocks[1]) # stride 8
+        if self.calc_c4:
+            self.layer3 = model.blocks[2] # stride 16
+        if self.calc_c5:
+            self.layer4 = model.blocks[3] # stride 32
+
+
+    def __init__(self, config: MobileNetBackboneConfig):
+        """
+        Initialize MobileNet backbone.
+
+        Args:
+            :param config: MobileNetBackboneConfig class that holds all necessary parameters
+        """
+        super().__init__()
+        self.config = config
+        self.type = self.config.version
+
+        self.calc_c3 = "c3" in self.config.feature_scales or "c4" in self.config.feature_scales or "c5" in self.config.feature_scales
+        self.calc_c4 = "c4" in self.config.feature_scales or "c5" in self.config.feature_scales
+        self.calc_c5 = "c5" in self.config.feature_scales
+
+        if self.config.version.startswith("mobilenetv2"):
+            self._init_v2()
+        elif self.config.version.startswith("mobilenetv4"):
+            self._init_v4()
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> Dict[str, torch.Tensor]:
         """

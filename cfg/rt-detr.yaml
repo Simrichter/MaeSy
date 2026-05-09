@@ -18,8 +18,8 @@ image_size: 224
 line_class_id: -1
 ellipse_class_id: -1
 num_classes: -1
-num_decoder_layers: 2
+num_decoder_layers: 6
 num_deformable_points: 8
 num_queries: 40
-backbone_version: swin_tiny # mobilenetv2 #resnet18
+backbone_version: mobilenetv2 # mobilenetv4_s # swin_tiny # resnet18
 type: RT-DETR

@@ -309,10 +309,10 @@ class BaseTrainer(ABC):
         for name, img in losses.items():
             if name.startswith('img_'):
                 save_image(img, f"{save_path}/predicted_image{self.global_step}_{name}.png")
-        val_out = {f"val_losses/{k}": v for k, v in self.loss.get_metrics()}
+        val_out = {f"val_losses/{k}": v for k, v in self.loss.get_metrics().items()}
         validation_finalize_hook = getattr(self, "_validation_finalize", None)
         if callable(validation_finalize_hook):
-            mets = {f"metrics/{k}": v for k, v in validation_finalize_hook()}
+            mets = {f"metrics/{k}": v for k, v in validation_finalize_hook().items()}
             val_out.update(mets)
 
         if self.enable_wandb:

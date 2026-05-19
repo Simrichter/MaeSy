@@ -20,6 +20,7 @@ def main(args):
             denoising_box_noise_scale=getattr(args, "dn_box_noise", 0.4),
             enable_line_detection=getattr(args, "enable_line_detection", False),
             enable_ellipse_detection=getattr(args, "enable_ellipse_detection", False),
+            seed=getattr(args, "seed", 42),
         )
     elif args.mode == "mae":
         train_mae(args.model, dataset_path=args.dataset, enable_wandb=args.wandb, continue_training_from_checkpoint=args.resume)

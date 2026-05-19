@@ -54,6 +54,7 @@ def main():
     od_parser.add_argument("--enable-line-detection", action="store_true", help="Enable optional line endpoint prediction branch")
     od_parser.add_argument("--enable-ellipse-detection", action="store_true", help="Enable optional Ellipse prediction branch")
     # od_parser.add_argument("--line-class-id", type=int, default=-1, help="Class id that should be treated as a line target (x1 y1 x2 y2)")
+    od_parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
 
 
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")
@@ -104,10 +105,14 @@ def main():
     # TODO
 
     # Command: maesy export
-    export.add_argument("checkpoint", help="Path to model checkpoint file")
-    export.add_argument("-o", "--out", type=str, default="", help="Folder to save exported model")
-    export.add_argument("--architecture", type=str, choices=["detr", "rt_detr"], default="rt_detr",
-                        help="Detection architecture for export (default: auto-detect from checkpoint)")
+    export.add_argument("model", type=str, help="Either a model architecture like [rt-detr, detr, mae] or a path to a training checkpoint")
+    export.add_argument("-o", "--outputpath", type=str, default="", help="Folder to save exported model. If model architecture is used, this must be specified")
+    export.add_argument("--name", type=str, default="", help="Desired file-name. If model architecture is used, this must be specified")
+    export.add_argument("--num-classes", type=int, default=-1, help="Number of classes. If model architecture is used, this must be specified")
+    export.add_argument("--enable-line-detection", action="store_true", help="Enable optional line endpoint prediction branch")
+    export.add_argument("--enable-ellipse-detection", action="store_true", help="Enable optional Ellipse prediction branch")
+    export.add_argument("--line-class-id", type=int, default=-1, help="Class id of the lines")
+    export.add_argument("--ellipse-class-id", type=int, default=-1, help="Class id of the ellipses")
 
     # Command: maesy dataset
     data_subs = data.add_subparsers(dest='command')

@@ -78,26 +78,26 @@ class MaesyDataset(Dataset):
         self.id_to_name = {i:v for i,v in enumerate(yaml_data.get("names", []))}
         self.name_to_id = {v:k for k,v in self.id_to_name.items()}
 
-        self.num_classes = yaml_data.get("nc", -1)
-        if self.num_classes == -1 and len(self.name_to_id) > 0:
-            raise ValueError(f"Value of nc not set properly in dataset.yaml. Found {len(self.name_to_id)} classes in dataset.yaml, but no 'nc' entry")
-        elif self.num_classes != len(self.name_to_id):
-            raise ValueError(f"Mismatch in dataset.yaml\nnc: {self.num_classes}, but {len(self.name_to_id)} class names were found.")
+        self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if img.endswith((".jpg", ".jpeg", ".png"))][start_index::step] * repeat_factor
 
-        self.special_classes = {'line_class_id': self.name_to_id.get(yaml_data.get("lines", None), -1),
-                                'ellipse_class_id': self.name_to_id.get(yaml_data.get("ellipses", None), -1)}
-        self.enable_lines = enable_lines
-        self.enable_ellipses = enable_ellipses
+        if self.return_labels:
+            self.num_classes = yaml_data.get("nc", -1)
+            if self.num_classes == -1 and len(self.name_to_id) > 0:
+                raise ValueError(f"Value of nc not set properly in dataset.yaml. Found {len(self.name_to_id)} classes in dataset.yaml, but no 'nc' entry")
+            elif self.num_classes != -1 and self.num_classes != len(self.name_to_id):
+                raise ValueError(f"Mismatch in dataset.yaml\nnc: {self.num_classes}, but {len(self.name_to_id)} class names were found.")
 
-        self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if
-                                   img.endswith((".jpg", ".jpeg", ".png"))][start_index::step] * repeat_factor
+            self.special_classes = {'line_class_id': self.name_to_id.get(yaml_data.get("lines", None), -1),
+                                    'ellipse_class_id': self.name_to_id.get(yaml_data.get("ellipses", None), -1)}
+            self.enable_lines = enable_lines
+            self.enable_ellipses = enable_ellipses
 
-        self.annotations = []
-        for img in self.images:
-            annotation_path = Path(img).with_suffix(".txt")
-            if not (self.annotations_dir / annotation_path).exists():
-                raise FileNotFoundError(f"Annotation file {annotation_path} not found for image {img}")
-            self.annotations.append(annotation_path)
+            self.annotations = []
+            for img in self.images:
+                annotation_path = Path(img).with_suffix(".txt")
+                if not (self.annotations_dir / annotation_path).exists():
+                    raise FileNotFoundError(f"Annotation file {annotation_path} not found for image {img}")
+                self.annotations.append(annotation_path)
 
         # self.annotations: List[Path] = [Path(ann) for ann in sorted(os.listdir(self.annotations_dir)) if ann.endswith(".txt")][start_index::step]*repeat_factor
         if use_first_n is not None:

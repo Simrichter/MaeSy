@@ -2,12 +2,12 @@ backbone_pretrained: true
 decoder_dropout: 0.1
 decoder_mlp_ratio: 4.0
 decoder_num_heads: 8
-lightweight_fusion: bool = False
+lightweight_fusion: bool = True
 num_rep_blocks_in_fusion: int = 3
 denoising_box_noise_scale: 0.4
 denoising_label_noise_ratio: 0.2
 denoising_num_queries: 0
-embed_dim: 128
+embed_dim: 256
 enable_auxiliary_losses: true
 enable_denoising: false
 feature_scales: !!python/tuple
@@ -22,5 +22,5 @@ num_classes: -1
 num_decoder_layers: 6
 num_deformable_points: 8
 num_queries: 40
-backbone_version: mobilenetv2 # mobilenetv4_s # swin_tiny # resnet18
+backbone_version: swin_tiny # mobilenetv4_s # swin_tiny # resnet18 # mobilenetv2
 type: RT-DETR

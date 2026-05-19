@@ -2,7 +2,7 @@ backbone_pretrained: true
 decoder_dropout: 0.1
 decoder_mlp_ratio: 4.0
 decoder_num_heads: 8
-lightweight_fusion: bool = False
+lightweight_fusion: bool = True
 num_rep_blocks_in_fusion: int = 3
 denoising_box_noise_scale: 0.4
 denoising_label_noise_ratio: 0.2

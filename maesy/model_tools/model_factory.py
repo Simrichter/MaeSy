@@ -1,9 +1,11 @@
 import os
+from pathlib import Path
 from typing import Dict
 
 import torch
 import yaml
 
+import maesy
 from maesy.model import (
     BaseModel,
     DETR,
@@ -17,7 +19,7 @@ from maesy.model import (
 )
 from maesy.model_tools import CheckpointHandler
 
-known_architectures = ["rt-detr", "detr", "mae", "mae-multiscale"]
+known_architectures = [config.rstrip(".yaml") for config in os.listdir((Path(os.path.realpath(__file__)).parent.parent.parent)/"cfg")]# ["rt-detr", "detr", "mae", "mae-multiscale"]
 
 def _print_model_info(model: BaseModel):
     """Utility function to print model information."""

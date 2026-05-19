@@ -5,12 +5,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from maesy.model.components import Utils
+from maesy.model.components import Utils, FusionBlock
 
 
 @dataclass
 class RTDETRHeadConfig:
-    feature_channels: Tuple[int, int, int]
+    feature_channels: Tuple[int, ...]
     num_classes: int = 80
     num_queries: int = 100
     embed_dim: int = 256
@@ -31,6 +31,9 @@ class RTDETRHeadConfig:
     enable_ellipse_detection: bool = False
     ellipse_class_id: int = -1
     enable_auxiliary_losses: bool = True
+    lightweight_fusion: bool = True
+    num_rep_blocks_in_fusion: int = 3
+
 
 
 class MLP(nn.Module):
@@ -259,12 +262,38 @@ class RTDETRHead(nn.Module):
         self.level_embeddings = nn.Parameter(torch.zeros(config.num_feature_levels, config.embed_dim))
 
         # Cross-scale fusion (top-down + bottom-up)
-        self.fpn_td_4 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
-        self.fpn_td_3 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
-        self.pan_down_3 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, stride=2, padding=1)
-        self.pan_down_4 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, stride=2, padding=1)
-        self.pan_out_4 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
-        self.pan_out_5 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
+        if self.config.lightweight_fusion:
+            self.fpn_td_4 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
+            self.fpn_td_3 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
+            self.pan_down_3 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, stride=2, padding=1)
+            self.pan_down_4 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, stride=2, padding=1)
+            self.pan_out_4 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
+            self.pan_out_5 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
+        else:
+            self.before_upsample1 = nn.ModuleList([
+                nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=1, stride=1, padding=0),
+                nn.BatchNorm2d(config.embed_dim),
+                nn.SiLU()
+            ])
+            self.before_upsample2 = nn.ModuleList([
+                nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=1, stride=1, padding=0),
+                nn.BatchNorm2d(config.embed_dim),
+                nn.SiLU()
+            ])
+            self.fusion1 = FusionBlock(self.config.num_rep_blocks_in_fusion, self.config.embed_dim)
+            self.fusion2 = FusionBlock(self.config.num_rep_blocks_in_fusion, self.config.embed_dim)
+            self.fusion3 = FusionBlock(self.config.num_rep_blocks_in_fusion, self.config.embed_dim)
+            self.fusion4 = FusionBlock(self.config.num_rep_blocks_in_fusion, self.config.embed_dim)
+            self.downsample_conv1 = nn.ModuleList([
+                nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, stride=2, padding=1),
+                nn.BatchNorm2d(config.embed_dim),
+                nn.SiLU()
+            ])
+            self.downsample_conv2 = nn.ModuleList([
+                nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, stride=2, padding=1),
+                nn.BatchNorm2d(config.embed_dim),
+                nn.SiLU()
+            ])
 
         self.aifi = AIFIBlock(
             embed_dim=config.embed_dim,
@@ -352,11 +381,18 @@ class RTDETRHead(nn.Module):
         p5_tokens = self.aifi(p5_tokens, self._build_positional_encoding(p5))
         p5 = p5_tokens.transpose(1, 2).reshape(b, c, h, w)
 
-        p4 = self.fpn_td_4(p4 + F.interpolate(p5, size=p4.shape[-2:], mode="nearest"))
-        p3 = self.fpn_td_3(p3 + F.interpolate(p4, size=p3.shape[-2:], mode="nearest"))
+        if self.config.lightweight_fusion:
+            p4 = self.fpn_td_4(p4 + F.interpolate(p5, size=p4.shape[-2:], mode="nearest"))
+            p3 = self.fpn_td_3(p3 + F.interpolate(p4, size=p3.shape[-2:], mode="nearest"))
 
-        n4 = self.pan_out_4(p4 + self.pan_down_3(p3))
-        n5 = self.pan_out_5(p5 + self.pan_down_4(n4))
+            n4 = self.pan_out_4(p4 + self.pan_down_3(p3))
+            n5 = self.pan_out_5(p5 + self.pan_down_4(n4))
+        else:
+            p4 = self.fusion1(torch.cat((F.interpolate(self.before_upsample1(p5), size=p4.shape[-2:], mode="nearest"), p4)))
+            p3 = self.fusion2(torch.cat((F.interpolate(self.before_upsample2(p4), size=p3.shape[-2:], mode="nearest"), p3)))
+
+            n4 = self.fusion3(torch.cat((self.downsample_conv1(p3), p4)))
+            n5 = self.fusion4(torch.cat((self.downsample_conv2(n4), p5)))
         return [p3, n4, n5]
 
     def _flatten_memory(self, fused_features: List[torch.Tensor]) -> Tuple[torch.Tensor, List[Tuple[int, int]]]:

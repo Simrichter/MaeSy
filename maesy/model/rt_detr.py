@@ -35,6 +35,8 @@ class RTDETRConfig:
     enable_ellipse_detection: bool = False
     ellipse_class_id: int = -1
     enable_auxiliary_losses: bool = True
+    lightweight_fusion: bool = True
+    num_rep_blocks_in_fusion: int = 3
 
 class RTDETR(BaseModel):
     """RT-DETR style detector with the same output contract as DETR."""
@@ -91,6 +93,8 @@ class RTDETR(BaseModel):
                 enable_ellipse_detection=config.enable_ellipse_detection,
                 ellipse_class_id=config.ellipse_class_id,
                 enable_auxiliary_losses=config.enable_auxiliary_losses,
+                lightweight_fusion=config.lightweight_fusion,
+                num_rep_blocks_in_fusion=config.num_rep_blocks_in_fusion
             )
 
         self.head = RTDETRHead(head_conf)

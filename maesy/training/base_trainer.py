@@ -179,7 +179,7 @@ class BaseTrainer(ABC):
             cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
                 T_max=self.config.num_epochs - self.config.warmup_epochs,
-                eta_min=self.config.min_lr # TODO: Make this configurable?
+                eta_min=self.config.min_lr
             )
             constant = torch.optim.lr_scheduler.ConstantLR(self.optimizer, factor=1.0, total_iters=1000000)
             return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, cosine, constant],  milestones=[self.config.warmup_epochs, self.config.num_epochs])

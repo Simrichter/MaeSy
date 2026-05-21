@@ -439,15 +439,19 @@ def compute_detection_metrics(
     iou_thresholds: Iterable[float] | None = None,
     line_class_id: int | None = None,
     line_distance_thresholds: Sequence[float] | None = None,
+    fb_beta=0.25
 ) -> Dict[str, float]:
     """Compute common OD metrics from decoded predictions and targets.
 
-    Args:
-        predictions: List per image with keys ``boxes`` (xyxy), ``labels``, ``scores``.
-        targets: List per image with keys ``boxes`` (xyxy), ``labels``.
-        num_classes: Number of foreground classes.
-        iou_thresholds: IoU thresholds for mAP50-95. Defaults to ``0.50:0.05:0.95``.
-    """
+        Args:
+            :param predictions: List per image with keys ``boxes`` (xyxy), ``labels``, ``scores``.
+            :param targets: List per image with keys ``boxes`` (xyxy), ``labels``.
+            :param num_classes: Number of foreground classes.
+            :param iou_thresholds: IoU thresholds for mAP50-95. Defaults to ``0.50:0.05:0.95``.
+            :param line_class_id: ID of the line class. None for training without lines
+            :param line_distance_thresholds: A sequence of thresholds for max line distances
+            :param fb_beta: The weighting for the F-Score. Defaults to 0.25 (to weigh precision 4x)
+        """
     if iou_thresholds is None:
         iou_thresholds = np.arange(0.5, 1.0, 0.05)
 
@@ -466,7 +470,6 @@ def compute_detection_metrics(
         mean_aps.append(float(np.mean(aps)) if aps else 0.0)
     map50_95 = float(np.mean(mean_aps)) if mean_aps else 0.0
 
-    fb_beta=0.25
     precision50, recall50, fb_50 = _compute_prf1_at_iou(
         predictions,
         targets,

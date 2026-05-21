@@ -13,8 +13,6 @@ class TrainingConfig:
     # Training parameters
     num_epochs: int = 100
     # batch_size: int = 16
-    learning_rate: float = 1e-4
-    backbone_learning_rate: float = learning_rate
     weight_decay: float = 1e-4
     label_smoothing: float = 0.0
     warmup_epochs: int = 5
@@ -25,6 +23,10 @@ class TrainingConfig:
     momentum: float = 0.9  # For SGD
     
     # Learning rate schedule
+    learning_rate: float = 1e-4
+    min_lr: float = 1e-7
+    patience: int = 10  # For ReduceLROnPlateau scheduler
+    backbone_learning_rate: float = learning_rate / 10
     lr_scheduler: str = "cosine"  # cosine, step, multistep
     lr_step_size: int = 30  # For step scheduler
     lr_gamma: float = 0.1  # For step scheduler

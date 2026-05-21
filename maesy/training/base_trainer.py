@@ -179,16 +179,29 @@ class BaseTrainer(ABC):
             cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer,
                 T_max=self.config.num_epochs - self.config.warmup_epochs,
-                eta_min=1e-7 # TODO: Make this configurable?
+                eta_min=self.config.min_lr # TODO: Make this configurable?
             )
             constant = torch.optim.lr_scheduler.ConstantLR(self.optimizer, factor=1.0, total_iters=1000000)
             return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, cosine, constant],  milestones=[self.config.warmup_epochs, self.config.num_epochs])
         elif self.config.lr_scheduler.lower() == "step":
-            return torch.optim.lr_scheduler.StepLR(
+            warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: min(
+                (step + 1) / self.config.warmup_epochs, 1.0))
+            step = torch.optim.lr_scheduler.StepLR(
                 self.optimizer,
                 step_size=self.config.lr_step_size,
                 gamma=self.config.lr_gamma
             )
+            return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, step], milestones=[self.config.warmup_epochs, self.config.num_epochs])
+        elif self.config.lr_scheduler.lower() == "plateau":
+            warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: min(
+                (step + 1) / self.config.warmup_epochs, 1.0))
+            plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer,
+                mode='min',
+                patience=self.config.patience,
+                min_lr=self.config.min_lr,
+            )
+            return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, plateau], milestones=[self.config.warmup_epochs, self.config.num_epochs])
         else:
             print(f"Warning: Unknown scheduler '{self.config.lr_scheduler}'")
             return None

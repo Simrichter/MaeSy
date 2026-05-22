@@ -189,19 +189,21 @@ class BaseTrainer(ABC):
             step = torch.optim.lr_scheduler.StepLR(
                 self.optimizer,
                 step_size=self.config.lr_step_size,
-                gamma=self.config.lr_gamma
+                gamma=self.config.lr_step_factor
             )
             return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, step], milestones=[self.config.warmup_epochs, self.config.num_epochs])
         elif self.config.lr_scheduler.lower() == "plateau":
-            warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: min(
-                (step + 1) / self.config.warmup_epochs, 1.0))
+            # warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: min(
+            #     (step + 1) / self.config.warmup_epochs, 1.0))
             plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer,
-                mode='min',
+                mode='max',
+                factor=self.config.lr_step_factor,
                 patience=self.config.patience,
-                min_lr=self.config.min_lr,
+                cooldown=self.config.min_num_epochs_per_plateau,
+                # min_lr=self.config.min_lr,
             )
-            return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, plateau], milestones=[self.config.warmup_epochs, self.config.num_epochs])
+            return plateau # torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, plateau], milestones=[self.config.warmup_epochs, self.config.num_epochs])
         else:
             print(f"Warning: Unknown scheduler '{self.config.lr_scheduler}'")
             return None
@@ -346,13 +348,8 @@ class BaseTrainer(ABC):
 
         for epoch in range(self.current_epoch, self.config.num_epochs):
             self.current_epoch = epoch
-
             # Train
             train_metrics = self.train_epoch()
-            # Step scheduler
-            if self.scheduler is not None:
-                self.scheduler.step()
-
             # Validate
             if self.val_loader is not None:
                 # val_metrics = {f"val/{k}": v for k, v in self.validate().items()}  # Preparations for logging
@@ -373,10 +370,26 @@ class BaseTrainer(ABC):
                 # Save best model
                 if val_out['val_losses/total_loss'] < self.best_val_loss:
                     self.best_val_loss = val_out['val_losses/total_loss']
-                    self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config,  'best_model.pth', self.scheduler)
+                    self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config,
+                                                            'best_model.pth', self.scheduler)
             else:
-                print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - "
-                      f"Train Loss: {train_metrics['total_loss']:.4f}")
+                val_out = None
+                print(f"Epoch {self.current_epoch + 1}/{self.config.num_epochs} - Train Loss: {train_metrics['total_loss']:.4f}")
+            # Step scheduler
+            if self.scheduler is not None:
+                if self.config.lr_scheduler.lower() == "plateau":
+                    if val_out is None:
+                        raise ValueError("Validation pass is required for plateau scheduler, but no validation loader was provided.")
+                    # self.scheduler.step(val_out['val_losses/total_loss'])
+                    self.scheduler.step(val_out['metrics/total_mAP'])
+                else:
+                    self.scheduler.step()
+
+                if self.config.early_stop_on_min_lr:
+                    current_lr = self.optimizer.param_groups[-1]['lr']
+                    if current_lr <= self.config.min_lr:
+                        print(f"Early stopping at epoch {self.current_epoch + 1} as learning rate has reached minimum threshold.")
+                        break
 
             # Save most recent epoch
             self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, 'latest_model.pth', self.scheduler)
@@ -393,6 +406,12 @@ class BaseTrainer(ABC):
         print("Training completed!")
 
     def resume(self, checkpoint_path: str):
+        """
+            Resume training from a checkpoint.
+
+            Args:
+                :param checkpoint_path: The path to a training checkpoint to resume from
+        """
         self.current_epoch, self.global_step, self.best_val_loss = self.checkpoint_handler.load_training_state(checkpoint_path, self.optimizer, self.scheduler)
         self.current_epoch += 1  # To continue with the next epoch and not repeat an already trained one
         self.train()

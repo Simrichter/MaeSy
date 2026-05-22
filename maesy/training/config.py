@@ -25,11 +25,13 @@ class TrainingConfig:
     # Learning rate schedule
     learning_rate: float = 1e-4
     min_lr: float = 1e-7
+    early_stop_on_min_lr: bool = True
     patience: int = 10  # For ReduceLROnPlateau scheduler
+    min_num_epochs_per_plateau: int = 100 # For ReduceLROnPlateau scheduler
     backbone_learning_rate: float = learning_rate / 10
     lr_scheduler: str = "cosine"  # cosine, step, multistep
     lr_step_size: int = 30  # For step scheduler
-    lr_gamma: float = 0.1  # For step scheduler
+    lr_step_factor: float = 0.3  # For step scheduler
     
     # Checkpoint and logging
     save_dir: str = "./checkpoints"

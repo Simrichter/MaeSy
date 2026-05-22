@@ -255,8 +255,10 @@ class DetectionLoss(BaseLoss):
 
                 gt_swapped = torch.cat([gt[:, 2:], gt[:, :2]], dim=-1)
 
-                loss1 = torch.abs(pred - gt).sum(dim=-1)
-                loss2 = torch.abs(pred - gt_swapped).sum(dim=-1)
+                # loss1 = torch.abs(pred - gt).sum(dim=-1)
+                # loss2 = torch.abs(pred - gt_swapped).sum(dim=-1)
+                loss1 = F.smooth_l1_loss(pred, gt, beta=0.05, reduction='sum')
+                loss2 = F.smooth_l1_loss(pred, gt_swapped, beta=0.05, reduction='sum')
 
                 loss_line = torch.min(loss1, loss2)
 
@@ -273,7 +275,8 @@ class DetectionLoss(BaseLoss):
                 assert pred.shape[0] == gt.shape[0]
 
 
-                center_loss = torch.abs(pred[:, :2] - gt[:, :2]).sum(dim=-1)
+                # center_loss = torch.abs(pred[:, :2] - gt[:, :2]).sum(dim=-1)
+                center_loss = F.smooth_l1_loss(pred[:, :2], gt[:, :2], reduction='sum', beta=0.05)
                 shape_loss = self.frobenius_per_sample(pred[:, 2:], gt[:, 2:])
                 loss_ellipse = center_loss + self.frobenius_coef * shape_loss
 

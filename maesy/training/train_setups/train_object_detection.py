@@ -145,7 +145,7 @@ def train_vit_detector(
         lr_scheduler= "plateau", # "cosine",
         patience=40,
         lr_step_factor=0.3,
-        min_num_epochs_per_plateau=75,
+        min_num_epochs_per_plateau=50,
         warmup_epochs=4, # Not used with Plateau scheduling
         label_smoothing=0.1,
         save_frequency=100,

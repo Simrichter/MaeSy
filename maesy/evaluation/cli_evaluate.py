@@ -1,4 +1,3 @@
-from maesy.training.train_setups import infer_vit_detector
 
 def main(args):
 
@@ -6,6 +5,7 @@ def main(args):
         case "infer":
             # infer_video(args)
             import torch
+            from maesy.training.train_setups import infer_vit_detector
             infer_vit_detector(
                 args.checkpoint,
                 args.imgpath,

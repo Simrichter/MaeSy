@@ -67,7 +67,7 @@ def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = 
         save_image(drawn/255, out_path)
         # save_image(img, out_path)
 
-def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_file:str= ""):
+def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_file:str= "", enable_lines: bool = True, enable_ellipses: bool = True):
     """
         Visualizes bounding boxes and lines. Autodetects MaesyDataset or standard image folder
 
@@ -76,6 +76,8 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
             :param output_dir: Output folder to be created. Default: 'Visualized' subfolder in the input directory
             :param label_path: Path to a folder that contains the annotation text files (Leave empty, if MaesyDataset or annotations in input_dir)
             :param label_file: Path to a file that contains the class names in order (default: empty, i.e. use default class names / class names from MaesyDataset yaml)
+            :param enable_lines: Whether to visualize lines
+            :param enable_ellipses: Whether to visualize lines
     """ # TODO: Update tooltips in commandline.py
     # TODO: Use MaesyDataset yaml for class names
 
@@ -93,7 +95,7 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
     datasets = []
     for split in ["train", "val", "test"]:
         try:
-            datasets.append(MaesyDataset(input_dir, split, "detection"))
+            datasets.append(MaesyDataset(input_dir, split, "detection", enable_lines=enable_lines, enable_ellipses=enable_ellipses))
         except AssertionError as e:
             ...
             # print(e)
@@ -106,6 +108,7 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
     if len(datasets) >= 0:
         for d in datasets:
             visualize_dataset(d, output_dir)
+            return
     else:
         print("No MaesyDataset detected, assuming standard image folder with annotations (txt files with same name as images).")
 
@@ -138,7 +141,7 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
                 continue
             # img = draw_boxes_in_image(img_path, boxes, name_coding=name_coding).float() / 255.0
             b = torch.stack([box.coordinates_as_tensor() for box in boxes])
-            img = _draw_boxes_in_tensor(read_image(img_path), b, labels=torch.tensor([box.cls() for box in boxes]), name_coding=name_coding).float() / 255.0
+            img = _draw_boxes_in_tensor(read_image(img_path), b, labels=torch.tensor([box.cls() for box in boxes]), name_coding=name_coding, xyxy=True).float() / 255.0
             # Annotiertes Bild speichern
             out_path = os.path.join(output_dir, file)
             save_image(img, out_path)
@@ -195,7 +198,7 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
 #
 #     return out
 
-def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None) -> torch.Tensor:
+def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None, xyxy: bool = False) -> torch.Tensor:
     """
         Draws bounding boxes on the image. If specified, uses labels and colors. If boxes is empty, img is returned
 
@@ -205,6 +208,7 @@ def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.
             :param labels: Tensor of labels, shape [nb, ]
             :param name_coding: Optional dict to translate from class id to label name
             :param color_coding: Optional dict to translate from class id to color
+            :param xyxy: Whether the boxes are already in xyxy format
 
         returns:
             img: The tensor with drawn bounding boxes, in format [C, H, W] (pixel range: [0,255])
@@ -230,8 +234,10 @@ def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.
 
 
     h, w = img.shape[-2:]
-    # boxes_xyxy = box_convert(boxes.detach().cpu(), "cxcywh", "xyxy")
-    boxes_xyxy = boxes.detach().cpu()
+    if not xyxy:
+        boxes_xyxy = box_convert(boxes.detach().cpu(), "cxcywh", "xyxy")
+    else:
+        boxes_xyxy = boxes.detach().cpu()
     boxes_xyxy[:, (0, 2)] *= w
     boxes_xyxy[:, (1, 3)] *= h
     boxes_xyxy[:, (0, 2)] = boxes_xyxy[:, (0, 2)].clamp(0, w - 1)
@@ -270,14 +276,14 @@ def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: s
 
         Args:
             :param img: The image as a torch.Tensor in format [C, H, W] (pixel range: [0,255], dtype=torch.uint8)
-            :param ellipses: Tensor containing the ellipses in normalized cxcylll format, shape [ne, 5]
+            :param ellipses: Tensor containing the ellipses in normalized cx cy a b theta format, shape [ne, 5]
             :param color: The color to draw the lines with. Default is pink. !Expects
 
         returns:
             img: The tensor with drawn bounding boxes, in format [C, H, W] (pixel range: [0,1])
     """
 
-    def _ellipse_to_points(params, num=100):
+    def _ellipse_to_points_cholesky(params, num=100):
         """
         Convert ellipse in cholesky representation to points in normalized xy format
         Args:
@@ -309,6 +315,35 @@ def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: s
 
         return pts.permute(0, 2, 1)  # [N, num, 2]
 
+    def _ellipse_to_points(params, num=100):
+        """
+        Convert ellipse in cx, cy, a, b, theta representation to points in normalized xy format
+        Args:
+            :param params: [N, 5] = [N, (cx, cy, a, b, theta)]
+            :param num: Number of points to Sample per ellipse
+        returns: Tensor [N, num, 2]
+        """
+        cx, cy, a, b, theta = params.unbind(-1)
+
+        # Parametric sampling of an ellipse with semi-axes a, b rotated by theta around center (cx, cy)
+        # t: [num]
+        t = torch.linspace(0, 2 * torch.pi, num, device=params.device, dtype=params.dtype)
+        cos_t = torch.cos(t).unsqueeze(0)  # [1, num]
+        sin_t = torch.sin(t).unsqueeze(0)  # [1, num]
+
+        # local coordinates for each ellipse: [N, num]
+        x_local = a.unsqueeze(-1) * cos_t
+        y_local = b.unsqueeze(-1) * sin_t
+
+        cos_theta = torch.cos(theta).unsqueeze(-1)  # [N, 1]
+        sin_theta = torch.sin(theta).unsqueeze(-1)  # [N, 1]
+
+        x = cx.unsqueeze(-1) + (x_local * cos_theta - y_local * sin_theta)
+        y = cy.unsqueeze(-1) + (x_local * sin_theta + y_local * cos_theta)
+
+        pts = torch.stack([x, y], dim=-1)  # [N, num, 2]
+        return pts
+
     h, w = img.shape[-2:]
     if ellipses.shape[0] == 0:
         return img
@@ -320,7 +355,7 @@ def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: s
     drawn = torch.from_numpy(drawn).permute(2, 0, 1).contiguous().float()
     return drawn
 
-def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, lines: torch.Tensor, ellipses: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None) -> torch.Tensor:
+def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, lines: torch.Tensor, ellipses: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None, xyxy: bool = False) -> torch.Tensor:
     """
         Draws bounding boxes and lines on the image.
 
@@ -332,9 +367,10 @@ def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch
             :param ellipses: Tensor of ellipses in normalized cxcylll format, shape [ne, 5]
             :param name_coding: Optional dict to translate from class id to label name
             :param color_coding: Optional dict to translate from class id to color
+            :param xyxy: Whether the boxes are already in xyxy format
 
     """
-    img = _draw_boxes_in_tensor(img, boxes, labels, name_coding, color_coding)
+    img = _draw_boxes_in_tensor(img, boxes, labels, name_coding, color_coding, xyxy)
     img = _draw_lines_in_tensor(img, lines)
     img = _draw_ellipses_in_tensor(img, ellipses)
     return img

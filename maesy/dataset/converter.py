@@ -123,8 +123,9 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                         if ellipse_model.estimate(points):
                             cx, cy, a, b, theta = ellipse_model.params
                             # Convert to cholesky representation
-                            cx, cy, l11, l12, l22 = ellipse_to_cholesky(cx, cy, a, b, theta)
-                            new_lines.append(f"{name_to_id['CenterCircle']} {cx} {cy} {l11} {l12} {l22}\n")
+                            # cx, cy, l11, l12, l22 = ellipse_to_cholesky(cx, cy, a, b, theta)
+                            # new_lines.append(f"{name_to_id['CenterCircle']} {cx} {cy} {l11} {l12} {l22}\n")
+                            new_lines.append(f"{name_to_id['CenterCircle']} {cx} {cy} {a} {b} {theta}\n")
                         else:
                             print(f"Failed to estimate ellipse from line '{line}' in file {label_file}")
                     case _:

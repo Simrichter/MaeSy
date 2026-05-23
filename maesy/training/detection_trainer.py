@@ -206,6 +206,6 @@ class DetectionTrainer(BaseTrainer):
             img = images[0].detach()
             img = (img * self._IMAGENET_STD) + self._IMAGENET_MEAN
             img = (img.clamp(0.0, 1.0) * 255.0).to(torch.uint8).cpu()
-            losses["img_predictions"] = draw_objects_in_tensor(img, predictions[0]["boxes"], predictions[0]["labels"], predictions[0]["line_points"], predictions[0]["ellipses"])/255
+            losses["img_predictions"] = draw_objects_in_tensor(img, predictions[0]["boxes"], predictions[0]["labels"], predictions[0]["line_points"], predictions[0]["ellipses"], xyxy=True)/255
 
         return losses

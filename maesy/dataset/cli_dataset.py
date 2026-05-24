@@ -1,8 +1,8 @@
-from .dataset_manager import DatasetManager
-
 def main(args):
     # print("Dataset management called with arguments:", args)
     # print(f"Path: {args.path}")
+
+    from .dataset_manager import DatasetManager
 
     dm = DatasetManager(data_root=args.path)
     match args.command:

@@ -1,10 +1,6 @@
-
-
-from maesy.training.train_setups import train_vit_detector, train_mae
-
-
 def main(args):
     if args.mode == "od":
+        from maesy.training.train_setups import train_vit_detector
         train_vit_detector(
             args.model,
             args.dataset,
@@ -23,6 +19,7 @@ def main(args):
             seed=getattr(args, "seed", 42),
         )
     elif args.mode == "mae":
+        from maesy.training.train_setups import train_mae
         train_mae(args.model, dataset_path=args.dataset, enable_wandb=args.wandb, continue_training_from_checkpoint=args.resume)
         #TODO: Add further parameters for mae training (image size, batch size, num epochs, mask ratio)...
     elif args.mode == "cl":
@@ -30,3 +27,6 @@ def main(args):
         train_classification(dataset_path=args.dataset, enable_wandb=args.wandb)
     else:
         raise ValueError(f"Invalid training mode: {args.mode}. Supported modes are 'od', 'mae' and 'cl'.")
+
+
+

@@ -37,8 +37,9 @@ class RTDETRHeadConfig:
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3, custom_init = False):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3, custom_init = False, last_activation: str = "None"):
         super().__init__()
+        str_to_act = {"None": nn.Identity(), "ReLU": nn.ReLU(), "Sigmoid": nn.Sigmoid(), "Tanh": nn.Tanh()}
         layers: List[nn.Module] = []
         in_dim = input_dim
         for idx in range(num_layers - 1):
@@ -50,6 +51,7 @@ class MLP(nn.Module):
             layers.append(nn.ReLU())
             in_dim = hidden_dim
         layers.append(nn.Linear(in_dim, output_dim))
+        layers.append(str_to_act.get(last_activation, nn.Identity()))
         self.layers = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -306,7 +308,7 @@ class RTDETRHead(nn.Module):
         # encoder_class_head is instantiated in create_class_heads() method!
         self.encoder_box_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 4) # dense head for reference boxes
         self.encoder_line_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 4) # dense head for reference lines
-        self.encoder_ellipse_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 5) # dense head for reference ellipses
+        self.encoder_ellipse_head = MLP(config.embed_dim, config.hidden_dim_dense_heads, 6) # dense head for reference ellipses
 
         self.query_content = nn.Embedding(config.num_queries, config.embed_dim)
         self.reference_point_proj = MLP(2, config.embed_dim, config.embed_dim, num_layers=2)
@@ -332,7 +334,7 @@ class RTDETRHead(nn.Module):
 
         self.decoder_line_heads = nn.ModuleList([MLP(config.embed_dim, config.hidden_dim_out_layers, 4) for _ in range(config.num_decoder_layers)]) if config.enable_line_detection else None
 
-        self.decoder_ellipse_heads = nn.ModuleList([MLP(config.embed_dim, config.hidden_dim_out_layers, 5) for _ in range(config.num_decoder_layers)]) if config.enable_ellipse_detection else None
+        self.decoder_ellipse_heads = nn.ModuleList([MLP(config.embed_dim, config.hidden_dim_out_layers, 6) for _ in range(config.num_decoder_layers)]) if config.enable_ellipse_detection else None
 
         if config.enable_denoising and config.denoising_num_queries > 0:
             self.dn_query_content = nn.Embedding(config.denoising_num_queries, config.embed_dim)
@@ -427,16 +429,17 @@ class RTDETRHead(nn.Module):
         )
 
         selected_refs = topk_idx.expand(-1, -1, 4)
-        enc_boxes = self.encoder_box_head(memory)#.sigmoid()
+        enc_boxes = self.encoder_box_head(memory)
         references["reference_boxes"] = torch.gather(enc_boxes, dim=1, index=selected_refs)
         enc_outputs["pred_boxes"] = references["reference_boxes"].sigmoid()
         if self.config.enable_line_detection:
-            enc_lines = self.encoder_line_head(memory)#.sigmoid()
+            enc_lines = self.encoder_line_head(memory)
             references["reference_lines"] = torch.gather(enc_lines, dim=1, index=selected_refs)
             enc_outputs["pred_lines"] = references["reference_lines"].sigmoid()
         if self.config.enable_ellipse_detection:
-            enc_ellipses = self.encoder_ellipse_head(memory)  # ! NO sigmoid since ellipses are not [0,1] bound
-            references["reference_ellipses"] = torch.gather(enc_ellipses, dim=1, index=topk_idx.expand(-1, -1, 5))
+            enc_ellipses = self.encoder_ellipse_head(memory)
+            enc_ellipses[:, :, -2:] = F.tanh(enc_ellipses[:, :, -2:])
+            references["reference_ellipses"] = torch.gather(enc_ellipses, dim=1, index=topk_idx.expand(-1, -1, 6))
             enc_outputs["pred_ellipses"] = references["reference_ellipses"]
 
         enc_outputs["selected_indices"] = topk_idx.squeeze(-1)
@@ -547,6 +550,7 @@ class RTDETRHead(nn.Module):
 
             if self.decoder_ellipse_heads is not None and ellipse_reference_logits is not None:
                 tmp_ellipse_pred = self.decoder_ellipse_heads[layer_idx](query)
+                tmp_ellipse_pred[:, :, -2:] = F.tanh(tmp_ellipse_pred[:, :, -2:])
                 pred_ellipses = (tmp_ellipse_pred + ellipse_reference_logits)
                 ellipses_per_layer.append(pred_ellipses)
                 ellipse_reference_logits = tmp_ellipse_pred.detach() + ellipse_reference_logits.detach()

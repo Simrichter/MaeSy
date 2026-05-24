@@ -152,7 +152,7 @@ class MaesyDataset(Dataset):
                                 line_points_list.append([*map(float, splits[1:])])
                         elif self.special_classes['ellipse_class_id'] is not None and cls_id == self.special_classes['ellipse_class_id']:
                             if self.enable_ellipses:
-                                assert len(splits) == 6, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'ellipse': 'class center_x center_y L_11 L_12 L_22' (cholesky decomposition)."
+                                assert len(splits) == 7, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 7 columns for annotation type 'ellipse': 'class center_x center_y log_a log_b cos(2*theta) sin(2*theta)'."
                                 ellipse_points_list.append([*map(float, splits[1:])])
                         else:
                             assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'BoundingBox': 'class cx cy w h'."
@@ -202,7 +202,7 @@ class MaesyDataset(Dataset):
                     if len(ellipse_points_list) > 0:
                         ellipses = torch.tensor(ellipse_points_list, dtype=torch.float32)
                     else:
-                        ellipses = torch.empty((0, 5), dtype=torch.float32)
+                        ellipses = torch.empty((0, 6), dtype=torch.float32)
 
                     target = {"boxes": coords, "labels": labels, "line_points": line_points, "ellipses": ellipses}
             image = torchvision.tv_tensors.Image(image) / 255.0

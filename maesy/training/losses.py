@@ -51,7 +51,7 @@ class DetectionLoss(BaseLoss):
             enc_loss_coef: float = 1.0,
             line_loss_coef: float = 2.0,
             ellipse_loss_coef: float = 2.0,
-            ellipse_frobenius_coef: float = 0.1,
+            ellipse_shape_coef: float = 0.1,
             dn_loss_coef: float = 1.0,
             enable_line_detection: bool = False,
             line_class_id: int = -1,
@@ -72,7 +72,7 @@ class DetectionLoss(BaseLoss):
             :param aux_loss_coef: Coefficient for weighting of auxiliary loss
             :param line_loss_coef: Coefficient for loss of line-detection head
             :param ellipse_loss_coef: Coefficient for loss of ellipse-detection head
-            :param ellipse_frobenius_coef: Coefficient to downscale frobenius norm (shape-loss) of ellipses
+            :param ellipse_shape_coef: Coefficient to downscale frobenius norm (shape-loss) of ellipses
             :param dn_loss_coef: Coefficient for auxiliary denoising loss
             :param enable_line_detection: Whether line detection head is enabled
             :param line_class_id: The class id of the lines
@@ -89,7 +89,7 @@ class DetectionLoss(BaseLoss):
         self.enc_loss_coef = enc_loss_coef
         self.line_loss_coef = line_loss_coef
         self.ellipse_loss_coef = ellipse_loss_coef
-        self.frobenius_coef = ellipse_frobenius_coef
+        self.ellipse_shape_coef = ellipse_shape_coef
         self.dn_loss_coef = dn_loss_coef
         self.enable_line_detection = enable_line_detection
         self.line_class_id = line_class_id
@@ -192,7 +192,7 @@ class DetectionLoss(BaseLoss):
 
         target_boxes = torch.cat(all_target_boxes) if all_target_boxes else torch.empty(0, 4, device=pred_logits.device)
         target_lines = torch.cat(all_target_lines) if all_target_lines else torch.empty(0, 4, device=pred_logits.device)
-        target_ellipses = torch.cat(all_target_ellipses) if all_target_ellipses else torch.empty(0, 5, device=pred_logits.device)
+        target_ellipses = torch.cat(all_target_ellipses) if all_target_ellipses else torch.empty(0, 6, device=pred_logits.device)
         # Compute classification loss
         target_classes = torch.full(
             pred_logits.shape[:2],
@@ -274,8 +274,10 @@ class DetectionLoss(BaseLoss):
 
 
                 center_loss = torch.abs(pred[:, :2] - gt[:, :2]).sum(dim=-1)
-                shape_loss = self.frobenius_per_sample(pred[:, 2:], gt[:, 2:])
-                loss_ellipse = center_loss + self.frobenius_coef * shape_loss
+                # shape_loss = self.frobenius_per_sample(pred[:, 2:], gt[:, 2:])
+                shape_loss = torch.abs(pred[:, 2:4] - gt[:, 2:4]).sum(dim=-1)
+                rotation_loss = (pred[:, 4]-gt[:, 4])**2 + (pred[:, 5]-gt[:, 5])**2
+                loss_ellipse = center_loss + self.ellipse_shape_coef * (shape_loss + rotation_loss)
 
                 if num_ellipse_matches > 0:
                     loss_ellipse = loss_ellipse.sum() / num_ellipse_matches
@@ -600,7 +602,7 @@ class DetectionLoss(BaseLoss):
     ) -> List[tuple[torch.Tensor, torch.Tensor]]:
         """
             Perform Hungarian matching between predictions and targets.
-            Expects boxes in format (cx cy w h), lines in format (x y x y) and ellipses in format (cx cy a_11 a_12 a_22)
+            Expects boxes in format (cx cy w h), lines in format (x y x y) and ellipses in format (cx cy log_a log_b sin2theta cos2theta)
         """
         pred_logits = predictions['pred_logits']  # [B, num_queries, num_classes + 1]
         pred_boxes = predictions['pred_boxes']  # [B, num_queries, 4]
@@ -652,10 +654,16 @@ class DetectionLoss(BaseLoss):
                 and pred_ellipses is not None
                 and tgt_ellipses is not None
             ):
-                pred_e = pred_ellipses[i]  # [num_queries, 5]
-                tgt_e = tgt_ellipses  # [num_ellipses, 5]
+                pred_e = pred_ellipses[i]  # [num_queries, 6]
+                tgt_e = tgt_ellipses  # [num_ellipses, 6]
                 len_tgt_lines = 0 if tgt_lines is None else len(tgt_lines)
-                cost_ellipse[:, len(tgt_bbox)+len_tgt_lines:] = torch.cdist(pred_e[:, :2], tgt_e[:, :2], p=1) + self.frobenius_coef * self._pairwise_frobenius(pred_e[:, 2:], tgt_e[:, 2:])
+
+                # ellipse cost mirrors the per-sample loss definition
+                center_loss = torch.cdist(pred_e[:, :2], tgt_e[:, :2], p=1)
+                shape_loss = torch.cdist(pred_e[:, 2:4], tgt_e[:, 2:4], p=1)
+                rotation_loss = torch.cdist(pred_e[:, 4:6], tgt_e[:, 4:6], p=2) ** 2
+                cost_ellipse[:, len(tgt_bbox)+len_tgt_lines:] = center_loss + self.ellipse_shape_coef * (shape_loss + rotation_loss)
+                # cost_ellipse[:, len(tgt_bbox)+len_tgt_lines:] = torch.cdist(pred_e[:, :2], tgt_e[:, :2], p=1) + self.ellipse_shape_coef * self._pairwise_frobenius(pred_e[:, 2:], tgt_e[:, 2:])
 
             # L1 cost bboxes
             cost_bbox = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)

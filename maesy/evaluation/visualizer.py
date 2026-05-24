@@ -276,7 +276,7 @@ def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: s
 
         Args:
             :param img: The image as a torch.Tensor in format [C, H, W] (pixel range: [0,255], dtype=torch.uint8)
-            :param ellipses: Tensor containing the ellipses in normalized cx cy a b theta format, shape [ne, 5]
+            :param ellipses: Tensor containing the ellipses in normalized cx cy log_a log_b cos(2*theta) sin(2*theta) format, shape [ne, 6]
             :param color: The color to draw the lines with. Default is pink. !Expects
 
         returns:
@@ -323,7 +323,9 @@ def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: s
             :param num: Number of points to Sample per ellipse
         returns: Tensor [N, num, 2]
         """
-        cx, cy, a, b, theta = params.unbind(-1)
+        cx, cy, log_a, log_b, cos2theta, sin2theta = params.unbind(-1)
+        a, b = torch.exp(log_a), torch.exp(log_b)
+        theta = torch.atan2(sin2theta, cos2theta) / 2
 
         # Parametric sampling of an ellipse with semi-axes a, b rotated by theta around center (cx, cy)
         # t: [num]

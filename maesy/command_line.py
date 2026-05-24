@@ -78,6 +78,11 @@ def main():
     # Command: maesy evaluate
     eval_parser = eval.add_subparsers(dest="command")
 
+    test = eval_parser.add_parser("test", help="Perform model testing on a test split of a dataset")
+    test.add_argument("dataset", help="Path to dataset root directory or yaml file")
+    test.add_argument("checkpoint", help="Path to model checkpoint file")
+    test.add_argument("--device", type=str, default="", help="Device to run evaluation on (default: auto-detect CUDA if available, otherwise CPU)")
+
     infer = eval_parser.add_parser("infer", help="Run inference on a folder of images")
     infer.add_argument("imgpath", help="Path to folder of images for inference")
     infer.add_argument("checkpoint", help="Path to model checkpoint file")

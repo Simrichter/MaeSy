@@ -19,3 +19,8 @@ def main(args):
         case "visualize":
             from maesy.evaluation import visualize_data
             visualize_data(args.imgpath, args.out, label_path=args.labels, label_file=args.label_file)
+
+        case "test":
+            from maesy.evaluation import Evaluator
+            evaluator = Evaluator(args.checkpoint, args.dataset, args.device)
+            evaluator.evaluate()

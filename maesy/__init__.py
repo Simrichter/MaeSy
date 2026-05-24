@@ -10,7 +10,6 @@ __all__ = [
     "ObjectDetectionDataset",
     "ModelConfig",
     "Evaluator",
-    "evaluate_model",
 ]
 
 _LAZY_ATTRS = { # Lazy imports to increase "-h" response time in cli
@@ -18,7 +17,6 @@ _LAZY_ATTRS = { # Lazy imports to increase "-h" response time in cli
     "ObjectDetectionDataset": ("maesy.dataset", "ObjectDetectionDataset"),
     "ModelConfig": ("maesy.model", "ModelConfig"),
     "Evaluator": ("maesy.evaluation", "Evaluator"),
-    "evaluate_model": ("maesy.evaluation", "evaluate_model"),
 }
 
 
@@ -39,4 +37,4 @@ def __dir__():
 if TYPE_CHECKING:
     from .dataset import DatasetManager, ObjectDetectionDataset
     from .model import ModelConfig
-    from .evaluation import Evaluator, evaluate_model
+    from .evaluation import Evaluator

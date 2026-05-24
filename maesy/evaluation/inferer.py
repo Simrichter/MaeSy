@@ -41,7 +41,7 @@ class Inferer:
         Get the models outputs of a complete epoch.
 
         Returns:
-            List with the results. First dimension is the batch/epoch dimension.
+            Tuple of Lists. First output are the predictions, second are the corresponding targets.
         """
 
         if self.data_loader is None:

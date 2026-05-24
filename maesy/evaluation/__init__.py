@@ -1,6 +1,6 @@
 """Evaluation module for model evaluation and metrics."""
 
-from .evaluator import Evaluator, evaluate_model
+from .evaluator import Evaluator
 from .metrics import (
     compute_detection_metrics,
     compute_map,
@@ -13,7 +13,6 @@ from .visualizer import visualize_data
 
 __all__ = [
     "Evaluator",
-    "evaluate_model",
     "compute_detection_metrics",
     "compute_map",
     "compute_precision_recall",

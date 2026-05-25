@@ -220,6 +220,8 @@ class BaseTrainer(ABC):
                 aux_loss_coef=getattr(self.config, "aux_loss_coef", 0.5),
                 enc_loss_coef=getattr(self.config, "enc_loss_coef", 1.0),
                 line_loss_coef=getattr(self.config, "line_loss_coef", 2.0),
+                ellipse_loss_coef=getattr(self.config, "ellipse_loss_coef", 2.0),
+                ellipse_shape_coef=getattr(self.config, "ellipse_shape_coef", 1.0),
                 dn_loss_coef=getattr(self.config, "dn_loss_coef", 1.0),
                 enable_line_detection=getattr(self.model.config, "enable_line_detection", False),
                 enable_ellipse_detection=getattr(self.model.config, "enable_ellipse_detection", False),

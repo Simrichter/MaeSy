@@ -2,7 +2,36 @@ from typing import Tuple, Optional
 
 import torch
 import torchvision.tv_tensors
+from torchvision.ops import box_convert
 
+
+def _cxcywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
+    if boxes.numel() == 0:
+        return boxes.reshape(0, 4)
+    return box_convert(boxes, in_fmt="cxcywh", out_fmt="xyxy")
+
+
+def sanitize_xyxy(boxes_xyxy: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    if boxes_xyxy.numel() == 0:
+        return boxes_xyxy.reshape(0, 4), torch.zeros((0,), dtype=torch.bool)
+    boxes_xyxy = boxes_xyxy.clone()
+    boxes_xyxy[:, 0::2] = boxes_xyxy[:, 0::2].clamp(0.0, 1.0)
+    boxes_xyxy[:, 1::2] = boxes_xyxy[:, 1::2].clamp(0.0, 1.0)
+    valid = (boxes_xyxy[:, 2] > boxes_xyxy[:, 0]) & (boxes_xyxy[:, 3] > boxes_xyxy[:, 1])
+    return boxes_xyxy[valid], valid
+
+def sanitize_cxcywh(boxes_cxcywh: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+        Sanitize bounding boxes in cxcywh format and return in xyxy
+        Args:
+            :param boxes_cxcywh: tensor of boxes in cxcywh format
+
+        Returns:
+            Tuple of (sanitized_boxes_xyxy,  valid_mask) where:
+            - sanitized_boxes_xyxy: tensor of boxes in xyxy format with invalid boxes removed
+            - valid_mask: boolean tensor indicating which input boxes were valid
+    """
+    return sanitize_xyxy(_cxcywh_to_xyxy(boxes_cxcywh))
 
 class BoundingBox:
     """Bounding Box representation stored internally as [x_min, y_min, x_max, y_max].

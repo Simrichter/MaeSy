@@ -9,7 +9,6 @@ from torchvision.utils import draw_bounding_boxes
 
 from maesy.evaluation.metrics import (
     compute_detection_metrics,
-    decode_detr_predictions,
     prepare_targets_for_detection_metrics,
 )
 from maesy.evaluation.visualizer import draw_objects_in_tensor
@@ -84,10 +83,10 @@ class DetectionTrainer(BaseTrainer):
             Dictionary of losses from the loss function
         """
         # Get model predictions
-        predictions = self.model.forward(images, targets=targets)
+        raw_out , predictions, _ = self.model.infer(images, targets=targets)
 
         # Compute loss
-        losses = self.loss(predictions, targets)
+        losses = self.loss(raw_out, targets)
 
         if val and targets is not None:
             line_class_id: int | None = getattr(self.model.config, "line_class_id", None)
@@ -97,30 +96,23 @@ class DetectionTrainer(BaseTrainer):
             if ellipse_class_id is not None and ellipse_class_id < 0:
                 ellipse_class_id = None
 
-            predictions = decode_detr_predictions( # TODO: Move this to postprocessing of rt-detr
-                pred_logits=predictions["pred_logits"],
-                pred_boxes=predictions["pred_boxes"],
-                pred_lines=predictions.get("pred_lines"),
-                pred_ellipses=predictions.get("pred_ellipses"),
-                line_class_id=line_class_id,
-                ellipse_class_id=ellipse_class_id,
-                no_object_class=predictions["pred_logits"].shape[-1] - 1,
-                score_threshold=0.5,
-            )
+            # predictions = decode_detr_predictions(
+            #     pred_logits=predictions["pred_logits"],
+            #     pred_boxes=predictions["pred_boxes"],
+            #     pred_lines=predictions.get("pred_lines"),
+            #     pred_ellipses=predictions.get("pred_ellipses"),
+            #     line_class_id=line_class_id,
+            #     ellipse_class_id=ellipse_class_id,
+            #     no_object_class=predictions["pred_logits"].shape[-1] - 1,
+            #     score_threshold=0.5,
+            # )
+
             losses["__decoded_predictions"] = predictions
 
             losses["__prepared_targets"] = prepare_targets_for_detection_metrics(
                 targets,
                 line_class_id=line_class_id,
             )
-            # losses["img_queries_all"] = self._render_all_query_predictions(
-            #     image=images[0],
-            #     pred_boxes=predictions["pred_boxes"][0],
-            #     pred_lines=predictions["pred_lines"][0],
-            #     pred_logits=predictions["pred_logits"][0],
-            #     special_classes ={"line_class_id": self.model.config.line_class_id}
-            # )
-            # losses["img_targets"] = self._render_target_boxes(images[0], targets[0])
 
             # Unnormalize to RGB uint8 so draw_bounding_boxes always renders visible overlays.
             img = images[0].detach()

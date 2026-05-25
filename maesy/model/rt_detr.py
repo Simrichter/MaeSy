@@ -1,11 +1,14 @@
 """RT-DETR style detector integrated with the MaeSy BaseModel contracts."""
 
 from dataclasses import dataclass
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
+
+import torch
 
 from .backbones import ResNetBackbone, ResNetBackboneConfig, MobileNetBackbone, MobileNetBackboneConfig, SWINBackbone, SWINBackboneConfig
 from .base_model import BaseModel
 from .heads import RTDETRHead, RTDETRHeadConfig
+from maesy.dataset import sanitize_cxcywh
 
 
 @dataclass
@@ -39,7 +42,7 @@ class RTDETRConfig:
     num_rep_blocks_in_fusion: int = 3
 
 class RTDETR(BaseModel):
-    """RT-DETR style detector with the same output contract as DETR."""
+    """RT-DETR detector"""
 
     def __init__(self, config: RTDETRConfig):
         super().__init__()
@@ -135,13 +138,128 @@ class RTDETR(BaseModel):
         if changed:
             self.head.create_class_heads()
 
+
+    def decode_detr_predictions(
+        self,
+        pred_logits: torch.Tensor,
+        pred_boxes: torch.Tensor,
+        pred_lines: torch.Tensor | None = None,
+        pred_ellipses: torch.Tensor | None = None,
+        line_class_id: int | None = None,
+        ellipse_class_id: int | None = None,
+        no_object_class: int | None = None,
+        score_threshold: float = 0.0,
+    ) -> List[Dict[str, torch.Tensor]]:
+        """
+        Decode DETR outputs to a list of ``xyxy`` detections per image.
+
+        Args:
+            :param pred_logits: Tensor of cls logits
+            :param pred_boxes: Tensor of predicted box coordinates
+            :param pred_lines: Optional Tensor of predicted line endpoint coordinates
+            :param pred_ellipses: Optional Tensor of predicted ellipses in cholesky format
+            :param line_class_id: Int specifying the cls_id for lines
+            :param ellipse_class_id: Int specifying the cls_id for ellipses
+            :param no_object_class: Int specifying the cls_id for no objects. Defaults to last cls_id
+            :param score_threshold: Threshold to filter predictions with too low confidence
+
+        Returns:
+            List of dicts containing:
+                {"boxes": boxes_xyxy,
+                "labels": det_labels,
+                "scores": det_scores,
+                "line_points": line_points,
+                "line_labels": line_labels,
+                "line_scores": line_scores}
+        """
+        if no_object_class is None:
+            no_object_class = pred_logits.shape[-1] - 1
+
+        probs = pred_logits.softmax(-1)
+        scores, labels = probs.max(-1)
+        decoded: List[Dict[str, torch.Tensor]] = []
+
+        for img_idx in range(pred_logits.shape[0]):
+            mask = labels[img_idx] != no_object_class
+            if score_threshold > 0.0:
+                mask = mask & (scores[img_idx] >= score_threshold)
+
+            masked_boxes = pred_boxes[img_idx][mask].detach().cpu().float()
+            masked_labels = labels[img_idx][mask].detach().cpu().long()
+            masked_scores = scores[img_idx][mask].detach().cpu().float()
+
+            # Route geometry by matched class: bbox classes use pred_boxes, line class uses pred_lines, ellipses use pred_ellipses.
+            if line_class_id is not None and pred_lines is not None:
+                bbox_mask = masked_labels != line_class_id
+                line_mask = masked_labels == line_class_id
+            else:
+                bbox_mask = torch.ones_like(masked_labels, dtype=torch.bool)
+                line_mask = torch.zeros_like(masked_labels, dtype=torch.bool)
+            if ellipse_class_id is not None and pred_ellipses is not None:
+                bbox_mask = bbox_mask & (masked_labels != ellipse_class_id)
+                ellipse_mask = masked_labels == ellipse_class_id
+            else:
+                ellipse_mask = torch.zeros_like(masked_labels, dtype=torch.bool)
+
+            boxes_xyxy, valid = sanitize_cxcywh(masked_boxes[bbox_mask])
+            if bbox_mask.any():
+                det_labels = masked_labels[bbox_mask][valid]
+                det_scores = masked_scores[bbox_mask][valid]
+            else:
+                det_labels = torch.empty((0,), dtype=torch.long)
+                det_scores = torch.empty((0,), dtype=torch.float32)
+
+            if line_mask.any() and pred_lines is not None:
+                line_points = pred_lines[img_idx][mask][line_mask].detach().cpu().float().clamp(0.0, 1.0)
+                line_labels = masked_labels[line_mask]
+                line_scores = masked_scores[line_mask]
+            else:
+                line_points = torch.empty((0, 4), dtype=torch.float32)
+                line_labels = torch.empty((0,), dtype=torch.long)
+                line_scores = torch.empty((0,), dtype=torch.float32)
+
+            if ellipse_mask.any() and pred_ellipses is not None:
+                ellipses = pred_ellipses[img_idx][mask][line_mask].detach().cpu().float()
+                ellipse_labels = masked_labels[ellipse_mask]
+                ellipse_scores = masked_scores[ellipse_mask]
+            else:
+                ellipses = torch.empty((0,4), dtype=torch.float32)
+                ellipse_labels = torch.empty((0,), dtype=torch.long)
+                ellipse_scores = torch.empty((0,), dtype=torch.float32)
+
+            decoded.append({
+                "boxes": boxes_xyxy,
+                "labels": det_labels,
+                "scores": det_scores,
+                "line_points": line_points,
+                "line_labels": line_labels,
+                "line_scores": line_scores,
+                "ellipses": ellipses,
+                "ellipse_labels": ellipse_labels,
+                "ellipse_scores": ellipse_scores
+            })
+
+        return decoded
+
     def infer(self, images, targets, **kwargs):
-        out = self.forward(images, **kwargs)
-        out["pred_logits"] = out["pred_logits"].softmax(-1).detach()
-        out["pred_boxes"] = out["pred_boxes"].detach()
-        if "pred_lines" in out:
-            out["pred_lines"] = out["pred_lines"].detach()
-        if "pred_boxes" in out:
-            out["pred_boxes"] = out["pred_boxes"].detach()
-        return out, targets
+        raw_out = self.forward(images, **kwargs)
+
+        predictions = self.decode_detr_predictions(
+            pred_logits=raw_out["pred_logits"],
+            pred_boxes=raw_out["pred_boxes"],
+            pred_lines=raw_out.get("pred_lines"),
+            pred_ellipses=raw_out.get("pred_ellipses"),
+            line_class_id=self.config.line_class_id,
+            ellipse_class_id=self.config.ellipse_class_id,
+            no_object_class=raw_out["pred_logits"].shape[-1] - 1,
+            score_threshold=0.5,
+        )
+
+        # out["pred_logits"] = out["pred_logits"].softmax(-1).detach()
+        # out["pred_boxes"] = out["pred_boxes"].detach()
+        # if "pred_lines" in out:
+        #     out["pred_lines"] = out["pred_lines"].detach()
+        # if "pred_boxes" in out:
+        #     out["pred_boxes"] = out["pred_boxes"].detach()
+        return raw_out, predictions, targets
 

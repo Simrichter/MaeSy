@@ -101,6 +101,7 @@ class DetectionTrainer(BaseTrainer):
             losses["__prepared_targets"] = prepare_targets_for_detection_metrics(
                 targets,
                 line_class_id=line_class_id,
+                ellipse_class_id=ellipse_class_id,
             )
 
             # Unnormalize to RGB uint8 so draw_bounding_boxes always renders visible overlays.

@@ -49,6 +49,8 @@ def test_compute_detection_metrics_reports_map_fields():
     assert "recall50" in metrics
     assert "f1_50" in metrics
     assert "AP50_class_0" in metrics
+    assert "curves" in metrics
+    assert "bbox" in metrics["curves"]
 
 
 def test_prepare_and_decode_support_mixed_bbox_and_line_targets():
@@ -128,5 +130,43 @@ def test_compute_detection_metrics_includes_line_metrics_when_enabled():
     assert "line_AP@0.05" in metrics
     assert "line_endpoint_error@0.05" in metrics
     assert "line_mAP" in metrics
+
+
+def test_compute_detection_metrics_includes_ellipse_metrics_and_curves():
+    predictions = [
+        {
+            "boxes": torch.tensor([[0.4, 0.4, 0.6, 0.6]], dtype=torch.float32),
+            "labels": torch.tensor([0], dtype=torch.long),
+            "scores": torch.tensor([0.95], dtype=torch.float32),
+            "ellipses": torch.tensor([[0.5, 0.5, 0.1, 0.1, 0.0, 1.0]], dtype=torch.float32),
+            "ellipse_labels": torch.tensor([3], dtype=torch.long),
+            "ellipse_scores": torch.tensor([0.9], dtype=torch.float32),
+        }
+    ]
+    raw_targets = [
+        {
+            "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], dtype=torch.float32),
+            "labels": torch.tensor([0, 3], dtype=torch.long),
+            "ellipses": torch.tensor([[0.5, 0.5, 0.1, 0.1, 0.0, 1.0]], dtype=torch.float32),
+        }
+    ]
+    targets = prepare_targets_for_detection_metrics(raw_targets, ellipse_class_id=3)
+
+    metrics = compute_detection_metrics(
+        predictions,
+        targets,
+        num_classes=4,
+        ellipse_class_id=3,
+        ellipse_distance_thresholds=(0.1,),
+    )
+
+    assert "ellipse_precision@0.10" in metrics
+    assert "ellipse_recall@0.10" in metrics
+    assert "ellipse_f1@0.10" in metrics
+    assert "ellipse_AP@0.10" in metrics
+    assert "ellipse_distance@0.10" in metrics
+    assert "ellipse_mAP" in metrics
+    assert "curves" in metrics
+    assert "ellipse" in metrics["curves"]
 
 

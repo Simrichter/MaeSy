@@ -8,6 +8,8 @@ import numpy as np
 import torch
 from torchvision.ops import box_convert
 
+from maesy.dataset import sanitize_cxcywh
+
 
 def compute_iou(box1: np.ndarray, box2: np.ndarray) -> float:
     """Compute IoU between two boxes in ``xyxy`` format."""
@@ -25,130 +27,14 @@ def compute_iou(box1: np.ndarray, box2: np.ndarray) -> float:
     union = area1 + area2 - intersection
     return intersection / union if union > 0.0 else 0.0
 
-
-def _cxcywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
-    if boxes.numel() == 0:
-        return boxes.reshape(0, 4)
-    return box_convert(boxes, in_fmt="cxcywh", out_fmt="xyxy")
-
-
-def _sanitize_xyxy(boxes_xyxy: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    if boxes_xyxy.numel() == 0:
-        return boxes_xyxy.reshape(0, 4), torch.zeros((0,), dtype=torch.bool)
-    boxes_xyxy = boxes_xyxy.clone()
-    boxes_xyxy[:, 0::2] = boxes_xyxy[:, 0::2].clamp(0.0, 1.0)
-    boxes_xyxy[:, 1::2] = boxes_xyxy[:, 1::2].clamp(0.0, 1.0)
-    valid = (boxes_xyxy[:, 2] > boxes_xyxy[:, 0]) & (boxes_xyxy[:, 3] > boxes_xyxy[:, 1])
-    return boxes_xyxy[valid], valid
-
-
-def decode_detr_predictions(
-    pred_logits: torch.Tensor,
-    pred_boxes: torch.Tensor,
-    pred_lines: torch.Tensor | None = None,
-    pred_ellipses: torch.Tensor | None = None,
-    line_class_id: int | None = None,
-    ellipse_class_id: int | None = None,
-    no_object_class: int | None = None,
-    score_threshold: float = 0.0,
-) -> List[Dict[str, torch.Tensor]]:
-    """
-    Decode DETR outputs to a list of ``xyxy`` detections per image.
-
-    Args:
-        :param pred_logits: Tensor of cls logits
-        :param pred_boxes: Tensor of predicted box coordinates
-        :param pred_lines: Optional Tensor of predicted line endpoint coordinates
-        :param pred_ellipses: Optional Tensor of predicted ellipses in cholesky format
-        :param line_class_id: Int specifying the cls_id for lines
-        :param ellipse_class_id: Int specifying the cls_id for ellipses
-        :param no_object_class: Int specifying the cls_id for no objects. Defaults to last cls_id
-        :param score_threshold: Threshold to filter predictions with too low confidence
-
-    Returns:
-        List of dicts containing:
-            {"boxes": boxes_xyxy,
-            "labels": det_labels,
-            "scores": det_scores,
-            "line_points": line_points,
-            "line_labels": line_labels,
-            "line_scores": line_scores}
-    """
-    if no_object_class is None:
-        no_object_class = pred_logits.shape[-1] - 1
-
-    probs = pred_logits.softmax(-1)
-    scores, labels = probs.max(-1)
-    decoded: List[Dict[str, torch.Tensor]] = []
-
-    for img_idx in range(pred_logits.shape[0]):
-        mask = labels[img_idx] != no_object_class
-        if score_threshold > 0.0:
-            mask = mask & (scores[img_idx] >= score_threshold)
-
-        masked_boxes = pred_boxes[img_idx][mask].detach().cpu().float()
-        masked_labels = labels[img_idx][mask].detach().cpu().long()
-        masked_scores = scores[img_idx][mask].detach().cpu().float()
-
-        # Route geometry by matched class: bbox classes use pred_boxes, line class uses pred_lines, ellipses use pred_ellipses.
-        if line_class_id is not None and pred_lines is not None:
-            bbox_mask = masked_labels != line_class_id
-            line_mask = masked_labels == line_class_id
-        else:
-            bbox_mask = torch.ones_like(masked_labels, dtype=torch.bool)
-            line_mask = torch.zeros_like(masked_labels, dtype=torch.bool)
-        if ellipse_class_id is not None and pred_ellipses is not None:
-            bbox_mask = bbox_mask & (masked_labels != ellipse_class_id)
-            ellipse_mask = masked_labels == ellipse_class_id
-        else:
-            ellipse_mask = torch.zeros_like(masked_labels, dtype=torch.bool)
-
-        boxes_xyxy, valid = _sanitize_xyxy(_cxcywh_to_xyxy(masked_boxes[bbox_mask]))
-        if bbox_mask.any():
-            det_labels = masked_labels[bbox_mask][valid]
-            det_scores = masked_scores[bbox_mask][valid]
-        else:
-            det_labels = torch.empty((0,), dtype=torch.long)
-            det_scores = torch.empty((0,), dtype=torch.float32)
-
-        if line_mask.any() and pred_lines is not None:
-            line_points = pred_lines[img_idx][mask][line_mask].detach().cpu().float().clamp(0.0, 1.0)
-            line_labels = masked_labels[line_mask]
-            line_scores = masked_scores[line_mask]
-        else:
-            line_points = torch.empty((0, 4), dtype=torch.float32)
-            line_labels = torch.empty((0,), dtype=torch.long)
-            line_scores = torch.empty((0,), dtype=torch.float32)
-
-        if ellipse_mask.any() and pred_ellipses is not None:
-            ellipses = pred_ellipses[img_idx][mask][line_mask].detach().cpu().float()
-            ellipse_labels = masked_labels[ellipse_mask]
-            ellipse_scores = masked_scores[ellipse_mask]
-        else:
-            ellipses = torch.empty((0,4), dtype=torch.float32)
-            ellipse_labels = torch.empty((0,), dtype=torch.long)
-            ellipse_scores = torch.empty((0,), dtype=torch.float32)
-
-        decoded.append({
-            "boxes": boxes_xyxy,
-            "labels": det_labels,
-            "scores": det_scores,
-            "line_points": line_points,
-            "line_labels": line_labels,
-            "line_scores": line_scores,
-            "ellipses": ellipses,
-            "ellipse_labels": ellipse_labels,
-            "ellipse_scores": ellipse_scores
-        })
-
-    return decoded
-
-
 def prepare_targets_for_detection_metrics(
     targets: List[Dict[str, torch.Tensor]],
     line_class_id: int | None = None,
 ) -> List[Dict[str, torch.Tensor]]:
-    """Convert training targets from normalized ``cxcywh`` to ``xyxy``."""
+    """
+        Convert training targets from normalized ``cxcywh`` to ``xyxy``.
+        Also sanitizes boxes and lines
+    """
     prepared: List[Dict[str, torch.Tensor]] = []
     for target in targets:
         boxes = target.get("boxes", torch.empty((0, 4))).detach().cpu().float()
@@ -170,7 +56,7 @@ def prepare_targets_for_detection_metrics(
         else:
             line_labels = torch.empty((0,), dtype=torch.long)
 
-        boxes_xyxy, valid = _sanitize_xyxy(_cxcywh_to_xyxy(boxes))
+        boxes_xyxy, valid = sanitize_cxcywh(boxes) # ! returns xyxy format
         if boxes.numel() == 0:
             box_labels = torch.empty((0,), dtype=torch.long)
         else:
@@ -218,7 +104,7 @@ def _ground_truth_by_image(
             ground_truth[image_idx] = np.zeros((0, 4), dtype=np.float32)
             continue
         class_mask = target["labels"] == class_id
-        ground_truth[image_idx] = target["boxes"][class_mask].numpy().astype(np.float32)
+        ground_truth[image_idx] = target["boxes"][class_mask].cpu().numpy().astype(np.float32)
     return ground_truth
 
 
@@ -271,49 +157,6 @@ def _compute_ap_from_pr(recalls: np.ndarray, precisions: np.ndarray) -> float:
     return float(np.sum((mrec[changes + 1] - mrec[changes]) * mpre[changes + 1]))
 
 
-def compute_precision_recall(
-    predictions: List[Dict[str, Any]],
-    targets: List[Dict[str, Any]],
-    iou_threshold: float = 0.5
-) -> Tuple[float, float]:
-    """Compute dataset precision/recall at a fixed IoU threshold."""
-    num_classes = 0
-    for target in targets:
-        if target["labels"].numel() > 0:
-            num_classes = max(num_classes, int(target["labels"].max().item()) + 1)
-    for pred in predictions:
-        if pred["labels"].numel() > 0:
-            num_classes = max(num_classes, int(pred["labels"].max().item()) + 1)
-
-    if num_classes == 0:
-        return 0.0, 0.0
-
-    total_tp = 0.0
-    total_fp = 0.0
-    total_fn = 0.0
-    for class_id in range(num_classes):
-        recalls, precisions = _compute_pr_curve(predictions, targets, class_id=class_id, iou_threshold=iou_threshold)
-        if recalls.size == 0:
-            gt_count = int(sum((target["labels"] == class_id).sum().item() for target in targets))
-            total_fn += float(gt_count)
-            continue
-
-        # Recover confusion counts from last cumulative point.
-        last_recall = float(recalls[-1])
-        last_precision = float(precisions[-1]) if precisions.size > 0 else 0.0
-        gt_count = int(sum((target["labels"] == class_id).sum().item() for target in targets))
-        tp = last_recall * gt_count
-        fp = (tp / max(last_precision, 1e-12)) - tp
-        fn = gt_count - tp
-        total_tp += tp
-        total_fp += fp
-        total_fn += fn
-
-    precision = float(total_tp / max(total_tp + total_fp, 1e-12))
-    recall = float(total_tp / max(total_tp + total_fn, 1e-12))
-    return precision, recall
-
-
 def compute_ap(
     predictions: List[Dict[str, Any]],
     targets: List[Dict[str, Any]],
@@ -323,17 +166,6 @@ def compute_ap(
     """Compute AP for one class at a fixed IoU threshold."""
     recalls, precisions = _compute_pr_curve(predictions, targets, class_id=class_id, iou_threshold=iou_threshold)
     return _compute_ap_from_pr(recalls, precisions)
-
-
-def compute_map(
-    predictions: List[Dict[str, Any]],
-    targets: List[Dict[str, Any]],
-    num_classes: int,
-    iou_threshold: float = 0.5
-) -> Dict[str, float]:
-    """Compute mAP and per-class AP at a fixed IoU threshold."""
-    aps = [compute_ap(predictions, targets, class_id, iou_threshold) for class_id in range(num_classes)]
-    return {"mAP": float(np.mean(aps)) if aps else 0.0, "per_class_AP": aps}
 
 
 def _compute_prf1_at_iou(

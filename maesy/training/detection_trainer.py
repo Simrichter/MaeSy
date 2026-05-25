@@ -96,17 +96,6 @@ class DetectionTrainer(BaseTrainer):
             if ellipse_class_id is not None and ellipse_class_id < 0:
                 ellipse_class_id = None
 
-            # predictions = decode_detr_predictions(
-            #     pred_logits=predictions["pred_logits"],
-            #     pred_boxes=predictions["pred_boxes"],
-            #     pred_lines=predictions.get("pred_lines"),
-            #     pred_ellipses=predictions.get("pred_ellipses"),
-            #     line_class_id=line_class_id,
-            #     ellipse_class_id=ellipse_class_id,
-            #     no_object_class=predictions["pred_logits"].shape[-1] - 1,
-            #     score_threshold=0.5,
-            # )
-
             losses["__decoded_predictions"] = predictions
 
             losses["__prepared_targets"] = prepare_targets_for_detection_metrics(

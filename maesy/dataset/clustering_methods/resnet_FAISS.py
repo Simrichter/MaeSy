@@ -73,7 +73,7 @@ def cluster(paths, similarity_threshold=0.85, batch_size=128, forward_scale=128,
     print("Extracting features and selecting representatives...")
     inferer = Inferer(model=model, data_loader=multi_dataloader, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     all_predictions, _ = inferer.infer()
-    features = torch.cat(all_predictions)
+    features = torch.cat(all_predictions) # TODO: Check if this still works after i changed [].append to [].extend in infer()!
     features = features / (features.norm(dim=1, keepdim=True) + 1e-8)
     features = features.to("cpu").detach().numpy()
 

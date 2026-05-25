@@ -50,13 +50,12 @@ class Inferer:
         all_predictions = []
         all_targets = []
 
-        # TODO: Cuda support not very efficient. Maybe due to list? Nope, probably only on HDD. But need to verify
         print(f"Running inference on {len(self.data_loader)} batches ({len(self.data_loader.dataset)} images)... (Device: {self.device})")
         for batch in tqdm(self.data_loader):
             images, targets = handle_raw_batch(batch, self.device)
             _, img_preds, targets = self.model.infer(images, targets)
 
-            all_predictions.append(img_preds)
-            all_targets.append(targets)
+            all_predictions.extend(img_preds)
+            all_targets.extend(targets)
         print("Done.")
         return all_predictions, all_targets

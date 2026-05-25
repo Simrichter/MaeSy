@@ -54,6 +54,7 @@ class ODTrainingConfig(TrainingConfig):
     enc_loss_coef: float = 0.3
     line_loss_coef: float = 2.0
     ellipse_loss_coef: float = 2.0
+    ellipse_shape_coef: float = 1.0
     dn_loss_coef: float = 1.0
 
     # Checkpoint and logging
@@ -153,14 +154,15 @@ def train_vit_detector(
         save_dir=output_dir,
         criterion="DetectionLoss",  # "YOLOv8Loss", #
         use_amp=True,
-        bbox_loss_coef = 5.0,
+        bbox_loss_coef = 4.0,
         class_loss_coef = 1.0,
         giou_loss_coef = 2.0,
-        eos_coef = 0.15,
+        eos_coef = 0.2,
         aux_loss_coef = 0.5,
         enc_loss_coef = 0.3,
-        line_loss_coef = 2.0,
-        ellipse_loss_coef = 2.0,
+        line_loss_coef = 3.0,
+        ellipse_loss_coef = 3.0,
+        ellipse_shape_coef=2.0,
         dn_loss_coef = 1.0,
     )
 

@@ -1,21 +1,18 @@
 """Evaluator for model evaluation."""
 
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
-from tqdm import tqdm
-from typing import Dict, Any, List, Optional
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from PIL import Image
-import numpy as np
+from typing import Dict, Any
+from .metrics import prepare_targets_for_detection_metrics
 
 from ..dataset import MaesyDataset
-from ..model import BaseModel, ViTDetector
-from .metrics import compute_map, compute_precision_recall, compute_detection_metrics
+from .metrics import compute_detection_metrics
 from maesy.evaluation.inferer import Inferer
 from ..model_tools import create_model_from_checkpoint
 from torchvision.transforms import v2 as transforms
+
+from ..training.utils import collate_detection_fn
+
 
 class Evaluator:
     """Evaluator for Vision Transformer object detection model."""
@@ -24,7 +21,7 @@ class Evaluator:
         self,
         checkpoint_path: str,
         dataset_path: str,
-        device: torch.device = ""
+        device: str = ""
     ):
         """
         Initialize evaluator.
@@ -36,6 +33,8 @@ class Evaluator:
         """
         if device == "":
             device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        else:
+            device=torch.device(device)
 
         # Load model
         self.model = create_model_from_checkpoint(checkpoint_path)  # CheckpointHandler(device=device).load_model(checkpoint_path)
@@ -53,7 +52,7 @@ class Evaluator:
 
         dataset = MaesyDataset(dataset_path, "test", "detection", transforms=test_transforms)
         self.special_classes = dataset.get_special_classes()
-        dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False, collate_fn=collate_detection_fn)
         self.inferer = Inferer(model=self.model, data_loader=dataloader, device=device)
 
 
@@ -61,8 +60,6 @@ class Evaluator:
     @torch.no_grad()
     def evaluate(
         self,
-        confidence_threshold: float = 0.5,
-        iou_threshold: float = 0.5
     ) -> Dict[str, Any]:
         """
         Evaluate model on dataset.
@@ -76,36 +73,12 @@ class Evaluator:
         """
         all_predictions, all_targets = self.inferer.infer()
 
+        print(len(all_predictions))
+
         print(compute_detection_metrics(
             predictions=all_predictions,
-            targets=all_targets,
+            targets=prepare_targets_for_detection_metrics(all_targets),
             num_classes=self.model.config.num_classes,
             line_class_id=self.special_classes["line_class_id"],
             )
         )
-
-        # Compute metrics
-        num_classes = self.model.config.num_classes
-        
-        map_results = compute_map(
-            all_predictions,
-            all_targets,
-            num_classes,
-            iou_threshold
-        )
-        
-        precision, recall = compute_precision_recall(
-            all_predictions,
-            all_targets,
-            iou_threshold
-        )
-        
-        results = {
-            'mAP': map_results['mAP'],
-            'per_class_AP': map_results['per_class_AP'],
-            'precision': precision,
-            'recall': recall,
-            'f1_score': 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-        }
-        
-        return results

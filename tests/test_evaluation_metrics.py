@@ -168,5 +168,3 @@ def test_compute_detection_metrics_includes_ellipse_metrics_and_curves():
     assert "ellipse_mAP" in metrics
     assert "curves" in metrics
     assert "ellipse" in metrics["curves"]
-
-

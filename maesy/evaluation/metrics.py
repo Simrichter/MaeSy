@@ -6,7 +6,6 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 import torch
-from torchvision.ops import box_convert
 
 from maesy.dataset import sanitize_cxcywh
 
@@ -564,7 +563,7 @@ def compute_detection_metrics(
         fb_beta=fb_beta,
     ) if eval_class_ids else (0.0, 0.0, 0.0)
 
-    precision50_f1, recall50_f1, f1_50 = _compute_prf1_at_iou(
+    _, _, f1_50 = _compute_prf1_at_iou(
         predictions,
         targets,
         class_ids=eval_class_ids,
@@ -577,8 +576,6 @@ def compute_detection_metrics(
         "mAP50_95": map50_95,
         "precision50": precision50,
         "recall50": recall50,
-        "precision50_f1": precision50_f1,
-        "recall50_f1": recall50_f1,
         "f1_50": f1_50,
         f"f{fb_beta}_50": fb_50,
         "num_gt_boxes": float(sum(target["boxes"].shape[0] for target in targets)),

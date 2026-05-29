@@ -238,7 +238,7 @@ class DatasetManager:
         # Always using YOLO-Style dataset structure (with train/val/test top-level folders and images/labels subfolders)
         # only creating the split folders that are actually needed based on split_percentages
         dataset_dir = self.data_root / dataset_name
-        splits = [s for i, s in enumerate(["train", "val", "test"]) if split_percentages[i] > 0.0]
+        splits = [s for i, s in enumerate(["train", "val", "test"])] # if split_percentages[i] > 0.0
         split_paths = [dataset_dir / split for split in splits]
         os.makedirs(dataset_dir, exist_ok=True)
         for split_path in split_paths:

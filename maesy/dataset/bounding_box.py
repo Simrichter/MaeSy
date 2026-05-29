@@ -100,7 +100,7 @@ class BoundingBox:
         return cls(cls_id, x_min, y_min, x_max, y_max, normalized)
 
     @classmethod
-    def from_str(cls, yolo_row: str, normalized: bool=True) -> "BoundingBox":
+    def from_str(cls, yolo_row: str, normalized: bool=True, xyxy: bool = False) -> "BoundingBox":
         """
         Create a BoundingBox from string format "cls cx cy w h" as used in YOLO annotations.
         Assumes normalized values by default, but can be set to False if the values in the string are in pixel coordinates.
@@ -108,6 +108,7 @@ class BoundingBox:
         Args:
             :param yolo_row: String in format "cls cx cy w h"
             :param normalized: Whether the coordinates in the string are normalized to [0,1] (default True)
+            :param xyxy: Whether the annotations are in xyxy format
 
         Returns:
             BoundingBox instance
@@ -116,12 +117,14 @@ class BoundingBox:
         if len(splits) != 5:
             raise ValueError(f"Invalid YOLO annotation format: {yolo_row}. Expected format: 'cls cx cy w h'")
         cls_id = int(splits[0])
-        cx = float(splits[1])
-        cy = float(splits[2])
-        w = float(splits[3])
-        h = float(splits[4])
-
-        return cls.from_xywh(cls_id, cx, cy, w, h, normalized)
+        first = float(splits[1])
+        second = float(splits[2])
+        third = float(splits[3])
+        fourth = float(splits[4])
+        if xyxy:
+            return cls(cls_id, first, second, third, fourth, normalized)
+        else:
+            return cls.from_xywh(cls_id, first, second, third, fourth, normalized)
 
     def normalize(self, image_width: float, image_height: float) -> None:
         """

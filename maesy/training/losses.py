@@ -138,7 +138,8 @@ class DetectionLoss(BaseLoss):
                 predictions["pred_lines"] = pred_lines
             if pred_ellipses is not None:
                 predictions["pred_ellipses"] = pred_ellipses
-            indices = self.match_predictions_to_targets(predictions, targets) # List[Tuple[Tensor, Tensor]]
+            with torch.autocast(device_type=self.device.type, enabled=False):
+                indices = self.match_predictions_to_targets(predictions, targets) # List[Tuple[Tensor, Tensor]]
 
         all_target_boxes = []
         all_target_lines = []
@@ -391,16 +392,11 @@ class DetectionLoss(BaseLoss):
                 "loss_enc": zero,
             }
 
-        # pred_dict = {
-        #         "pred_logits": pred_logits,
-        #         "pred_boxes": pred_boxes,
-        #         "pred_lines": enc_outputs.get("pred_lines"),
-        #         "pred_ellipses": enc_outputs.get("pred_ellipses"),
-        #     }
-        enc_indices = self.match_predictions_to_targets(
-            enc_outputs,
-            targets
-        )
+        with torch.autocast(device_type=self.device.type, enabled=False):
+            enc_indices = self.match_predictions_to_targets(
+                enc_outputs,
+                targets
+            )
         enc_losses = self._compute_single_output_losses(
             pred_logits=pred_logits,
             pred_boxes=pred_boxes,
@@ -439,16 +435,11 @@ class DetectionLoss(BaseLoss):
         Returns:
             Dictionary of losses
         """
-        main_indices = self.match_predictions_to_targets(
-            # {
-            #     'pred_logits': predictions['pred_logits'],
-            #     'pred_boxes': predictions['pred_boxes'],
-            #     'pred_lines': predictions.get('pred_lines'),
-            #     'pred_ellipses': predictions.get('pred_ellipses')
-            # },
-            predictions,
-            targets,
-        )
+        with torch.autocast(device_type=self.device.type, enabled=False):
+            main_indices = self.match_predictions_to_targets(
+                predictions,
+                targets,
+            )
         losses = self._compute_single_output_losses(
             pred_logits=predictions['pred_logits'],
             pred_boxes=predictions['pred_boxes'],
@@ -604,10 +595,19 @@ class DetectionLoss(BaseLoss):
             Perform Hungarian matching between predictions and targets.
             Expects boxes in format (cx cy w h), lines in format (x y x y) and ellipses in format (cx cy log_a log_b sin2theta cos2theta)
         """
-        pred_logits = predictions['pred_logits']  # [B, num_queries, num_classes + 1]
-        pred_boxes = predictions['pred_boxes']  # [B, num_queries, 4]
+        pred_logits = predictions['pred_logits'].float()  # [B, num_queries, num_classes + 1]
+        pred_boxes = predictions['pred_boxes'].float()  # [B, num_queries, 4]
         pred_lines = predictions.get('pred_lines')
+        if pred_lines is not None:
+            pred_lines = pred_lines.float()
         pred_ellipses = predictions.get('pred_ellipses')
+        if pred_ellipses is not None:
+            pred_ellipses = pred_ellipses.float()
+
+        assert torch.isfinite(pred_boxes).all()
+        assert torch.isfinite(pred_logits).all()
+        assert pred_lines is None or torch.isfinite(pred_lines).all()
+        assert pred_ellipses is None or torch.isfinite(pred_ellipses).all()
 
         batch_size, num_queries = pred_logits.shape[:2]
         # Flatten to compute cost matrices

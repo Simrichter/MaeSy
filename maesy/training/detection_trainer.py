@@ -82,8 +82,11 @@ class DetectionTrainer(BaseTrainer):
         Returns:
             Dictionary of losses from the loss function
         """
-        # Get model predictions
-        raw_out , predictions, _ = self.model.infer(images, targets=targets)
+        if val and targets is not None:
+            # Get model predictions
+            raw_out , predictions, _ = self.model.infer(images, targets=targets)
+        else:
+            raw_out = self.model(images)
 
         # Compute loss
         losses = self.loss(raw_out, targets)

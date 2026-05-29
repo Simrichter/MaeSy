@@ -15,10 +15,10 @@ def main():
     subparsers = parser.add_subparsers(dest='module')
 
     train = subparsers.add_parser('train', help="Train a model")
-    debug = subparsers.add_parser('debug', help="Call debug utilities")
+    # debug = subparsers.add_parser('debug', help="Call debug utilities")
     eval = subparsers.add_parser('evaluate', help="Evaluate a model")
     export = subparsers.add_parser("export", help="Export a model to a different format (e.g. ONNX)")
-    subparsers.add_parser('predict', help="Make predictions with a model")
+    # subparsers.add_parser('predict', help="Make predictions with a model")
     data = subparsers.add_parser('dataset', help="Manage datasets")
     data.add_argument("-p", "--path", type=str, help="Path to the data root dir (default: ./data)", default="./data")
 
@@ -87,17 +87,10 @@ def main():
     infer.add_argument("imgpath", help="Path to folder of images for inference")
     infer.add_argument("checkpoint", help="Path to model checkpoint file")
     infer.add_argument("-o", "--out", type=str, default="./inference_results", help="Folder to save inference results. Default: ./inference_results")
-    infer.add_argument("--device", type=str, default="",
-                       help="Device to run inference on (default: auto-detect CUDA if available, otherwise CPU)")
-    infer.add_argument(
-        "--detector",
-        type=str,
-        choices=["auto", "detr", "rt_detr"],
-        default="auto",
-        help="Detection architecture for inference (default: auto-detect from checkpoint)",
-    )
-    infer.add_argument("-v", "--visualize", action="store_true",
-                       help="Whether to save visualizations of predictions in a subfolder (default: False)")
+    infer.add_argument("--device", type=str, default="", help="Device to run inference on (default: auto-detect CUDA if available, otherwise CPU)")
+    infer.add_argument("--split", "-s", type=str, choices=["train", "val", "test"], default="", help="The split of the dataset to be used. Default: All")
+    infer.add_argument("--confidence", "-c", type=float, default="0.0", help="Confidence threshold to filter predictions. Default: 0.0")
+    infer.add_argument("-v", "--visualize", action="store_true", help="Whether to save visualizations of predictions in a subfolder (default: False)")
 
     vis = eval_parser.add_parser("visualize", help="Visualize predictions on a folder of images")
     vis.add_argument("imgpath", help="Path to folder of images for visualization")

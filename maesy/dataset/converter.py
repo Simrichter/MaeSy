@@ -221,8 +221,9 @@ def datumaro_to_devils_yolo(datumaro_dir: str) -> Tuple[str, int, list, dict]:
                         if ellipse_model.estimate(points):
                             cx, cy, a, b, theta = ellipse_model.params
                             # Convert to cholesky representation
-                            cx, cy, l11, l12, l22 = ellipse_to_cholesky(cx, cy, a, b, theta)
-                            f.write(f"{ann['label_id']} {cx} {cy} {l11} {l12} {l22}\n")
+                            # cx, cy, l11, l12, l22 = ellipse_to_cholesky(cx, cy, a, b, theta)
+                            # f.write(f"{ann['label_id']} {cx} {cy} {l11} {l12} {l22}\n")
+                            f.write(f"{ann['label_id']} {cx} {cy} {np.log(a)} {np.log(b)} {np.cos(2 * theta)} {np.sin(2 * theta)}\n")
         print("Conversion finished successfully!")
 
         if data['items'][0]['id'].count("/") > 0: # Check if datumaro exported with subfolders (e.g. "train/default/faiss/img1.jpg", etc.)

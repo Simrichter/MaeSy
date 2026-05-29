@@ -98,17 +98,17 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
             datasets.append(MaesyDataset(input_dir, split, "detection", enable_lines=enable_lines, enable_ellipses=enable_ellipses))
         except AssertionError as e:
             ...
-            # print(e)
+            print(e)
         except ValueError as e:
             ...
-            # print(e)
+            print(e)
         except FileNotFoundError as e:
             ...
-            # print(e)
-    if len(datasets) >= 0:
+            print(e)
+    if len(datasets) > 0:
         for d in datasets:
             visualize_dataset(d, output_dir)
-            return
+        return
     else:
         print("No MaesyDataset detected, assuming standard image folder with annotations (txt files with same name as images).")
 
@@ -133,7 +133,7 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
             if not os.path.exists(txt_path):
                 print(f"WARNING: No annotation file found for image {img_path}, skipping visualization.\n (Expected annotation file: {txt_path})")
                 continue
-            boxes = [BoundingBox.from_str(l) for l in open(txt_path, "r").readlines()]
+            boxes = [BoundingBox.from_str(l, xyxy=True) for l in open(txt_path, "r").readlines()]
             # print(boxes)
             boxes = [box for box in boxes ] # TODO Filter is deactivated only for tests: if box.cls_id != 3
             if len(boxes) == 0:
@@ -236,6 +236,7 @@ def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.
     h, w = img.shape[-2:]
     if not xyxy:
         boxes_xyxy = box_convert(boxes.detach().cpu(), "cxcywh", "xyxy")
+        print("Converted to xyxy")
     else:
         boxes_xyxy = boxes.detach().cpu()
     boxes_xyxy[:, (0, 2)] *= w
@@ -376,10 +377,3 @@ def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch
     img = _draw_lines_in_tensor(img, lines)
     img = _draw_ellipses_in_tensor(img, ellipses)
     return img
-
-
-
-if __name__ == "__main__":
-    input_dir = "/home/simon/Desktop/webots-logger/controllers/TrainingDataController/images"
-    output_dir = ""
-    visualize_data(input_dir, output_dir)

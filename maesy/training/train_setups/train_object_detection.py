@@ -242,7 +242,7 @@ def train_vit_detector(
         assert model.config.num_classes == train_dataset.get_num_classes(), "Error: The number of classes in the model config does not match the number of classes in the dataset. Please make sure they match before continuing training."
         if enable_line_detection:
             assert model.config.line_class_id == train_dataset.get_special_classes()["line_class_id"], f"Error: The line_class_id in the model config ({model.config.line_class_id}) does not match the line_class_id in the dataset ({train_dataset.get_special_classes()['line_class_id']}). Please make sure they match before continuing training."
-        if enable_line_detection:
+        if enable_ellipse_detection:
             assert model.config.ellipse_class_id == train_dataset.get_special_classes()["ellipse_class_id"], f"Error: The ellipse_class_id in the model config ({model.config.ellipse_class_id}) does not match the ellipse_class_id in the dataset ({train_dataset.get_special_classes()['ellipse_class_id']}). Please make sure they match before continuing training."
         trainer.resume(model_info)
     else:
@@ -254,7 +254,8 @@ def infer_vit_detector(
     out_path: str,
     visualize: bool,
     device: torch.device,
-    # detector_arch: str | None = None,
+    split: str,
+    confidence: float,
 ) -> None:
     """
     Run inference with a trained object detection model.
@@ -265,7 +266,8 @@ def infer_vit_detector(
         :param out_path: Path to save inference results (predicted bounding boxes and labels)
         :param visualize: Whether to save visualizations of predictions (e.g., images with predicted boxes drawn)
         :param device: Device to run inference on (e.g., "cuda" or "cpu")
-        # :param detector_arch: The architecture to be used (e.g., "detr" or "rt_detr")
+        :param split: Str to specify dataset split to run inference on (choice of ["train", "val", "test"]).
+        :param confidence: Confidence threshold to filter predictions
     """
     print("=" * 60)
     print("Running Inference")
@@ -274,8 +276,6 @@ def infer_vit_detector(
     # Load model
     model = create_model_from_checkpoint(checkpoint_path) #CheckpointHandler(device=device).load_model(checkpoint_path)
     model.eval()
-
-    # dataset = MaesyDataset(dataset_path, "val", "None", transforms=)
     infer_transforms = transforms.Compose(
         [  # TODO: make blank image folder possible again, "auto-infer" split? Maybe through 'None' -> All splits
             transforms.ToImage(),
@@ -285,10 +285,10 @@ def infer_vit_detector(
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
-    dataset = MaesyDataset(dataset_path, "val", "None", transforms=infer_transforms)
+    dataset = MaesyDataset(dataset_path, split, "None", transforms=infer_transforms)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
     inferer = Inferer(model=model, data_loader=dataloader, device=device)
-    preds, _ = inferer.infer() # List[Dict] with keys "pred_boxes" (B X num_querys X 4) and "pred_logits" (B X num_queries)
+    preds, _ = inferer.infer(score_threshold=confidence) # List[Dict] with keys "boxes" (B X num_querys X 4) and "labels" (B X num_queries) (scores, lines etc.)
 
     print("=" * 60)
     print(f"Saving inference results to {out_path}...")
@@ -300,17 +300,20 @@ def infer_vit_detector(
     out_path = Path(out_path)
     out_path.mkdir(parents=True, exist_ok=True)
     save_all_predictions = False  # Intentionally keep all query outputs for debugging.
-    for p in tqdm(zip(dataset.images, preds)):
-        img_path = images_dir/p[0]
-        shutil.copy(img_path, out_path/p[0])
-        with open(out_path/Path(p[0]).with_suffix(".txt"), "w") as f:
-            boxes = torch.unbind(p[1]["pred_boxes"].squeeze(0), dim=0)
-            labels = torch.unbind(p[1]["pred_logits"].squeeze(0), dim=0)
-            for box, label in zip(boxes, labels):
+    for img, pred in tqdm(zip(dataset.images, preds)):
+        img_path = images_dir/img
+        shutil.copy(img_path, out_path/img)
+        with open(out_path/Path(img).with_suffix(".txt"), "w") as f:
+            # boxes = torch.unbind(p[1]["boxes"], dim=0)
+            # print(p[1]["boxes"])
+            boxes = pred["boxes"]
+            labels = pred["labels"]
+            scores = pred["scores"]
+            for box, label, score in zip(boxes, labels, scores):
                 cx, cy, w, h = box
-                score, l = label.max(-1)
-                if save_all_predictions or (l < 3 and score >= 0.3):
-                    f.write(f"{l.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
+                if save_all_predictions or (score >= 0.3):
+                    f.write(f"{label.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
+            # TODO: Add inference for lines + ellipses
     if visualize:
         from maesy.evaluation import visualize_data
         visualize_data(str(out_path), "")

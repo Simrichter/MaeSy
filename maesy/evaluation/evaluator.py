@@ -75,15 +75,12 @@ class Evaluator:
     ) -> Dict[str, Any]:
         """
         Evaluate model on dataset.
-        
-        Args:
-            confidence_threshold: Confidence threshold for predictions
-            iou_threshold: IoU threshold for matching
-            
+
         Returns:
             Dictionary with evaluation metrics
         """
         all_predictions, all_targets = self.inferer.infer(score_threshold=0.0)
+
 
         line_class_id = self.special_classes.get("line_class_id")
         ellipse_class_id = self.special_classes.get("ellipse_class_id")

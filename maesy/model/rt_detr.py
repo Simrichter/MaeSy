@@ -9,6 +9,7 @@ from .backbones import ResNetBackbone, ResNetBackboneConfig, MobileNetBackbone, 
 from .base_model import BaseModel
 from .heads import RTDETRHead, RTDETRHeadConfig
 from maesy.dataset import sanitize_cxcywh
+from ..dataset.bounding_box import sanitize_xyxy
 
 
 @dataclass
@@ -242,7 +243,7 @@ class RTDETR(BaseModel):
             self.head.create_class_heads()
 
     def infer(self, images, targets, **kwargs):
-        score_threshold = kwargs.pop("score_threshold", 0.5)
+        score_threshold = kwargs.pop("score_threshold", 0.3)
         raw_out = self.forward(images, **kwargs)
 
         predictions = decode_detr_predictions(

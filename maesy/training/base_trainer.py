@@ -306,7 +306,7 @@ class BaseTrainer(ABC):
 
         self.loss.reset_metrics()
         self.model.eval()
-        # self.model.train()
+
         validation_start_hook = getattr(self, "_validation_start", None)
         if callable(validation_start_hook):
             validation_start_hook()
@@ -321,16 +321,17 @@ class BaseTrainer(ABC):
                 validation_step_hook(images, targets, losses)
 
 
+        val_out = {f"val_losses/{k}": v for k, v in self.loss.get_metrics().items()}
+        validation_finalize_hook = getattr(self, "_validation_finalize", None)
+        if callable(validation_finalize_hook):
+            mets = {f"metrics/{k}": v for k, v in validation_finalize_hook().items() if k != "curves"}
+            val_out.update(mets)
+
         save_path = self.save_dir / "images"
         save_path.mkdir(parents=True, exist_ok=True)
         for name, img in losses.items():
             if name.startswith('img_'):
                 save_image(img, f"{save_path}/predicted_image{self.global_step}_{name}.png")
-        val_out = {f"val_losses/{k}": v for k, v in self.loss.get_metrics().items()}
-        validation_finalize_hook = getattr(self, "_validation_finalize", None)
-        if callable(validation_finalize_hook):
-            mets = {f"metrics/{k}": v for k, v in validation_finalize_hook().items()}
-            val_out.update(mets)
 
         if self.enable_wandb:
             imgs_to_log: dict[str, Image] = {f"img/{k}": wandb.Image(v * 255) for k, v in losses.items() if k.startswith('img_')}

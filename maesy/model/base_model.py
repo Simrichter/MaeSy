@@ -1,4 +1,5 @@
 from abc import ABC
+from typing import Tuple, Dict
 
 import torch.nn as nn
 import torch
@@ -11,12 +12,12 @@ class BaseModel(ABC, nn.Module):
     head: BaseHead
     backbone: BaseBackbone
 
-    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor | Dict[str, torch.Tensor]:
         out = self.backbone.forward(x, **kwargs)
         out = self.head.forward(out, **kwargs)
         return out
 
-    def infer(self, images, targets, **kwargs):
+    def infer(self, images, targets, **kwargs) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Inference method for the model. By default, it just runs a forward pass and returns the raw outputs and targets.
         This can be overridden in specific model implementations to include post-processing steps (e.g., applying softmax, non-max suppression, etc.) before returning the results.
@@ -26,7 +27,9 @@ class BaseModel(ABC, nn.Module):
             :param targets: Ground truth targets (format depends on the task)
             :param kwargs: Additional arguments for inference (e.g., confidence thresholds, etc.)
         """
-        return self.forward(images, **kwargs), targets
+        raw_out = self.forward(images, **kwargs)
+        preds = raw_out # At this point, model-specific post-processing steps can be applied (usually argmax on class logits, etc.)
+        return raw_out, preds, targets
 
     def update_head_conf(self, *args, **kwargs) -> None:
         """

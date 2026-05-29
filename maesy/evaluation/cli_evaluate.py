@@ -14,6 +14,8 @@ def main(args):
                 torch.device(args.device) if args.device != "" else torch.device(
                     "cuda" if torch.cuda.is_available() else "cpu"
                 ),
+                args.split,
+                args.confidence
                 # detector_arch=None if args.detector == "auto" else args.detector,
             )
         case "visualize":

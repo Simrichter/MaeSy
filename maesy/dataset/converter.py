@@ -2,7 +2,7 @@ import ast
 import json
 import os
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 from skimage.measure import EllipseModel
@@ -144,7 +144,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                 f.writelines(new_lines)
 
 
-def datumaro_to_devils_yolo(datumaro_dir: str) -> Tuple[str, int, list, dict]:
+def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list[int]]=None) -> Tuple[str, int, list, dict]:
         """
         Convert Image annotations exported from cvat in datumaro JSON format into DevilsYolo format.
         Lines are represented by their two endpoint coordinates in xyxy format.
@@ -153,6 +153,7 @@ def datumaro_to_devils_yolo(datumaro_dir: str) -> Tuple[str, int, list, dict]:
 
         Args:
             :param datumaro_dir: Path to the datumaro dataset root folder (the one that contains the annotations folder and the images folder)
+            :param class_id_blacklist: List of class ids to ignore during conversion
 
         Returns:
             path: Path to images and labels
@@ -165,6 +166,9 @@ def datumaro_to_devils_yolo(datumaro_dir: str) -> Tuple[str, int, list, dict]:
         print(f"Converting datumaro to DevilsYolo format")
         print(f"Dataset root path: {datumaro_dir}")
         print("=" * 60)
+
+        if class_id_blacklist is None:
+            class_id_blacklist = []
 
         def _fix_multipoint_line(datadict):
             for (img_i, img_dat) in enumerate(datadict['items']):
@@ -205,6 +209,8 @@ def datumaro_to_devils_yolo(datumaro_dir: str) -> Tuple[str, int, list, dict]:
                 normalize = img_data["image"]["size"]
                 normalize.reverse() # datumaro saves height, width
                 for ann_ind, ann in enumerate(img_data['annotations']):
+                    if ann['label_id'] in class_id_blacklist:
+                        continue
                     if ann['type'] == "bbox": # BoundingBoxes
                         x1 = ann['bbox'][0] / normalize[0]
                         y1 = ann['bbox'][1] / normalize[1]

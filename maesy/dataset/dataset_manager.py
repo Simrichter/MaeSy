@@ -200,6 +200,7 @@ class DatasetManager:
                        cluster_method: str,
                        left_right: bool,
                        convert: Optional[str] = None,
+                       convert_id_blacklist: Optional[List[int]] = None,
                        nc: int = None,
                        class_names: Optional[List[str]] = None,
                        special_classes: Optional[Dict[str, str]] = None,
@@ -220,6 +221,7 @@ class DatasetManager:
             :param cluster_method: If specified, use clustering_method to select images. Default=None
             :param left_right: If active, expects matching images from stereo cameras. Assumes chosen_paths to lead to right images and expects "left" folder next to "right" folder
             :param convert: Optional choice of ["datumaro", "robert"]. Triggers automatic conversion in DevilsYolo format before dataset creation.
+            :param convert_id_blacklist: List of class IDs to ignore during conversion. Only used with convert.
             :param nc: Optional number of classes (for dataset.yaml)
             :param class_names: Optional List of strings that specify class names in class_id order (for dataset.yaml)
             :param special_classes: Optional Dict of strings with keys in ['lines', 'ellipses'] and values in class_names (for dataset.yaml)
@@ -237,9 +239,8 @@ class DatasetManager:
 
         # Set up dataset folder structure
         # Always using YOLO-Style dataset structure (with train/val/test top-level folders and images/labels subfolders)
-        # only creating the split folders that are actually needed based on split_percentages
         dataset_dir = self.data_root / dataset_name
-        splits = [s for i, s in enumerate(["train", "val", "test"])] # if split_percentages[i] > 0.0
+        splits = [s for i, s in enumerate(["train", "val", "test"])]
         split_paths = [dataset_dir / split for split in splits]
         os.makedirs(dataset_dir, exist_ok=True)
         for split_path in split_paths:
@@ -276,11 +277,14 @@ class DatasetManager:
         if convert is not None and convert !="":
             match convert:
                 case "datumaro":
-                    if len(folder_names) != 1:
-                        raise ValueError(f"Currently dataset conversion only works for single folders, but {len(folder_names)} folders are given.")
+                    # if len(folder_names) != 1:
+                    #     raise ValueError(f"Currently dataset conversion only works for single folders, but {len(folder_names)} folders are given.")
                     from maesy.dataset import datumaro_to_devils_yolo
-                    img_dir, nc, class_names, special_classes = datumaro_to_devils_yolo(folder_names[0])
-                    folder_names = [img_dir]
+                    out_folders = []
+                    for folder in folder_names:
+                        img_dir, nc, class_names, special_classes = datumaro_to_devils_yolo(folder, convert_id_blacklist)
+                        out_folders.append(img_dir)
+                    folder_names = out_folders
         image_files = _get_paths()
         num_images = len(image_files)
 

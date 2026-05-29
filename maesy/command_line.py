@@ -157,6 +157,7 @@ def main():
                                         help="Start index for sampling images from folders")
     dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "resnet_faiss"], default=None, help="Clustering method to use for dataset creation")
     dataset_creator_parser.add_argument("--convert", type=str, choices=["datumaro"], default=None, help="Convert data from a different dataset type before clustering/dataset creation currently only works with single folder datapaths")
+    dataset_creator_parser.add_argument("--convert-id-blacklist", type=int, nargs='+', default=[], help="Space-separated list of ids to blacklist when converting. Only works when --convert flag is used as well")
     dataset_creator_parser.add_argument("-o", "--output-path", type=str, default="./data", help="Directory, in which the dataset will be saved (default: ./data)")
     dataset_creator_parser.add_argument("--left-right", "-lr", action="store_true", default=False, help="If set, expects matching images from stereo cameras. Assumes data_paths to lead to right images and expects 'left' folder next to 'right' folder")
 
@@ -167,7 +168,7 @@ def main():
     dataset_convert_parser.add_argument("-i", "--input-format", help="Current format of the dataset", choices=["datumaro", "robert"], default="datumaro")
     # dataset_convert_parser.add_argument("--output_format", help="Desired format of the dataset", choices=["devilsyolo"], default="devilsyolo")
     dataset_convert_parser.add_argument("-o", "--output-path", help="Output path for the created .txt label files", default="")
-
+    dataset_convert_parser.add_argument("--convert-id-blacklist", type=int, nargs='+', default=[], help="Space-separated list of ids to blacklist when converting.")
     args = parser.parse_args()
     # args = sys.argv[1:]
     match args.module:

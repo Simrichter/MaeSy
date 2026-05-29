@@ -7,7 +7,8 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 import numpy as np
 import torch
 
-from maesy.dataset import sanitize_cxcywh
+from maesy.dataset import sanitize_xyxy
+from maesy.model.rt_detr import decode_detr_predictions
 
 
 def compute_iou(box1: np.ndarray, box2: np.ndarray) -> float:
@@ -33,8 +34,7 @@ def prepare_targets_for_detection_metrics(
     ellipse_class_id: int | None = None,
 ) -> List[Dict[str, torch.Tensor]]:
     """
-        Convert training targets from normalized ``cxcywh`` to ``xyxy``.
-        Also sanitizes boxes and lines
+        Sanitize targets in normalized ``xyxy`` format and filter invalid boxes/lines.
     """
     prepared: List[Dict[str, torch.Tensor]] = []
     for target in targets:
@@ -66,7 +66,7 @@ def prepare_targets_for_detection_metrics(
         else:
             ellipse_labels = torch.empty((0,), dtype=torch.long)
 
-        boxes_xyxy, valid = sanitize_cxcywh(boxes) # ! returns xyxy format
+        boxes_xyxy, valid = sanitize_xyxy(boxes)
         if boxes.numel() == 0:
             box_labels = torch.empty((0,), dtype=torch.long)
         else:

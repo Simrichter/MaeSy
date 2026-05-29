@@ -176,7 +176,8 @@ class DatasetManager:
         yaml_content = {
             'path' : str(dataset_dir),
             'nc': num_classes,
-            'names': class_names if class_names is not None else [f'class_{i}' for i in range(num_classes)]
+            'names': class_names if class_names is not None else [f'class_{i}' for i in range(num_classes)],
+            'box_format': 'xyxy'
         }
         for split in splits:
             yaml_content[split] = str(split)

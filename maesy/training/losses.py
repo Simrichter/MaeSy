@@ -232,10 +232,7 @@ class DetectionLoss(BaseLoss):
                 if num_box_matches > 0:
                     loss_bbox = loss_bbox.sum() / num_box_matches
 
-                giou_matrix = self._generalized_box_iou(
-                    self._box_cxcywh_to_xyxy(src_boxes_for_loss),
-                    self._box_cxcywh_to_xyxy(target_boxes_for_loss)
-                )
+                giou_matrix = self._generalized_box_iou(src_boxes_for_loss, target_boxes_for_loss)
                 loss_giou = 1 - torch.diag(giou_matrix)
                 if num_box_matches > 0:
                     loss_giou = loss_giou.sum() / num_box_matches
@@ -339,9 +336,7 @@ class DetectionLoss(BaseLoss):
 
         if box_mask.any():
             loss_bbox = F.l1_loss(boxes_valid[box_mask], target_boxes_valid[box_mask])
-            giou_matrix = self._generalized_box_iou(
-                self._box_cxcywh_to_xyxy(boxes_valid[box_mask]),
-                self._box_cxcywh_to_xyxy(target_boxes_valid[box_mask]),
+            giou_matrix = self._generalized_box_iou(boxes_valid[box_mask],                target_boxes_valid[box_mask],
             )
             loss_giou = (1 - torch.diag(giou_matrix)).mean()
         else:
@@ -593,7 +588,7 @@ class DetectionLoss(BaseLoss):
     ) -> List[tuple[torch.Tensor, torch.Tensor]]:
         """
             Perform Hungarian matching between predictions and targets.
-            Expects boxes in format (cx cy w h), lines in format (x y x y) and ellipses in format (cx cy log_a log_b sin2theta cos2theta)
+            Expects boxes in format (x1 y1 x2 y2), lines in format (x y x y) and ellipses in format (cx cy log_a log_b sin2theta cos2theta)
         """
         pred_logits = predictions['pred_logits'].float()  # [B, num_queries, num_classes + 1]
         pred_boxes = predictions['pred_boxes'].float()  # [B, num_queries, 4]
@@ -674,10 +669,7 @@ class DetectionLoss(BaseLoss):
 
             # GIoU cost
             cost_giou = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)
-            cost_giou[:, :len(tgt_bbox)] = -self._generalized_box_iou(
-                self._box_cxcywh_to_xyxy(out_bbox[i * num_queries:(i + 1) * num_queries]),
-                self._box_cxcywh_to_xyxy(tgt_bbox)
-            )
+            cost_giou[:, :len(tgt_bbox)] = -self._generalized_box_iou(out_bbox[i * num_queries:(i + 1) * num_queries], tgt_bbox)
             if cost_giou.shape[1] > cost_giou.shape[0]:
                 raise ValueError(f"Hungarian matching failed, more target boxes than predictions. Cost GIoU shape: {cost_giou.shape}")
 
@@ -711,16 +703,6 @@ class DetectionLoss(BaseLoss):
         src_idx = torch.cat([src for (src, _) in indices])
         return batch_idx, src_idx
 
-# TODO: Move this util stuff to bounding_box.py
-    @staticmethod
-    def _box_cxcywh_to_xyxy(boxes: torch.Tensor) -> torch.Tensor:
-        """Convert boxes from [cx, cy, w, h] to [x1, y1, x2, y2]."""
-        cx, cy, w, h = boxes.unbind(-1)
-        x1 = cx - 0.5 * w
-        y1 = cy - 0.5 * h
-        x2 = cx + 0.5 * w
-        y2 = cy + 0.5 * h
-        return torch.stack([x1, y1, x2, y2], dim=-1)
 
     @staticmethod
     def _generalized_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
@@ -989,10 +971,7 @@ class YOLOv8Loss(BaseLoss):
                 target_boxes_padded[b_idx, :len(target_box)] = target_box
 
         # Compute IoU loss
-        pred_xyxy = self._box_cxcywh_to_xyxy(pred_boxes)
-        target_xyxy = self._box_cxcywh_to_xyxy(target_boxes_padded)
-
-        iou = self._compute_iou(pred_xyxy, target_xyxy)  # [B, num_queries, num_queries]
+        iou = self._compute_iou(pred_boxes, target_boxes_padded)  # [B, num_queries, num_queries]
 
         # Use diagonal for matched pairs (simplified - in practice would use assignment)
         iou_loss = 1.0 - torch.diagonal(iou, dim1=1, dim2=2).mean()
@@ -1031,11 +1010,3 @@ class YOLOv8Loss(BaseLoss):
 
         return iou
 
-    def _box_cxcywh_to_xyxy(self, boxes: torch.Tensor) -> torch.Tensor:
-        """Convert boxes from [cx, cy, w, h] to [x1, y1, x2, y2]."""
-        cx, cy, w, h = boxes[..., 0], boxes[..., 1], boxes[..., 2], boxes[..., 3]
-        x1 = cx - 0.5 * w
-        y1 = cy - 0.5 * h
-        x2 = cx + 0.5 * w
-        y2 = cy + 0.5 * h
-        return torch.stack([x1, y1, x2, y2], dim=-1)

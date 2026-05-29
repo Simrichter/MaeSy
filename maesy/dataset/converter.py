@@ -97,8 +97,12 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                             print(f"Skipping BoundingBox line in file {label_file} due to incorrect format: {line}")
                             continue
                         cx, cy, w, h = parts
-                        cx, cy, w, h = float(cx), float(cy), float(w), float(h) # Explicit cast to ensure datatype compatibility
-                        new_lines.append(f"{name_to_id[class_id]} {cx} {cy} {w} {h}\n")
+                        cx, cy, w, h = float(cx), float(cy), float(w), float(h)  # Explicit cast to ensure datatype compatibility
+                        x1 = cx - 0.5 * w
+                        y1 = cy - 0.5 * h
+                        x2 = cx + 0.5 * w
+                        y2 = cy + 0.5 * h
+                        new_lines.append(f"{name_to_id[class_id]} {x1} {y1} {x2} {y2}\n")
                     case "Lines":
                         line_parts = line.strip().split(", ")
                         if len(line_parts) == 4: # Subtype: Line
@@ -115,7 +119,11 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                             continue
                         cx, cy, w, h = parts
                         cx, cy, w, h = float(cx), float(cy), float(w), float(h)  # Explicit cast to ensure datatype compatibility
-                        new_lines.append(f"{name_to_id['PenaltyCross']} {cx} {cy} {w} {h}\n")
+                        x1 = cx - 0.5 * w
+                        y1 = cy - 0.5 * h
+                        x2 = cx + 0.5 * w
+                        y2 = cy + 0.5 * h
+                        new_lines.append(f"{name_to_id['PenaltyCross']} {x1} {y1} {x2} {y2}\n")
                     case "CenterCircle":
                         points = np.array(ast.literal_eval(f"[{line}]"))
                         points[:,::2] = points[:,::2]/544
@@ -198,13 +206,11 @@ def datumaro_to_devils_yolo(datumaro_dir: str) -> Tuple[str, int, list, dict]:
                 normalize.reverse() # datumaro saves height, width
                 for ann_ind, ann in enumerate(img_data['annotations']):
                     if ann['type'] == "bbox": # BoundingBoxes
-                        cx = ann['bbox'][0] / normalize[0]
-                        cy = ann['bbox'][1] / normalize[1]
-                        w = ann['bbox'][2] / normalize[0]
-                        h = ann['bbox'][3] / normalize[1]
-                        cx += 0.5 * w
-                        cy += 0.5 * h
-                        f.write(f"{ann['label_id']} {cx} {cy} {w} {h}\n")
+                        x1 = ann['bbox'][0] / normalize[0]
+                        y1 = ann['bbox'][1] / normalize[1]
+                        x2 = (ann['bbox'][0] + ann['bbox'][2]) / normalize[0]
+                        y2 = (ann['bbox'][1] + ann['bbox'][3]) / normalize[1]
+                        f.write(f"{ann['label_id']} {x1} {y1} {x2} {y2}\n")
                     elif ann['type'] == "polyline": # FieldLines
                         p = ann['points']
                         if len(p) != 4:

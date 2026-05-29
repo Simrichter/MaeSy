@@ -23,8 +23,8 @@ def test_detection_loss_computes_line_and_dn_terms_when_enabled():
         ),
         "pred_boxes": torch.tensor(
             [[
-                [0.50, 0.50, 0.20, 0.20],
-                [0.30, 0.30, 0.15, 0.15],
+                [0.40, 0.40, 0.60, 0.60],
+                [0.225, 0.225, 0.375, 0.375],
             ]],
             dtype=torch.float32,
         ),
@@ -41,7 +41,7 @@ def test_detection_loss_computes_line_and_dn_terms_when_enabled():
                 dtype=torch.float32,
             ),
             "pred_boxes": torch.tensor(
-                [[[0.50, 0.50, 0.20, 0.20]]],
+                [[[0.40, 0.40, 0.60, 0.60]]],
                 dtype=torch.float32,
             ),
             "pred_lines": torch.tensor(
@@ -49,14 +49,14 @@ def test_detection_loss_computes_line_and_dn_terms_when_enabled():
                 dtype=torch.float32,
             ),
             "target_labels": torch.tensor([[2]], dtype=torch.long),
-            "target_boxes": torch.tensor([[[0.50, 0.50, 0.20, 0.20]]], dtype=torch.float32),
+            "target_boxes": torch.tensor([[[0.40, 0.40, 0.60, 0.60]]], dtype=torch.float32),
             "target_lines": torch.tensor([[[0.40, 0.40, 0.60, 0.60]]], dtype=torch.float32),
             "target_valid_mask": torch.tensor([[True]]),
         },
     }
     targets = [{
         "labels": torch.tensor([0, 2], dtype=torch.long),
-        "boxes": torch.tensor([[0.50, 0.50, 0.20, 0.20]], dtype=torch.float32),
+        "boxes": torch.tensor([[0.40, 0.40, 0.60, 0.60]], dtype=torch.float32),
         "line_points": torch.tensor([[0.40, 0.40, 0.60, 0.60]], dtype=torch.float32),
     }]
 
@@ -94,8 +94,8 @@ def test_detection_loss_normalizes_bbox_loss_by_box_matches_only():
         ),
         "pred_boxes": torch.tensor(
             [[
-                [0.60, 0.60, 0.40, 0.40],
-                [0.20, 0.20, 0.10, 0.10],
+                [0.40, 0.40, 0.80, 0.80],
+                [0.15, 0.15, 0.25, 0.25],
             ]],
             dtype=torch.float32,
         ),
@@ -109,13 +109,13 @@ def test_detection_loss_normalizes_bbox_loss_by_box_matches_only():
     }
     targets = [{
         "labels": torch.tensor([0, 2], dtype=torch.long),
-        "boxes": torch.tensor([[0.50, 0.50, 0.20, 0.20]], dtype=torch.float32),
+        "boxes": torch.tensor([[0.40, 0.40, 0.60, 0.60]], dtype=torch.float32),
         "line_points": torch.tensor([[0.40, 0.40, 0.60, 0.60]], dtype=torch.float32),
     }]
 
     losses = loss_fn(predictions, targets)
 
-    # L1 sum over the single bbox pair: |0.60-0.50|+|0.60-0.50|+|0.40-0.20|+|0.40-0.20| = 0.6
-    assert torch.isclose(losses["loss_bbox"], torch.tensor(0.6), atol=1e-6)
+    # L1 sum over the single bbox pair: |0.40-0.40|+|0.40-0.40|+|0.80-0.60|+|0.80-0.60| = 0.4
+    assert torch.isclose(losses["loss_bbox"], torch.tensor(0.4), atol=1e-6)
 
 

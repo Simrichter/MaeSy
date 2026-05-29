@@ -77,7 +77,7 @@ class BoundingBox:
         self.normalized = normalized
 
     @classmethod
-    def from_xywh(cls, cls_id: int, center_x: float, center_y: float, width: float, height: float, normalized=False) -> "BoundingBox":
+    def from_cxcywh(cls, cls_id: int, center_x: float, center_y: float, width: float, height: float, normalized=False) -> "BoundingBox":
         """Create a BoundingBox from center-format (cx, cy, w, h).
 
         Args:
@@ -100,7 +100,7 @@ class BoundingBox:
         return cls(cls_id, x_min, y_min, x_max, y_max, normalized)
 
     @classmethod
-    def from_str(cls, yolo_row: str, normalized: bool=True, xyxy: bool = False) -> "BoundingBox":
+    def from_str(cls, yolo_row: str, normalized: bool=True, xyxy: bool = True) -> "BoundingBox":
         """
         Create a BoundingBox from string format "cls cx cy w h" as used in YOLO annotations.
         Assumes normalized values by default, but can be set to False if the values in the string are in pixel coordinates.
@@ -115,7 +115,8 @@ class BoundingBox:
         """
         splits = yolo_row.split()
         if len(splits) != 5:
-            raise ValueError(f"Invalid YOLO annotation format: {yolo_row}. Expected format: 'cls cx cy w h'")
+            expected = "cls x1 y1 x2 y2" if xyxy else "cls cx cy w h"
+            raise ValueError(f"Invalid annotation format: {yolo_row}. Expected format: '{expected}'")
         cls_id = int(splits[0])
         first = float(splits[1])
         second = float(splits[2])
@@ -124,7 +125,7 @@ class BoundingBox:
         if xyxy:
             return cls(cls_id, first, second, third, fourth, normalized)
         else:
-            return cls.from_xywh(cls_id, first, second, third, fourth, normalized)
+            return cls.from_cxcywh(cls_id, first, second, third, fourth, normalized)
 
     def normalize(self, image_width: float, image_height: float) -> None:
         """
@@ -184,10 +185,10 @@ class BoundingBox:
 
     def as_tv_tensor(self) -> torchvision.tv_tensors.BoundingBoxes:
         """
-        Return bounding box coordinates as a tv_tensor Image with cxcywh format.
+        Return bounding box coordinates as a tv_tensor Image with xyxy format.
         Note: The bounding box coordinates are returned regardless of whether they are normalized or not.
         """
-        return torchvision.tv_tensors.BoundingBoxes(self.as_cxcywh(), format="cxcywh", canvas_size=(480, 640), clamping_mode="hard")
+        return torchvision.tv_tensors.BoundingBoxes(self.as_xyxy(), format="XYXY", canvas_size=(480, 640), clamping_mode="hard")
 
 
     def coordinates_as_tensor(self) -> torch.Tensor:
@@ -207,10 +208,10 @@ class BoundingBox:
             return self.as_xyxy()
         return self.x_min / image_width, self.y_min / image_height, self.x_max / image_width, self.y_max / image_height,
 
-    def as_xywh_normalized(self, image_width: float, image_height: float) -> Tuple[float, float, float, float]:
+    def as_cxcywh_normalized(self, image_width: float, image_height: float) -> Tuple[float, float, float, float]:
         """
-        Return xywh (center) coordinates normalized to [0,1] by image size, without altering the bounding box object.
-        If the bounding box is already normalized, this will just return .as_xywh()
+        Return cxcywh coordinates normalized to [0,1] by image size, without altering the bounding box object.
+        If the bounding box is already normalized, this will just return .as_cxcywh()
         """
         cx, cy, w, h = self.as_cxcywh()
         if self.normalized:

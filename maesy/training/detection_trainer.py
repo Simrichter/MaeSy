@@ -4,7 +4,6 @@ from typing import Optional, List, Dict
 
 import cv2
 import torch
-from torchvision.ops import box_convert
 from torchvision.utils import draw_bounding_boxes
 
 from maesy.evaluation.metrics import (
@@ -60,7 +59,7 @@ class DetectionTrainer(BaseTrainer):
             return img.float() / 255.0
 
         h, w = img.shape[-2:]
-        boxes_xyxy = box_convert(boxes, "cxcywh", "xyxy")
+        boxes_xyxy = boxes.clone()
         boxes_xyxy[:, (0, 2)] *= w
         boxes_xyxy[:, (1, 3)] *= h
         boxes_xyxy[:, (0, 2)] = boxes_xyxy[:, (0, 2)].clamp(0, w - 1)

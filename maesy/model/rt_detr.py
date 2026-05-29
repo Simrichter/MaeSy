@@ -8,8 +8,7 @@ import torch
 from .backbones import ResNetBackbone, ResNetBackboneConfig, MobileNetBackbone, MobileNetBackboneConfig, SWINBackbone, SWINBackboneConfig
 from .base_model import BaseModel
 from .heads import RTDETRHead, RTDETRHeadConfig
-from maesy.dataset import sanitize_cxcywh
-from ..dataset.bounding_box import sanitize_xyxy
+from maesy.dataset import sanitize_xyxy
 
 
 @dataclass
@@ -104,7 +103,7 @@ def decode_detr_predictions(
         else:
             ellipse_mask = torch.zeros_like(masked_labels, dtype=torch.bool)
 
-        boxes_xyxy, valid = sanitize_cxcywh(masked_boxes[bbox_mask])
+        boxes_xyxy, valid = sanitize_xyxy(masked_boxes[bbox_mask])
         if bbox_mask.any():
             det_labels = masked_labels[bbox_mask][valid]
             det_scores = masked_scores[bbox_mask][valid]

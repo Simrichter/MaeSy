@@ -9,7 +9,6 @@ from torch.utils.data import Dataset
 from PIL import Image
 from typing import Optional, Callable, Dict, List, Tuple
 import numpy as np
-from torchvision.ops import box_convert
 import yaml
 
 from maesy.dataset.bounding_box import BoundingBox
@@ -70,6 +69,9 @@ class MaesyDataset(Dataset):
             yaml_data = {}
 
         dataset_dir = yaml_data.get("path", dataset_dir)
+        self.box_format = str(yaml_data.get("box_format", "")).lower()
+        if self.box_format not in {"xyxy", "cxcywh"}:
+            raise ValueError(f"Unsupported box_format '{self.box_format}' in dataset.yaml. Expected 'xyxy' or 'cxcywh'.")
 
         split_path = Path(dataset_dir) / yaml_data.get(split, split)
         assert split_path.exists(), f"Requested split '{split}' does not exist in dataset at {dataset_dir}"
@@ -155,28 +157,35 @@ class MaesyDataset(Dataset):
                                 assert len(splits) == 7, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 7 columns for annotation type 'ellipse': 'class center_x center_y log_a log_b cos(2*theta) sin(2*theta)'."
                                 ellipse_points_list.append([*map(float, splits[1:])])
                         else:
-                            assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'BoundingBox': 'class cx cy w h'."
-                            box = BoundingBox.from_xywh(cls_id, *map(float, splits[1:]), normalized=True)
+                            expected = "class x1 y1 x2 y2" if self.box_format == "xyxy" else "class cx cy w h"
+                            assert len(splits) == 5, (
+                                f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. "
+                                f"Expected 5 columns for annotation type 'BoundingBox': '{expected}'."
+                            )
+                            if self.box_format == "cxcywh":
+                                box = BoundingBox.from_cxcywh(cls_id, *map(float, splits[1:]), normalized=True)
+                            else:
+                                box = BoundingBox(cls_id, *map(float, splits[1:]), normalized=True)
                             boxes_list.append(box)
                     for box in boxes_list:
                         box.scale_to_size(img_width, img_height)  # TODO: Ugly
 
                     labels_list = []
                     if len(boxes_list) > 0:
-                        coords_np = np.array([box.as_cxcywh() for box in boxes_list], dtype=np.float32)
+                        coords_np = np.array([box.as_xyxy() for box in boxes_list], dtype=np.float32)
                         coords = torch.from_numpy(coords_np)
 
                         # Wrap as tv_tensors.BoundingBoxes with actual image size
                         coords = torchvision.tv_tensors.BoundingBoxes(
                             coords,
-                            format="CXCYWH",
+                            format="XYXY",
                             canvas_size=(img_height, img_width)  # (H, W)
                         )
                         labels_list.extend([box.cls_id for box in boxes_list])
                     else:
                         coords = torchvision.tv_tensors.BoundingBoxes(
                             torch.empty((0, 4), dtype=torch.float32),
-                            format="CXCYWH",
+                            format="XYXY",
                             canvas_size=(img_height, img_width)
                         )
                     if len(line_points_list) > 0:
@@ -214,11 +223,8 @@ class MaesyDataset(Dataset):
                     boxes = target["boxes"]
                     labels = target["labels"]
 
-                    # Convert to xyxy to check validity
-                    boxes_xyxy = box_convert(boxes, "cxcywh", "xyxy")
-
                     # Keep boxes that have area > 0
-                    valid_mask = (boxes_xyxy[:, 2] - boxes_xyxy[:, 0]) * (boxes_xyxy[:, 3] - boxes_xyxy[:, 1]) > 0
+                    valid_mask = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1]) > 0
 
                     target["boxes"] = boxes[valid_mask]
                     if target["line_points"].shape[0] > 0:

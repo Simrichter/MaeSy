@@ -14,7 +14,7 @@ def test_decode_detr_predictions_filters_no_object_queries():
         dtype=torch.float32,
     )
     pred_boxes = torch.tensor(
-        [[[0.5, 0.5, 0.4, 0.4], [0.5, 0.5, 0.2, 0.2], [0.2, 0.2, 0.1, 0.1]]],
+        [[[0.3, 0.3, 0.7, 0.7], [0.4, 0.4, 0.6, 0.6], [0.15, 0.15, 0.25, 0.25]]],
         dtype=torch.float32,
     )
 
@@ -35,7 +35,7 @@ def test_compute_detection_metrics_reports_map_fields():
     ]
     targets = [
         {
-            "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], dtype=torch.float32),
+            "boxes": torch.tensor([[0.4, 0.4, 0.6, 0.6]], dtype=torch.float32),
             "labels": torch.tensor([0], dtype=torch.long),
         }
     ]
@@ -57,7 +57,7 @@ def test_prepare_and_decode_support_mixed_bbox_and_line_targets():
     line_class_id = 2
     targets = [
         {
-            "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], dtype=torch.float32),
+            "boxes": torch.tensor([[0.4, 0.4, 0.6, 0.6]], dtype=torch.float32),
             "labels": torch.tensor([0, line_class_id], dtype=torch.long),
             "line_points": torch.tensor([[0.1, 0.1, 0.8, 0.8]], dtype=torch.float32),
         }
@@ -74,7 +74,7 @@ def test_prepare_and_decode_support_mixed_bbox_and_line_targets():
         dtype=torch.float32,
     )
     pred_boxes = torch.tensor(
-        [[[0.5, 0.5, 0.2, 0.2], [0.2, 0.2, 0.2, 0.2]]],
+        [[[0.4, 0.4, 0.6, 0.6], [0.1, 0.1, 0.3, 0.3]]],
         dtype=torch.float32,
     )
     pred_lines = torch.tensor(
@@ -109,7 +109,7 @@ def test_compute_detection_metrics_includes_line_metrics_when_enabled():
     ]
     raw_targets = [
         {
-            "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], dtype=torch.float32),
+            "boxes": torch.tensor([[0.4, 0.4, 0.6, 0.6]], dtype=torch.float32),
             "labels": torch.tensor([0, 2], dtype=torch.long),
             "line_points": torch.tensor([[0.1, 0.1, 0.8, 0.8]], dtype=torch.float32),
         }
@@ -145,7 +145,7 @@ def test_compute_detection_metrics_includes_ellipse_metrics_and_curves():
     ]
     raw_targets = [
         {
-            "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], dtype=torch.float32),
+            "boxes": torch.tensor([[0.4, 0.4, 0.6, 0.6]], dtype=torch.float32),
             "labels": torch.tensor([0, 3], dtype=torch.long),
             "ellipses": torch.tensor([[0.5, 0.5, 0.1, 0.1, 0.0, 1.0]], dtype=torch.float32),
         }

@@ -79,7 +79,7 @@ def test_rt_detr_denoising_outputs_emitted_only_in_training_with_targets():
     images = torch.randn(1, 3, 64, 64)
     targets = [{
         "labels": torch.tensor([1], dtype=torch.long),
-        "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], dtype=torch.float32),
+        "boxes": torch.tensor([[0.4, 0.4, 0.6, 0.6]], dtype=torch.float32),
         "line_points": torch.tensor([[0.4, 0.4, 0.6, 0.6]], dtype=torch.float32),
     }]
 

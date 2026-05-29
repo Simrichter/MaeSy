@@ -9,7 +9,6 @@ import torch
 from PIL.ImageColor import getrgb
 from torch.utils.data import DataLoader
 from torchvision.io import read_image
-from torchvision.ops import box_convert
 from torchvision.utils import draw_bounding_boxes, save_image
 from tqdm import tqdm
 
@@ -204,7 +203,7 @@ def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.
 
         Args:
             :param img: The image as a torch.Tensor in format [C, H, W] (pixel range: [0,255], dtype=torch.uint8)
-            :param boxes: Tensor of bounding boxes in normalized cxcywh format, shape [nb, 4]
+            :param boxes: Tensor of bounding boxes in normalized xyxy format, shape [nb, 4]
             :param labels: Tensor of labels, shape [nb, ]
             :param name_coding: Optional dict to translate from class id to label name
             :param color_coding: Optional dict to translate from class id to color
@@ -234,11 +233,7 @@ def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.
 
 
     h, w = img.shape[-2:]
-    if not xyxy:
-        boxes_xyxy = box_convert(boxes.detach().cpu(), "cxcywh", "xyxy")
-        print("Converted to xyxy")
-    else:
-        boxes_xyxy = boxes.detach().cpu()
+    boxes_xyxy = boxes.detach().cpu()
     boxes_xyxy[:, (0, 2)] *= w
     boxes_xyxy[:, (1, 3)] *= h
     boxes_xyxy[:, (0, 2)] = boxes_xyxy[:, (0, 2)].clamp(0, w - 1)
@@ -364,7 +359,7 @@ def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch
 
         Args:
             :param img: Tensor containing the image in format [C, H, W] (pixel range: [0,255], dtype=torch.uint8)
-            :param boxes: Tensor of bounding boxes in normalized cxcywh format, shape [nb, 4]
+            :param boxes: Tensor of bounding boxes in normalized xyxy format, shape [nb, 4]
             :param labels: Tensor of bbox labels, shape [nb, ]
             :param lines: Tensor of lines in normalized xyxy format, shape [nl, 4]
             :param ellipses: Tensor of ellipses in normalized cxcylll format, shape [ne, 5]

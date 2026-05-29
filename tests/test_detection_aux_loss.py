@@ -45,8 +45,8 @@ def test_detection_loss_accumulates_auxiliary_outputs():
         ),
         "pred_boxes": torch.tensor(
             [[
-                [0.50, 0.50, 0.20, 0.20],
-                [0.10, 0.10, 0.10, 0.10],
+                [0.40, 0.40, 0.60, 0.60],
+                [0.05, 0.05, 0.15, 0.15],
             ]],
             dtype=torch.float32,
         ),
@@ -61,8 +61,8 @@ def test_detection_loss_accumulates_auxiliary_outputs():
                 ),
                 "pred_boxes": torch.tensor(
                     [[
-                        [0.20, 0.20, 0.30, 0.30],
-                        [0.90, 0.90, 0.05, 0.05],
+                        [0.05, 0.05, 0.35, 0.35],
+                        [0.875, 0.875, 0.925, 0.925],
                     ]],
                     dtype=torch.float32,
                 ),
@@ -71,7 +71,7 @@ def test_detection_loss_accumulates_auxiliary_outputs():
     }
     targets = [{
         "labels": torch.tensor([0], dtype=torch.long),
-        "boxes": torch.tensor([[0.50, 0.50, 0.20, 0.20]], dtype=torch.float32),
+        "boxes": torch.tensor([[0.40, 0.40, 0.60, 0.60]], dtype=torch.float32),
     }]
 
     losses = loss_fn(predictions, targets)
@@ -110,8 +110,8 @@ def test_detection_loss_reuses_main_hungarian_matching_for_aux_and_dn():
         ),
         "pred_boxes": torch.tensor(
             [[
-                [0.50, 0.50, 0.20, 0.20],
-                [0.10, 0.10, 0.10, 0.10],
+                [0.40, 0.40, 0.60, 0.60],
+                [0.05, 0.05, 0.15, 0.15],
             ]],
             dtype=torch.float32,
         ),
@@ -126,8 +126,8 @@ def test_detection_loss_reuses_main_hungarian_matching_for_aux_and_dn():
                 ),
                 "pred_boxes": torch.tensor(
                     [[
-                        [0.20, 0.20, 0.30, 0.30],
-                        [0.90, 0.90, 0.05, 0.05],
+                        [0.05, 0.05, 0.35, 0.35],
+                        [0.875, 0.875, 0.925, 0.925],
                     ]],
                     dtype=torch.float32,
                 ),
@@ -135,15 +135,15 @@ def test_detection_loss_reuses_main_hungarian_matching_for_aux_and_dn():
         ],
         "dn_outputs": {
             "pred_logits": torch.tensor([[[6.0, -6.0, -8.0]]], dtype=torch.float32),
-            "pred_boxes": torch.tensor([[[0.50, 0.50, 0.20, 0.20]]], dtype=torch.float32),
+            "pred_boxes": torch.tensor([[[0.40, 0.40, 0.60, 0.60]]], dtype=torch.float32),
             "target_labels": torch.tensor([[0]], dtype=torch.long),
-            "target_boxes": torch.tensor([[[0.50, 0.50, 0.20, 0.20]]], dtype=torch.float32),
+            "target_boxes": torch.tensor([[[0.40, 0.40, 0.60, 0.60]]], dtype=torch.float32),
             "target_valid_mask": torch.tensor([[True]]),
         },
     }
     targets = [{
         "labels": torch.tensor([0], dtype=torch.long),
-        "boxes": torch.tensor([[0.50, 0.50, 0.20, 0.20]], dtype=torch.float32),
+        "boxes": torch.tensor([[0.40, 0.40, 0.60, 0.60]], dtype=torch.float32),
     }]
 
     with patch.object(
@@ -163,15 +163,15 @@ def test_detection_loss_applies_separate_hungarian_matching_for_encoder_dense_ou
 
     predictions = {
         "pred_logits": torch.tensor([[[6.0, -6.0, -8.0], [-4.0, 4.0, -8.0]]], dtype=torch.float32),
-        "pred_boxes": torch.tensor([[[0.50, 0.50, 0.20, 0.20], [0.10, 0.10, 0.10, 0.10]]], dtype=torch.float32),
+        "pred_boxes": torch.tensor([[[0.40, 0.40, 0.60, 0.60], [0.05, 0.05, 0.15, 0.15]]], dtype=torch.float32),
         "enc_outputs": {
             "pred_logits": torch.tensor([[[5.0, -5.0, -8.0], [-3.0, 3.0, -8.0]]], dtype=torch.float32),
-            "pred_boxes": torch.tensor([[[0.48, 0.52, 0.22, 0.18], [0.15, 0.15, 0.10, 0.10]]], dtype=torch.float32),
+            "pred_boxes": torch.tensor([[[0.37, 0.43, 0.59, 0.61], [0.10, 0.10, 0.20, 0.20]]], dtype=torch.float32),
         },
     }
     targets = [{
         "labels": torch.tensor([0], dtype=torch.long),
-        "boxes": torch.tensor([[0.50, 0.50, 0.20, 0.20]], dtype=torch.float32),
+        "boxes": torch.tensor([[0.40, 0.40, 0.60, 0.60]], dtype=torch.float32),
     }]
 
     with patch.object(

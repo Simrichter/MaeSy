@@ -201,6 +201,7 @@ class DatasetManager:
                        left_right: bool,
                        convert: Optional[str] = None,
                        convert_id_blacklist: Optional[List[int]] = None,
+                       merge_ids: Optional[dict[int, int]] = None,
                        nc: int = None,
                        class_names: Optional[List[str]] = None,
                        special_classes: Optional[Dict[str, str]] = None,
@@ -222,6 +223,7 @@ class DatasetManager:
             :param left_right: If active, expects matching images from stereo cameras. Assumes chosen_paths to lead to right images and expects "left" folder next to "right" folder
             :param convert: Optional choice of ["datumaro", "robert"]. Triggers automatic conversion in DevilsYolo format before dataset creation.
             :param convert_id_blacklist: List of class IDs to ignore during conversion. Only used with convert.
+            :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y
             :param nc: Optional number of classes (for dataset.yaml)
             :param class_names: Optional List of strings that specify class names in class_id order (for dataset.yaml)
             :param special_classes: Optional Dict of strings with keys in ['lines', 'ellipses'] and values in class_names (for dataset.yaml)
@@ -282,7 +284,7 @@ class DatasetManager:
                     from maesy.dataset import datumaro_to_devils_yolo
                     out_folders = []
                     for folder in folder_names:
-                        img_dir, nc, class_names, special_classes = datumaro_to_devils_yolo(folder, convert_id_blacklist)
+                        img_dir, nc, class_names, special_classes = datumaro_to_devils_yolo(folder, convert_id_blacklist, merge_ids)
                         out_folders.append(img_dir)
                     folder_names = out_folders
         image_files = _get_paths()

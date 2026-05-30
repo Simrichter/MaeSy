@@ -43,13 +43,15 @@ def ellipse_to_cholesky(cx: float, cy: float, a: float, b: float, theta: float):
 
     return np.stack([cx, cy, l11, l21, l22], axis=-1)
 
-def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
+def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = "", class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None):
     """
         Convert Image annotations from Robert's Unity simulator outputs to devils_yolo format.
 
         Args:
             :param labels_path: Path to the labels folder (only .txt is considered)
             :param out_path: Path to the output folder (if not specified, a subfolder "DevilsYolo" is created)
+            :param class_id_blacklist: List of class IDs to ignore during conversion
+            :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y
     """
 
     name_to_id = {
@@ -65,6 +67,8 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
     print(f"Labels path: {labels_path}")
     print("=" * 60)
 
+    if merge_ids is None:
+        merge_ids = {}
 
     labels_path: Path = Path(labels_path)
     splits = [f for f in os.listdir(labels_path) if f in ["train", "val", "test"]]
@@ -91,7 +95,11 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                     continue
                 match current_cat:
                     case "BoundingBoxes":
-                        class_id, coords = line.strip().split(":")
+                        class_name, coords = line.strip().split(":")
+                        class_id = name_to_id[class_name]
+                        class_id = merge_ids.get(class_id, class_id)
+                        if class_id is not None and class_id in class_id_blacklist:
+                            continue
                         parts = coords.strip().split()
                         if len(parts) != 4:
                             print(f"Skipping BoundingBox line in file {label_file} due to incorrect format: {line}")
@@ -104,6 +112,10 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                         y2 = cy + 0.5 * h
                         new_lines.append(f"{name_to_id[class_id]} {x1} {y1} {x2} {y2}\n")
                     case "Lines":
+                        class_id = name_to_id['Line']
+                        class_id = merge_ids.get(class_id, class_id)
+                        if class_id is not None and class_id in class_id_blacklist:
+                            continue
                         line_parts = line.strip().split(", ")
                         if len(line_parts) == 4: # Subtype: Line
                             x1, y1, x2, y2 = [float(lp.lstrip("(").rstrip("),")) for lp in line_parts]
@@ -113,6 +125,10 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                         else: # Subtype: CornerArc
                             ... # TODO
                     case "PenaltyPoints":
+                        class_id = name_to_id['PenaltyCross']
+                        class_id = merge_ids.get(class_id, class_id)
+                        if class_id is not None and class_id in class_id_blacklist:
+                            continue
                         parts = line.strip().split()
                         if len(parts) != 4:
                             print(f"Skipping PenaltyPoint line in file {label_file} due to incorrect format: {line}")
@@ -125,6 +141,10 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                         y2 = cy + 0.5 * h
                         new_lines.append(f"{name_to_id['PenaltyCross']} {x1} {y1} {x2} {y2}\n")
                     case "CenterCircle":
+                        class_id = name_to_id['CenterCircle']
+                        class_id = merge_ids.get(class_id, class_id)
+                        if class_id is not None and class_id in class_id_blacklist:
+                            continue
                         points = np.array(ast.literal_eval(f"[{line}]"))
                         points[:,::2] = points[:,::2]/544
                         points[:,1::2] = 1-points[:,1::2]/448
@@ -144,7 +164,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = ""):
                 f.writelines(new_lines)
 
 
-def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list[int]]=None) -> Tuple[str, int, list, dict]:
+def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None) -> Tuple[str, int, list, dict]:
         """
         Convert Image annotations exported from cvat in datumaro JSON format into DevilsYolo format.
         Lines are represented by their two endpoint coordinates in xyxy format.
@@ -154,6 +174,7 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
         Args:
             :param datumaro_dir: Path to the datumaro dataset root folder (the one that contains the annotations folder and the images folder)
             :param class_id_blacklist: List of class ids to ignore during conversion
+            :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y
 
         Returns:
             path: Path to images and labels
@@ -162,6 +183,8 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
             special_classes: Dict of special classes (lines, ellipses)
         """
 
+        if merge_ids is None:
+            merge_ids = {}
         print("="*60)
         print(f"Converting datumaro to DevilsYolo format")
         print(f"Dataset root path: {datumaro_dir}")
@@ -203,27 +226,47 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
 
         id_to_name = {i: label["name"] for i, label in enumerate(data["categories"]["label"]["labels"])}
 
+        # update merge and blacklist information into id_to_name to return the correct nc, class_names and special_classes
+        for k, v in merge_ids.items():
+            print(f"Merging class {id_to_name[v]} into class {id_to_name[k]}")
+            id_to_name[v] = id_to_name[k]
+        for class_id in class_id_blacklist:
+            print(f"Removing {class_id} ({id_to_name[class_id]}) from id_to_name due to blacklist")
+            del id_to_name[class_id]
+        # Rebuilding keys to ensure continuous class IDs and no duplicate names
+        new_id_to_name = {k: v for k, v in enumerate(set(id_to_name.values()))} # Only used to generate information for building the dataset.yaml file
+        name_to_new_id = {v: k for k, v in new_id_to_name.items()}
+        translate_ids = {k: name_to_new_id[v] for k, v in id_to_name.items()}  # Usage: translate_ids[old_id] = new_id
+        id_to_name = new_id_to_name
+        # Building special_classes if still present in dict
+        special_classes = {}
+        if "Lines" in id_to_name.values():
+            special_classes["lines"] = "Lines"
+        if "CenterCircle" in id_to_name.values():
+            special_classes["ellipses"] = "CenterCircle"
+
         print("Writing .txt annotations...")
         for img_ind, img_data in enumerate(tqdm(data['items'])):
             with (open(os.path.join(img_dir, img_data['id'] + ".txt"), 'w') as f):
                 normalize = img_data["image"]["size"]
                 normalize.reverse() # datumaro saves height, width
                 for ann_ind, ann in enumerate(img_data['annotations']):
-                    if ann['label_id'] in class_id_blacklist:
+                    class_id = ann['label_id']
+                    class_id = merge_ids.get(class_id, class_id)
+                    if class_id in class_id_blacklist:
                         continue
                     if ann['type'] == "bbox": # BoundingBoxes
                         x1 = ann['bbox'][0] / normalize[0]
                         y1 = ann['bbox'][1] / normalize[1]
                         x2 = (ann['bbox'][0] + ann['bbox'][2]) / normalize[0]
                         y2 = (ann['bbox'][1] + ann['bbox'][3]) / normalize[1]
-                        f.write(f"{ann['label_id']} {x1} {y1} {x2} {y2}\n")
+                        f.write(f"{translate_ids[class_id]} {x1} {y1} {x2} {y2}\n")
                     elif ann['type'] == "polyline": # FieldLines
                         p = ann['points']
                         if len(p) != 4:
-                            print(
-                                f"Warning: Skipping annotation in file {img_data['id']} due to incorrect number of points: {p}")
+                            print(f"Warning: Skipping annotation in file {img_data['id']} due to incorrect number of points: {p}")
                             continue
-                        f.write(f"{ann['label_id']} {p[0]/normalize[0]} {p[1]/normalize[1]} {p[2]/normalize[0]} {p[3]/normalize[1]}\n")
+                        f.write(f"{translate_ids[class_id]} {p[0]/normalize[0]} {p[1]/normalize[1]} {p[2]/normalize[0]} {p[3]/normalize[1]}\n")
                     elif ann['type'] == "polygon" and id_to_name[ann['label_id']] in ["CenterCircle"]: # Ellipses
                         p = ann['points']
                         # reshape to N, 2 with every two consecutive values grouped in last dimension
@@ -232,10 +275,7 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
                         points[:, 1::2] = points[:, 1::2] / normalize[1]
                         if ellipse_model.estimate(points):
                             cx, cy, a, b, theta = ellipse_model.params
-                            # Convert to cholesky representation
-                            # cx, cy, l11, l12, l22 = ellipse_to_cholesky(cx, cy, a, b, theta)
-                            # f.write(f"{ann['label_id']} {cx} {cy} {l11} {l12} {l22}\n")
-                            f.write(f"{ann['label_id']} {cx} {cy} {np.log(a)} {np.log(b)} {np.cos(2 * theta)} {np.sin(2 * theta)}\n")
+                            f.write(f"{translate_ids[class_id]} {cx} {cy} {np.log(a)} {np.log(b)} {np.cos(2 * theta)} {np.sin(2 * theta)}\n")
         print("Conversion finished successfully!")
 
         if data['items'][0]['id'].count("/") > 0: # Check if datumaro exported with subfolders (e.g. "train/default/faiss/img1.jpg", etc.)
@@ -243,4 +283,4 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
         else:
             folder_path = img_dir
 
-        return folder_path, len(id_to_name), list(id_to_name.values()), {"lines": "Lines", "ellipses": "CenterCircle"}
+        return folder_path, len(id_to_name), list(id_to_name.values()), special_classes

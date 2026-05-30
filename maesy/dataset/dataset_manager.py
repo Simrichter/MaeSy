@@ -267,9 +267,7 @@ class DatasetManager:
                     img_paths.extend(image_paths)
                 return img_paths
             else:
-                folder_path = self.cluster_data(folder_names, chosen_paths, cluster_method=cluster_method,
-                                                num_clusters=500,
-                                                step=step, start_index=start_index)
+                folder_path = self.cluster_data(folder_names, chosen_paths, cluster_method=cluster_method, num_clusters=500, step=step, start_index=start_index)
                 image_paths = [f for f in folder_path if
                                f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
                 if len(image_paths) == 0:
@@ -279,14 +277,19 @@ class DatasetManager:
         if convert is not None and convert !="":
             match convert:
                 case "datumaro":
-                    # if len(folder_names) != 1:
-                    #     raise ValueError(f"Currently dataset conversion only works for single folders, but {len(folder_names)} folders are given.")
                     from maesy.dataset import datumaro_to_devils_yolo
-                    out_folders = []
-                    for folder in folder_names:
-                        img_dir, nc, class_names, special_classes = datumaro_to_devils_yolo(folder, convert_id_blacklist, merge_ids)
-                        out_folders.append(img_dir)
-                    folder_names = out_folders
+                    conversion_function = datumaro_to_devils_yolo
+                case "robert":
+                    from maesy.dataset import robert_to_devils_yolo
+                    conversion_function = robert_to_devils_yolo
+                case _:
+                    raise ValueError(f"Unknown dataset type {convert}. Conversion failed...")
+            out_folders = []
+            for folder in folder_names:
+                img_dir, nc, class_names, special_classes = conversion_function(folder, convert_id_blacklist, merge_ids)
+                out_folders.append(img_dir)
+            folder_names = out_folders
+
         image_files = _get_paths()
         num_images = len(image_files)
 

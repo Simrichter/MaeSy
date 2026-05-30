@@ -5,7 +5,7 @@ def main(args):
             args.model,
             args.dataset,
             args.output,
-            args.freeze,
+            args.finetune,
             enable_wandb=args.wandb,
             continue_training_from_checkpoint=args.resume,
             pretrained_backbone=args.backbone,

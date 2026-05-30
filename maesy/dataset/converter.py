@@ -43,16 +43,30 @@ def ellipse_to_cholesky(cx: float, cy: float, a: float, b: float, theta: float):
 
     return np.stack([cx, cy, l11, l21, l22], axis=-1)
 
-def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = "", class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None):
+def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None):
     """
         Convert Image annotations from Robert's Unity simulator outputs to devils_yolo format.
+        Returns output path, number of classes, class_names and special_classes dict (for create dataset)
 
         Args:
-            :param labels_path: Path to the labels folder (only .txt is considered)
-            :param out_path: Path to the output folder (if not specified, a subfolder "DevilsYolo" is created)
-            :param class_id_blacklist: List of class IDs to ignore during conversion
+            :param dataset_dir: Path to the root data folder
+            :param class_id_blacklist: List of class ids to ignore during conversion
             :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y
+
+        Returns:
+            path: Path to images and labels
+            nc: Number of classes
+            class_names: List of class names
+            special_classes: Dict of special classes (lines, ellipses)
     """
+
+    print("="*60)
+    print(f"Converting Robert's Unity Simulator annotations to DevilsYolo format")
+    print(f"Dataset path: {dataset_dir}")
+    print("=" * 60)
+
+    if merge_ids is None:
+        merge_ids = {}
 
     name_to_id = {
         "Trionda Ball 2026(Clone)": 0,
@@ -62,23 +76,34 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = "", cl
         "CenterCircle": 4,
     }
 
-    print("="*60)
-    print(f"Converting Robert's Unity Simulator annotations to DevilsYolo format")
-    print(f"Labels path: {labels_path}")
-    print("=" * 60)
+    if class_id_blacklist is None:
+        class_id_blacklist = {}
 
-    if merge_ids is None:
-        merge_ids = {}
+    # apply merging and blacklisting operations
+    id_to_name = {v: k for k, v in name_to_id.items()}
+    for x, y in merge_ids.items():
+        name_to_id[id_to_name[x]] = y
+    for class_id in class_id_blacklist:
+        del name_to_id[id_to_name[class_id]]
+    # rebuild indices
+    translate_ids = {v: k for k, v in enumerate(set(name_to_id.values()))}
+    name_to_id = {k: translate_ids[v] for k, v in name_to_id.items()}
+    # build special classes dict
+    special_classes = {}
+    if "Line" in name_to_id.keys():
+        special_classes["lines"] = "Line"
+    if "CenterCircle" in id_to_name.values():
+        special_classes["ellipses"] = "CenterCircle"
 
-    labels_path: Path = Path(labels_path)
-    splits = [f for f in os.listdir(labels_path) if f in ["train", "val", "test"]]
+    dataset_dir: Path = Path(dataset_dir)
+    splits = [f for f in os.listdir(dataset_dir) if f in ["train", "val", "test"]]
     print(f"Found {len(splits)} splits: {splits}")
     for split in splits:
         print(f"Handling {split}...")
-        path = labels_path/split/"labels"
+        path = dataset_dir / split / "labels"
         if not os.path.exists(path):
             raise ValueError(f"Could not find '{split}/labels' Folder in dataset root!!")
-        out_path: Path = Path(path)/"DevilsYolo" if out_path == "" else Path(out_path)
+        out_path: Path = dataset_dir / split / "images"
         out_path.mkdir(exist_ok=True)
 
         txts = [t for t in os.listdir(path) if t.endswith(".txt")]
@@ -110,7 +135,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = "", cl
                         y1 = cy - 0.5 * h
                         x2 = cx + 0.5 * w
                         y2 = cy + 0.5 * h
-                        new_lines.append(f"{name_to_id[class_id]} {x1} {y1} {x2} {y2}\n")
+                        new_lines.append(f"{class_id} {x1} {y1} {x2} {y2}\n")
                     case "Lines":
                         class_id = name_to_id['Line']
                         class_id = merge_ids.get(class_id, class_id)
@@ -121,7 +146,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = "", cl
                             x1, y1, x2, y2 = [float(lp.lstrip("(").rstrip("),")) for lp in line_parts]
                             x1, x2 = x1/544, x2/544
                             y1, y2 = 1-y1/448, 1-y2/448 # TODO: Quickfix for horizontally flipped lines????
-                            new_lines.append(f"{name_to_id['Line']} {x1} {y1} {x2} {y2}\n") # Class ID 1 for lines, can be changed if needed
+                            new_lines.append(f"{class_id} {x1} {y1} {x2} {y2}\n") # Class ID 1 for lines, can be changed if needed
                         else: # Subtype: CornerArc
                             ... # TODO
                     case "PenaltyPoints":
@@ -139,7 +164,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = "", cl
                         y1 = cy - 0.5 * h
                         x2 = cx + 0.5 * w
                         y2 = cy + 0.5 * h
-                        new_lines.append(f"{name_to_id['PenaltyCross']} {x1} {y1} {x2} {y2}\n")
+                        new_lines.append(f"{class_id} {x1} {y1} {x2} {y2}\n")
                     case "CenterCircle":
                         class_id = name_to_id['CenterCircle']
                         class_id = merge_ids.get(class_id, class_id)
@@ -150,10 +175,7 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = "", cl
                         points[:,1::2] = 1-points[:,1::2]/448
                         if ellipse_model.estimate(points):
                             cx, cy, a, b, theta = ellipse_model.params
-                            # Convert to cholesky representation
-                            # cx, cy, l11, l12, l22 = ellipse_to_cholesky(cx, cy, a, b, theta)
-                            # new_lines.append(f"{name_to_id['CenterCircle']} {cx} {cy} {l11} {l12} {l22}\n")
-                            new_lines.append(f"{name_to_id['CenterCircle']} {cx} {cy} {np.log(a)} {np.log(b)} {np.cos(2*theta)} {np.sin(2*theta)}\n")
+                            new_lines.append(f"{class_id} {cx} {cy} {np.log(a)} {np.log(b)} {np.cos(2*theta)} {np.sin(2*theta)}\n")
                         else:
                             print(f"Failed to estimate ellipse from line '{line}' in file {label_file}")
                     case _:
@@ -163,13 +185,15 @@ def robert_to_devils_yolo(labels_path: str | Path, out_path: str | Path = "", cl
             with open(os.path.join(out_path, label_file), 'w') as f:
                 f.writelines(new_lines)
 
+    return out_path, len(name_to_id.values()), list(name_to_id.keys()), special_classes
+
 
 def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None) -> Tuple[str, int, list, dict]:
         """
         Convert Image annotations exported from cvat in datumaro JSON format into DevilsYolo format.
         Lines are represented by their two endpoint coordinates in xyxy format.
         All coordinates are normalized
-        Returns number of classes, class_names and special_classes dict (for create dataset)
+        Returns output path, number of classes, class_names and special_classes dict (for create dataset)
 
         Args:
             :param datumaro_dir: Path to the datumaro dataset root folder (the one that contains the annotations folder and the images folder)
@@ -183,13 +207,13 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
             special_classes: Dict of special classes (lines, ellipses)
         """
 
-        if merge_ids is None:
-            merge_ids = {}
         print("="*60)
         print(f"Converting datumaro to DevilsYolo format")
         print(f"Dataset root path: {datumaro_dir}")
         print("=" * 60)
 
+        if merge_ids is None:
+            merge_ids = {}
         if class_id_blacklist is None:
             class_id_blacklist = []
 

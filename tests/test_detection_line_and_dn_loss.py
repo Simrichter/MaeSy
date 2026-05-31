@@ -119,3 +119,31 @@ def test_detection_loss_normalizes_bbox_loss_by_box_matches_only():
     assert torch.isclose(losses["loss_bbox"], torch.tensor(0.4), atol=1e-6)
 
 
+def test_detection_loss_computes_line_angle_and_log_length_components():
+    loss_fn = DetectionLoss(
+        num_classes=3,
+        bbox_loss_coef=0.0,
+        class_loss_coef=0.0,
+        giou_loss_coef=0.0,
+        line_loss_coef=1.0,
+        line_angle_loss_coef=2.0,
+        line_length_loss_coef=3.0,
+        enable_line_detection=True,
+        line_class_id=2,
+        device=torch.device("cpu"),
+    )
+
+    predictions = {
+        "pred_logits": torch.tensor([[[0.0, 0.0, 6.0, -8.0]]], dtype=torch.float32),
+        "pred_boxes": torch.tensor([[[0.0, 0.0, 0.0, 0.0]]], dtype=torch.float32),
+        "pred_lines": torch.tensor([[[0.0, 0.0, 1.0, 0.0]]], dtype=torch.float32),
+    }
+    targets = [{
+        "labels": torch.tensor([2], dtype=torch.long),
+        "boxes": torch.empty((0, 4), dtype=torch.float32),
+        "line_points": torch.tensor([[0.0, 0.0, 0.0, 1.0]], dtype=torch.float32),
+    }]
+
+    losses = loss_fn(predictions, targets)
+
+    assert torch.isclose(losses["loss_line"], torch.tensor(4.0), atol=1e-6)

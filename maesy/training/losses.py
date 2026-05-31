@@ -50,6 +50,8 @@ class DetectionLoss(BaseLoss):
             aux_loss_coef: float = 0.5,
             enc_loss_coef: float = 0.3,
             line_loss_coef: float = 2.0,
+            line_angle_loss_coef: float = 0.5,
+            line_length_loss_coef: float = 0.5,
             ellipse_loss_coef: float = 2.0,
             ellipse_shape_coef: float = 1.0,
             dn_loss_coef: float = 1.0,
@@ -71,6 +73,8 @@ class DetectionLoss(BaseLoss):
             :param label_smoothing: Value for label smoothing in cross-entropy loss
             :param aux_loss_coef: Coefficient for weighting of auxiliary loss
             :param line_loss_coef: Coefficient for loss of line-detection head
+            :param line_angle_loss_coef: Coefficient for line angle loss component
+            :param line_length_loss_coef: Coefficient for line log-length loss component
             :param ellipse_loss_coef: Coefficient for loss of ellipse-detection head
             :param ellipse_shape_coef: Coefficient to downscale frobenius norm (shape-loss) of ellipses
             :param dn_loss_coef: Coefficient for auxiliary denoising loss
@@ -88,6 +92,8 @@ class DetectionLoss(BaseLoss):
         self.aux_loss_coef = aux_loss_coef
         self.enc_loss_coef = enc_loss_coef
         self.line_loss_coef = line_loss_coef
+        self.line_angle_loss_coef = line_angle_loss_coef
+        self.line_length_loss_coef = line_length_loss_coef
         self.ellipse_loss_coef = ellipse_loss_coef
         self.ellipse_shape_coef = ellipse_shape_coef
         self.dn_loss_coef = dn_loss_coef
@@ -256,7 +262,20 @@ class DetectionLoss(BaseLoss):
                 loss1 = torch.abs(pred - gt).sum(dim=-1)
                 loss2 = torch.abs(pred - gt_swapped).sum(dim=-1)
 
-                loss_line = torch.min(loss1, loss2)
+                endpoint_loss = torch.min(loss1, loss2)
+
+                pred_vec = pred[:, 2:] - pred[:, :2]
+                gt_vec = gt[:, 2:] - gt[:, :2]
+                pred_len = torch.norm(pred_vec, dim=-1)
+                gt_len = torch.norm(gt_vec, dim=-1)
+                eps = 1e-6
+                pred_unit = pred_vec / (pred_len.unsqueeze(-1) + eps)
+                gt_unit = gt_vec / (gt_len.unsqueeze(-1) + eps)
+                angle_alignment = torch.sum(pred_unit * gt_unit, dim=-1).abs().clamp(max=1.0)
+                angle_loss = 1.0 - angle_alignment
+                log_length_loss = torch.abs(torch.log(pred_len + eps) - torch.log(gt_len + eps))
+
+                loss_line = endpoint_loss + self.line_angle_loss_coef * angle_loss + self.line_length_loss_coef * log_length_loss
 
                 if num_line_matches > 0:
                     loss_line = loss_line.sum() / num_line_matches
@@ -639,7 +658,28 @@ class DetectionLoss(BaseLoss):
                 dist1 = torch.cdist(pred_l, tgt_l, p=1)
                 dist2 = torch.cdist(pred_l, tgt_l_swapped, p=1)
 
-                cost_line[:, len(tgt_bbox):len(tgt_bbox)+len(tgt_lines)] = torch.min(dist1, dist2)
+                pred_vec = pred_l[:, 2:] - pred_l[:, :2]
+                tgt_vec = tgt_l[:, 2:] - tgt_l[:, :2]
+                pred_len = torch.linalg.vector_norm(pred_vec, dim=-1)
+                tgt_len = torch.linalg.vector_norm(tgt_vec, dim=-1)
+                eps = 1e-6
+                pred_unit = pred_vec / (pred_len.unsqueeze(-1) + eps)
+                tgt_unit = tgt_vec / (tgt_len.unsqueeze(-1) + eps)
+                angle_alignment = (pred_unit[:, None, :] * tgt_unit[None, :, :]).sum(dim=-1).abs().clamp(max=1.0)
+                angle_cost = 1.0 - angle_alignment
+                weight = torch.clamp(tgt_len/0.02, max=1.0) # weighting down lines that are shorter than 2% of the image size (~4,5 pixels at 224)
+                angle_cost *= weight[None, :]
+                log_len_pred = torch.log(pred_len + eps)
+                log_len_tgt = torch.log(tgt_len + eps)
+                log_len_cost = torch.abs(log_len_pred[:, None] - log_len_tgt[None, :])
+
+                len_tgt_boxes = len(tgt_bbox)
+                len_tgt_lines = len(tgt_lines)
+                cost_line[:, len_tgt_boxes:len_tgt_boxes + len_tgt_lines] = (
+                    torch.min(dist1, dist2)
+                    + self.line_angle_loss_coef * angle_cost
+                    + self.line_length_loss_coef * log_len_cost
+                )
                 # cost_line[:, len(tgt_bbox):] = torch.cdist(pred_lines[i], tgt_lines, p=1)
 
             cost_ellipse = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)
@@ -1009,4 +1049,3 @@ class YOLOv8Loss(BaseLoss):
         iou = inter / (union + 1e-7)
 
         return iou
-

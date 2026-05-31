@@ -53,6 +53,8 @@ class ODTrainingConfig(TrainingConfig):
     aux_loss_coef: float = 0.5
     enc_loss_coef: float = 0.3
     line_loss_coef: float = 2.0
+    line_angle_loss_coef: float = 0.5
+    line_length_loss_coef: float = 0.5
     ellipse_loss_coef: float = 2.0
     ellipse_shape_coef: float = 1.0
     dn_loss_coef: float = 1.0
@@ -76,7 +78,7 @@ def train_vit_detector(
     model_info: str,
     dataset_path: str,
     output_dir: str,
-    freeze: bool,
+    finetune: bool,
     continue_training_from_checkpoint: bool,
     pretrained_backbone: str,
     enable_wandb: bool,
@@ -95,7 +97,7 @@ def train_vit_detector(
         :param model_info: String that specifies the model configuration to be used. Either a path to a checkpoint, or a model architecture like "rt-detr"
         :param dataset_path: Path to object detection dataset
         :param output_dir: Directory to save checkpoints
-        :param freeze: Whether to freeze the backbone
+        :param finetune: If set, finetuning parameters are used in config
         :param continue_training_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
         :param pretrained_backbone: Path to a checkpoint that contains a backbone to be reused in od training
         :param enable_wandb: Whether to enable Weights & Biases logging
@@ -137,10 +139,10 @@ def train_vit_detector(
 
     # Create training configuration
     training_config = ODTrainingConfig(
-        batch_size=48, # 64, # TODO: Everything apart from largest model config (rt-detr6) was with 64
+        batch_size=32, # 64, # TODO: Everything apart from largest model config (rt-detr6) was with 64
         num_epochs=1000,
-        learning_rate=1e-4 if freeze else 5e-4,  # Higher LR when only training head
-        backbone_learning_rate=0.0 if freeze else 5e-5,  # Lower LR for backbone if fine-tuning, otherwise 0
+        learning_rate=1e-5 if finetune else 5e-4,  # Higher LR when only training head
+        backbone_learning_rate=1e-6 if finetune else 5e-5,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler= "plateau", # "cosine",
@@ -148,7 +150,7 @@ def train_vit_detector(
         lr_step_factor=0.3,
         min_num_epochs_per_plateau=50,
         warmup_epochs=4, # Not used with Plateau scheduling
-        label_smoothing=0.1,
+        label_smoothing=0.0 if finetune else 0.1,
         save_frequency=100,
         log_frequency=50,
         save_dir=output_dir,
@@ -161,6 +163,8 @@ def train_vit_detector(
         aux_loss_coef = 0.5,
         enc_loss_coef = 0.3,
         line_loss_coef = 2.0,
+        line_angle_loss_coef = 0.1,
+        line_length_loss_coef = 0.05,
         ellipse_loss_coef = 2.0,
         ellipse_shape_coef=1.0,
         dn_loss_coef = 1.0,
@@ -378,25 +382,3 @@ def export_vit_detector(
     onnx_program.save(save_name)
     print("=" * 60)
     print(f"Success! Model has been exported to {save_name}")
-
-
-if __name__ == "__main__":
-    #argparse:
-    # import argparse
-    # parser = argparse.ArgumentParser(description="Train a ViTDetector for object detection")
-    # parser.add_argument("--checkpoint", type=str, default="", help="Path to pretrained MAE checkpoint (or OD checkpoint if --continue_from_checkpoint is set)")
-    # parser.add_argument("--dataset", type=str, default="/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)", help="Path to object detection dataset")
-    # parser.add_argument("--output", type=str, default="./od_checkpoints", help="Directory to save checkpoints")
-    # parser.add_argument("--device", type=str, default="cuda:0", help="Device to run inference on")
-    #
-    # args = parser.parse_args
-    checkpoint = "/home/simon/Desktop/maesy-training/od_checkpoints/super-moon-127/final_model.pth" # ""
-    dataset = "/home/simon/Desktop/maesy-training/data/CvatLE" # r"/home/simon/Desktop/maesy-training/data/"
-    output = r"/home/simon/Desktop/maesy-training/od_checkpoints"
-    resume = checkpoint != ""
-    train_vit_detector(checkpoint, dataset, output, True, continue_training_from_checkpoint=False, enable_wandb=False, enable_line_detection=True, enable_ellipse_detection=True)
-
-    # checkpoint = r"/home/simon/Desktop/maesy-training/od_checkpoints/leafy-music-38/best_model.pth"
-    # images = r"/home/simon/Desktop/maesy-training/data/AllData (ObjectDetection)/train/images"
-    # out = r"/home/simon/Desktop/maesy-training/inference_results"
-    # infer_vit_detector(checkpoint, images, out, True, torch.device("cuda"))

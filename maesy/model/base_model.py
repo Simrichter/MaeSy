@@ -31,9 +31,16 @@ class BaseModel(ABC, nn.Module):
         preds = raw_out # At this point, model-specific post-processing steps can be applied (usually argmax on class logits, etc.)
         return raw_out, preds, targets
 
+    def update_backbone_conf(self, *args, **kwargs) -> None:
+        """
+            Update the backbone configuration with new parameters and recreate the bakcbone's affected layers if necessary.
+            Subclasses may specify their own arguments instead of kwargs
+        """
+        raise NotImplementedError("update_backbone_conf method of base_model.py was called, but is not implemented in specific model.")
+
     def update_head_conf(self, *args, **kwargs) -> None:
         """
         Update the head configuration with new parameters (e.g., number of classes, line class ID, etc.) and recreate the head's classification layers if necessary.
         Subclasses may specify their own arguments instead of kwargs
         """
-        raise NotImplementedError("update_head_conf method was called, but is not implemented in specific model.")
+        raise NotImplementedError("update_head_conf method of base_model.py was called, but is not implemented in specific model.")

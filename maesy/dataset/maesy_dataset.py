@@ -10,6 +10,7 @@ from PIL import Image
 from typing import Optional, Callable, Dict, List, Tuple
 import numpy as np
 import yaml
+import math
 
 from maesy.dataset.bounding_box import BoundingBox
 
@@ -134,6 +135,7 @@ class MaesyDataset(Dataset):
             Dictionary containing the image and target annotations as a List[Object]
         """
         image_path = os.path.join(self.images_dir, self.images[idx])
+        target = None
         # Load image
         with Image.open(image_path).convert('RGB') as image:
             if self.return_labels:
@@ -170,89 +172,163 @@ class MaesyDataset(Dataset):
                     for box in boxes_list:
                         box.scale_to_size(img_width, img_height)  # TODO: Ugly
 
-                    labels_list = []
-                    if len(boxes_list) > 0:
-                        coords_np = np.array([box.as_xyxy() for box in boxes_list], dtype=np.float32)
-                        coords = torch.from_numpy(coords_np)
+                if len(boxes_list) > 0:
+                    coords_np = np.array([box.as_xyxy() for box in boxes_list], dtype=np.float32)
+                    coords = torch.from_numpy(coords_np)
+                    coords = torchvision.tv_tensors.BoundingBoxes(
+                        coords,
+                        format="XYXY",
+                        canvas_size=(img_height, img_width)
+                    )
+                    box_labels = torch.tensor([box.cls_id for box in boxes_list], dtype=torch.long)
+                else:
+                    coords = torchvision.tv_tensors.BoundingBoxes(
+                        torch.empty((0, 4), dtype=torch.float32),
+                        format="XYXY",
+                        canvas_size=(img_height, img_width)
+                    )
+                    box_labels = torch.empty((0,), dtype=torch.long)
 
-                        # Wrap as tv_tensors.BoundingBoxes with actual image size
-                        coords = torchvision.tv_tensors.BoundingBoxes(
-                            coords,
-                            format="XYXY",
-                            canvas_size=(img_height, img_width)  # (H, W)
-                        )
-                        labels_list.extend([box.cls_id for box in boxes_list])
-                    else:
-                        coords = torchvision.tv_tensors.BoundingBoxes(
-                            torch.empty((0, 4), dtype=torch.float32),
-                            format="XYXY",
-                            canvas_size=(img_height, img_width)
-                        )
-                    if len(line_points_list) > 0:
-                        labels_list.extend([self.special_classes['line_class_id']] * len(line_points_list))
-                    if len(ellipse_points_list) > 0:
-                        labels_list.extend([self.special_classes['ellipse_class_id']] * len(ellipse_points_list))
-                    labels = torch.tensor(labels_list, dtype=torch.long)
+                if len(line_points_list) > 0:
+                    line_labels = torch.full((len(line_points_list),), self.special_classes['line_class_id'], dtype=torch.long)
+                else:
+                    line_labels = torch.empty((0,), dtype=torch.long)
+                if len(ellipse_points_list) > 0:
+                    ellipse_labels = torch.full((len(ellipse_points_list),), self.special_classes['ellipse_class_id'], dtype=torch.long)
+                else:
+                    ellipse_labels = torch.empty((0,), dtype=torch.long)
 
-                    # Basically a "combined" else to the three above
-                    if len(boxes_list) <= 0 and len(line_points_list) <= 0:
-                        # coords = torchvision.tv_tensors.BoundingBoxes(
-                        #     torch.empty((0, 4), dtype=torch.float32),
-                        #     format="CXCYWH",
-                        #     canvas_size=(img_height, img_width)
-                        # )
-                        labels = torch.empty((0,), dtype=torch.long)
+                if box_labels.numel() or line_labels.numel() or ellipse_labels.numel():
+                    labels = torch.cat([box_labels, line_labels, ellipse_labels], dim=0)
+                else:
+                    labels = torch.empty((0,), dtype=torch.long)
 
-                    if len(line_points_list) > 0:
-                        line_points = torch.tensor(line_points_list, dtype=torch.float32)
-                    else:
-                        line_points = torch.empty((0, 4), dtype=torch.float32)
+                if len(line_points_list) > 0:
+                    line_points = torch.tensor(line_points_list, dtype=torch.float32)
+                    line_points[:, [0, 2]] *= img_width
+                    line_points[:, [1, 3]] *= img_height
+                else:
+                    line_points = torch.empty((0, 4), dtype=torch.float32)
 
-                    if len(ellipse_points_list) > 0:
-                        ellipses = torch.tensor(ellipse_points_list, dtype=torch.float32)
-                    else:
-                        ellipses = torch.empty((0, 6), dtype=torch.float32)
+                if len(ellipse_points_list) > 0:
+                    ellipses = torch.tensor(ellipse_points_list, dtype=torch.float32)
+                    ellipses[:, 0] *= img_width
+                    ellipses[:, 1] *= img_height
+                    ellipses[:, 2] += math.log(float(img_width))
+                    ellipses[:, 3] += math.log(float(img_height))
+                else:
+                    ellipses = torch.empty((0, 6), dtype=torch.float32)
 
-                    target = {"boxes": coords, "labels": labels, "line_points": line_points, "ellipses": ellipses}
+                target = {
+                    "boxes": coords,
+                    "labels": labels,
+                    "box_labels": box_labels,
+                    "line_labels": line_labels,
+                    "ellipse_labels": ellipse_labels,
+                    "line_points": line_points,
+                    "ellipses": ellipses,
+                }
             image = torchvision.tv_tensors.Image(image) / 255.0
 
-            if self.transforms is not None:
-                if self.return_labels:
-                    image, target = self.transforms(image, target)
-                    # Filter out invalid boxes (out of bounds or zero area)
-                    boxes = target["boxes"]
-                    labels = target["labels"]
+        if self.transforms is not None:
+            if self.return_labels:
+                image, target = self.transforms(image, target)
+                boxes = target["boxes"]
+                box_labels = target.get("box_labels", target["labels"][: len(boxes)])
+                line_points = target.get("line_points", torch.empty((0, 4), dtype=torch.float32))
+                ellipses = target.get("ellipses", torch.empty((0, 6), dtype=torch.float32))
+                line_labels = torch.full(
+                    (len(line_points),),
+                    self.special_classes['line_class_id'],
+                    dtype=torch.long,
+                    device=line_points.device,
+                )
+                ellipse_labels = torch.full(
+                    (len(ellipses),),
+                    self.special_classes['ellipse_class_id'],
+                    dtype=torch.long,
+                    device=ellipses.device,
+                )
 
-                    # Keep boxes that have area > 0
-                    valid_mask = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1]) > 0
-
-                    target["boxes"] = boxes[valid_mask]
-                    if target["line_points"].shape[0] > 0:
-                        valid_mask = torch.cat((valid_mask, torch.ones((target["line_points"].shape[0],), dtype=torch.bool,
-                                                                       device=valid_mask.device)))  # Keep all line targets in labels
-                    if target["ellipses"].shape[0] > 0:
-                        valid_mask = torch.cat((valid_mask, torch.ones((target["ellipses"].shape[0],), dtype=torch.bool, device=valid_mask.device))) # Keep all ellipse targets in labels
-                    target["labels"] = labels[valid_mask]
-
-                    # Normalize boxes back to [0,1]
-                    h, w = image.shape[-2:]
-                    if len(target["boxes"]) > 0:
-                        target["boxes"] = target["boxes"] / torch.tensor([w, h, w, h], device=target["boxes"].device)
+                if boxes.numel() > 0:
+                    valid_box_mask = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1]) > 0
                 else:
-                    image = self.transforms(image)
-            else:
-                # Default: convert image to tensor
-                # image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
-                if self.return_labels:
-                    # Normalize boxes back to [0,1] after transforms
-                    h, w = image.shape[-2:]
-                    target["boxes"] = target["boxes"] / torch.tensor([w, h, w, h], device=target["boxes"].device)
+                    valid_box_mask = torch.zeros((0,), dtype=torch.bool, device=boxes.device)
+                boxes = boxes[valid_box_mask]
+                box_labels = box_labels[valid_box_mask]
 
-            if self.return_labels and len(target["line_points"]) > 0:
-                target["line_points"] = target["line_points"].clamp(0.0, 1.0).to(dtype=torch.float32)
-            # if self.return_labels and len(target["ellipses"]) > 0:
-            #     target["ellipses"][:, :2] = target["ellipses"][:, :2].clamp(0.0, 1.0).to(dtype=torch.float32)
-            return image, target if self.return_labels else image
+                if line_points.numel() > 0:
+                    h, w = image.shape[-2:]
+                    x1, y1, x2, y2 = line_points.T
+                    in_bounds = (
+                        (x1 >= 0.0) & (x1 <= w) & (y1 >= 0.0) & (y1 <= h)
+                        & (x2 >= 0.0) & (x2 <= w) & (y2 >= 0.0) & (y2 <= h)
+                    )
+                    lengths = torch.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                    valid_line_mask = in_bounds & (lengths > 1.0)
+                    line_points = line_points[valid_line_mask]
+                    line_labels = line_labels[valid_line_mask]
+                else:
+                    line_points = torch.empty((0, 4), dtype=torch.float32)
+                    line_labels = torch.empty((0,), dtype=torch.long)
+
+                if ellipses.numel() > 0:
+                    h, w = image.shape[-2:]
+                    cx, cy, log_a, log_b, cos2, sin2 = ellipses.T
+                    a = torch.exp(log_a)
+                    b = torch.exp(log_b)
+                    valid_ellipse_mask = (
+                        (cx >= 0.0) & (cx <= w) & (cy >= 0.0) & (cy <= h)
+                        & torch.isfinite(log_a) & torch.isfinite(log_b)
+                        & torch.isfinite(cos2) & torch.isfinite(sin2)
+                        & (a > 1e-3) & (b > 1e-3)
+                    )
+                    ellipses = ellipses[valid_ellipse_mask]
+                    ellipse_labels = ellipse_labels[valid_ellipse_mask]
+                else:
+                    ellipses = torch.empty((0, 6), dtype=torch.float32)
+                    ellipse_labels = torch.empty((0,), dtype=torch.long)
+
+                if box_labels.numel() or line_labels.numel() or ellipse_labels.numel():
+                    target["labels"] = torch.cat([box_labels, line_labels, ellipse_labels], dim=0)
+                else:
+                    target["labels"] = torch.empty((0,), dtype=torch.long)
+                target["boxes"] = boxes
+                target["line_points"] = line_points
+                target["ellipses"] = ellipses
+                target["box_labels"] = box_labels
+                target["line_labels"] = line_labels
+                target["ellipse_labels"] = ellipse_labels
+
+                h, w = image.shape[-2:]
+                if boxes.numel() > 0:
+                    target["boxes"] = boxes / torch.tensor([w, h, w, h], device=boxes.device)
+                if line_points.numel() > 0:
+                    target["line_points"] = line_points / torch.tensor([w, h, w, h], device=line_points.device)
+                if ellipses.numel() > 0:
+                    target["ellipses"][:, 0] = ellipses[:, 0] / w
+                    target["ellipses"][:, 1] = ellipses[:, 1] / h
+                    target["ellipses"][:, 2] -= math.log(float(w))
+                    target["ellipses"][:, 3] -= math.log(float(h))
+            else:
+                image = self.transforms(image)
+        else:
+            if self.return_labels:
+                h, w = image.shape[-2:]
+                target["boxes"] = target["boxes"] / torch.tensor([w, h, w, h], device=target["boxes"].device)
+                if target["line_points"].numel() > 0:
+                    target["line_points"] = target["line_points"] / torch.tensor([w, h, w, h], device=target["line_points"].device)
+                if target["ellipses"].numel() > 0:
+                    target["ellipses"][:, 0] = target["ellipses"][:, 0] / w
+                    target["ellipses"][:, 1] = target["ellipses"][:, 1] / h
+                    target["ellipses"][:, 2] -= math.log(float(w))
+                    target["ellipses"][:, 3] -= math.log(float(h))
+
+        if self.return_labels and len(target["line_points"]) > 0:
+            target["line_points"] = target["line_points"].clamp(0.0, 1.0).to(dtype=torch.float32)
+        if self.return_labels and len(target["ellipses"]) > 0:
+            target["ellipses"][:, :2] = target["ellipses"][:, :2].clamp(0.0, 1.0).to(dtype=torch.float32)
+        return image, target if self.return_labels else image
 
     def get_image_path(self, idx: int) -> Path:
         """

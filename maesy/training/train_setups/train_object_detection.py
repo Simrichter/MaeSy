@@ -7,7 +7,6 @@ import torchvision
 from torch.utils.data import DataLoader
 from pathlib import Path
 
-from torchvision.transforms import v2 as transforms
 from tqdm import tqdm
 
 from maesy.evaluation.inferer import Inferer
@@ -20,7 +19,8 @@ from maesy.training import DetectionTrainer, TrainingConfig
 from maesy.training.utils import collate_detection_fn
 
 # Import dataset
-from maesy.dataset import UnlabeledDataset, MaesyDataset # TODO Move unlabeled dataset to MaesyDataset(Unlabeled=True)
+from maesy.dataset import MaesyDataset
+from maesy.dataset.od_augmentations import ODTrainTransforms, ODValTransforms
 
 
 @dataclass
@@ -111,23 +111,8 @@ def train_vit_detector(
 
     torch.manual_seed(seed)
 
-    train_transform_steps: List[Any] = [
-        transforms.ToImage(),
-        transforms.ToDtype(torch.float32, scale=True),
-        transforms.Resize((224, 224)),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2),
-    ]
-    if not (enable_line_detection or enable_ellipse_detection):
-        train_transform_steps.append(transforms.RandomAffine(degrees=8, translate=(0.15, 0.15), scale=(0.95, 1.05)))
-        # TODO: Affine should be possible with lines as well?
-    train_transform_steps.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
-    train_transforms = transforms.Compose(train_transform_steps)
-    val_transforms = transforms.Compose([
-        transforms.ToImage(),
-        transforms.ToDtype(torch.float32, scale=True),
-        transforms.Resize((224, 224)),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    train_transforms = ODTrainTransforms(image_size=224)
+    val_transforms = ODValTransforms(image_size=224)
 
     # None activates auto-infer, -1 deactivates class in MaesyDataset
     special_class_deactivation_dict = {'line_class_id': None if enable_line_detection else -1,
@@ -280,14 +265,7 @@ def infer_vit_detector(
     # Load model
     model = create_model_from_checkpoint(checkpoint_path) #CheckpointHandler(device=device).load_model(checkpoint_path)
     model.eval()
-    infer_transforms = transforms.Compose(
-        [  # TODO: make blank image folder possible again, "auto-infer" split? Maybe through 'None' -> All splits
-            transforms.ToImage(),
-            transforms.ToDtype(torch.float32, scale=True),
-            transforms.Resize((224, 224)),
-            # transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
+    infer_transforms = ODValTransforms(image_size=224)
 
     dataset = MaesyDataset(dataset_path, split, "None", transforms=infer_transforms)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)

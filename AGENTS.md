@@ -13,21 +13,22 @@
 
 ## Data + Batch Contracts (Must Preserve)
 - OD dataset format is YOLO-style: `<split>/images` + `<split>/labels` (`maesy/dataset/object_detection_dataset.py`).
-- Label rows are normalized `class_id cx cy w h`; training expects normalized `cxcywh` boxes and `labels` long tensors.
-- OD batch path is `ObjectDetectionDataset` -> `collate_detection_fn` -> `handle_raw_batch` -> detection loss matching.
+- Default training/inference uses `MaesyDataset` (`maesy/dataset/maesy_dataset.py`) and requires a `dataset.yaml` in the dataset root (or pass the yaml path directly) with `path`, split keys (`train`/`val`/`test`), `box_format` (`xyxy` or `cxcywh`), `nc`, and `names`.
+- Label rows are normalized; `MaesyDataset` accepts `cxcywh` or `xyxy` per `box_format` and always returns normalized `boxes` in `xyxy` plus `labels` long tensors.
+- OD batch path is `MaesyDataset`/`ObjectDetectionDataset` -> `collate_detection_fn` -> `handle_raw_batch` -> detection loss matching.
 - `collate_detection_fn` and `handle_raw_batch` are implemented in `maesy/training/utils/utils.py` (see `tests/test_od_batch_contract.py`).
 - `collate_detection_fn` output must stay `(images, List[target_dict])` for OD trainers/losses.
-- If line detection is enabled, `ObjectDetectionDataset` also emits normalized `target["line_points"]` (`x1 y1 x2 y2`) for `line_class_id` targets.
+- If line/ellipse detection is enabled, targets include normalized `target["line_points"]` (`x1 y1 x2 y2`) and `target["ellipses"]` (`center_x center_y log_a log_b cos(2*theta) sin(2*theta)`) when class names are mapped via `dataset.yaml` (`lines`, `ellipses`).
 
 ## Environment + Workflow
 - Use the project venv: `MaeSy/.venv`; package is already editable-installed there.
 - Prefer venv executables directly (for deterministic agent runs): `./.venv/bin/python`, `./.venv/bin/maesy`.
 - Discover CLI surfaces before edits: `maesy train -h`, `maesy dataset -h`, `maesy evaluate -h`, `maesy export -h`.
 - Common flows:
-  - `maesy train mae --dataset <dataset_root> [--checkpoint ...] [--wandb]`
-  - `maesy train od --dataset <dataset_root> [--checkpoint ...] [--resume] [--freeze] [--detector {detr,rt_detr}] [--enable-denoising ...] [--enable-line-detection --line-class-id N] [--wandb]`
-  - `maesy evaluate infer <image_folder> <checkpoint> [-o out_dir] [--detector {auto,detr,rt_detr}] [--visualize]`
-  - `maesy export <checkpoint> [-o out_dir] [--architecture {detr,rt_detr}]`
+  - `maesy train mae <model_or_checkpoint> --dataset <dataset_root_or_yaml> [--resume] [--wandb]`
+  - `maesy train od <model_or_checkpoint> --dataset <dataset_root_or_yaml> [--finetune] [--resume] [--backbone <ckpt>] [--enable-denoising ...] [--enable-line-detection] [--enable-ellipse-detection] [--wandb]`
+  - `maesy evaluate infer <image_folder> <checkpoint> [-o out_dir] [--visualize]`
+  - `maesy export <model_or_checkpoint> [-o out_dir] [--name NAME] [--num-classes N] [--enable-line-detection --line-class-id N] [--enable-ellipse-detection --ellipse-class-id N]`
 
 ## Testing + Validation Policy
 - For code changes, add/update tests that cover new behavior, then run all tests in `.venv`.
@@ -39,11 +40,10 @@
 - W&B is initialized in `BaseTrainer`; run naming controls checkpoint subdirs.
 - Checkpoints are custom (`backbone`, `head`, type/config metadata) in `maesy/model_tools/checkpoint_handler.py`.
 - If checkpoint schema/model contracts change, update save/load compatibility checks together.
-- Inference/export can infer detector architecture from checkpoint `headtype`; explicit CLI overrides should remain supported.
+- Inference/export load models from checkpoints via `create_model_from_checkpoint`; export can also take an architecture name from `cfg/*.yaml` when `--num-classes` (and special class ids) are provided.
 - Dataset creation supports optional clustering (`resnet_kmeans`, `resnet_faiss`) via `DatasetManager.create_dataset`.
 
 ## Safe Change Strategy
 - For new training/export modes/models: wire all three layers (`command_line.py` args -> `cli_*`/`cli_export.py` -> `training/train_setups/*`).
 - Keep transforms consistent across train/val/infer (current default uses `224x224` + ImageNet normalization).
 - Prefer CLI + `train_setups` behavior over stale examples/docs when they disagree.
-

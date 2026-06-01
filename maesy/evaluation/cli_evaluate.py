@@ -24,5 +24,5 @@ def main(args):
 
         case "test":
             from maesy.evaluation import Evaluator
-            evaluator = Evaluator(args.checkpoint, args.dataset, args.device)
+            evaluator = Evaluator(args.checkpoint, args.dataset, args.device, args.split)
             evaluator.evaluate()

@@ -27,15 +27,18 @@ class Evaluator:
         checkpoint_path: str,
         dataset_path: str,
         device: str = "",
+        split: str = "test",
         output_dir: str | None = None,
     ):
         """
         Initialize evaluator.
         
         Args:
-            checkpoint_path: Path to the checkpoint to evaluate
-            dataset_path: Path to the MaeSyDataset with a test split to evaluate on
-            device: Device to run evaluation on
+            :param checkpoint_path: Path to the checkpoint to evaluate
+            :param dataset_path: Path to the MaeSyDataset with a test split to evaluate on
+            :param device: Device to run evaluation on
+            :param split: The dataset's split to evaluate on. Default: 'test'
+            :param output_dir: The output folder for the results. Default: 'test_results' subfolder in checkpoint folder
         """
         if device == "":
             device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -56,12 +59,12 @@ class Evaluator:
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
             ])
 
-        dataset = MaesyDataset(dataset_path, "test", "detection", transforms=test_transforms, enable_lines=True, enable_ellipses=True)
+        dataset = MaesyDataset(dataset_path, split, "detection", transforms=test_transforms, enable_lines=True, enable_ellipses=True)
         self.special_classes = dataset.get_special_classes()
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False, collate_fn=collate_detection_fn)
         self.inferer = Inferer(model=self.model, data_loader=dataloader, device=device)
         checkpoint_dir = os.path.dirname(os.path.abspath(checkpoint_path))
-        self.output_dir = output_dir or os.path.join(checkpoint_dir, "test results")
+        self.output_dir = output_dir or os.path.join(checkpoint_dir, "test_results")
         self.class_labels = [
             dataset.id_to_name.get(i, str(i))
             for i in range(self.model.config.num_classes)

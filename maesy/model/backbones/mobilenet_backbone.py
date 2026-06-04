@@ -126,7 +126,7 @@ class MobileNetBackbone(nn.Module):
         """
         return {k: torch.Size((self.feature_dim[k], self.spatial_feature_size[k], self.spatial_feature_size[k])) for k in self.config.feature_scales}
 
-    def get_feature_channels(self) -> Tuple[int, ...]:
+    def get_feature_channels(self) -> Tuple[int, ...]: # TODO: Make dict[str, int]
         """
         Return the number of channels for each feature scale as a tuple
         """

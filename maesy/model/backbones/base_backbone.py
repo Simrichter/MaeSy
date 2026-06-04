@@ -17,7 +17,7 @@ class BaseBackbone(Protocol):
     """
     type: str
     config: BaseConfig
-    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, *args, **kwargs) -> Dict[str, torch.Tensor]:
         """
             Forward pass through the backbone. Should return a dict of feature maps for each requested feature scale, e.g. {"c3": c3_features, "c4": c4_features, "c5": c5_features}
         """
@@ -36,6 +36,7 @@ class BaseBackbone(Protocol):
         raise NotImplementedError("get_feature_channels")
 
     def get_transforms(self) -> List[Transform]:
+        # TODO: Either implement or leave out...
         """
             Returns a list of backbone-specific transforms that will be applied to the input tensor.
             Especially helpful with pretrained weights that expect certain normalizations

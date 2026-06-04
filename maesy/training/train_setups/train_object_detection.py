@@ -125,9 +125,9 @@ def train_vit_detector(
     # Create training configuration
     training_config = ODTrainingConfig(
         batch_size=32, # 64, # TODO: Everything apart from largest model config (rt-detr6) was with 64
-        num_epochs=1000,
-        learning_rate=1e-5 if finetune else 5e-4,  # Higher LR when only training head
-        backbone_learning_rate=1e-6 if finetune else 5e-5,  # Lower LR for backbone if fine-tuning, otherwise 0
+        num_epochs=3000,
+        learning_rate=5e-6 if finetune else 1e-5,  # Higher LR when only training head
+        backbone_learning_rate=5e-7 if finetune else 1e-6,  # Lower LR for backbone if fine-tuning, otherwise 0
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler= "plateau", # "cosine",

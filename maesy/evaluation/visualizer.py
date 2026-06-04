@@ -140,7 +140,8 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
                 continue
             # img = draw_boxes_in_image(img_path, boxes, name_coding=name_coding).float() / 255.0
             b = torch.stack([box.coordinates_as_tensor() for box in boxes])
-            img = _draw_boxes_in_tensor(read_image(img_path), b, labels=torch.tensor([box.cls() for box in boxes]), name_coding=name_coding, xyxy=True).float() / 255.0
+            img = read_image(img_path)[:3] # Convert RGBA to RGB by dropping alpha channel if necessary
+            img = _draw_boxes_in_tensor(img, b, labels=torch.tensor([box.cls() for box in boxes]), name_coding=name_coding, xyxy=True).float() / 255.0
             # Annotiertes Bild speichern
             out_path = os.path.join(output_dir, file)
             save_image(img, out_path)

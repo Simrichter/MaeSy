@@ -202,7 +202,8 @@ class DatasetManager:
                        convert: Optional[str] = None,
                        convert_id_blacklist: Optional[List[int]] = None,
                        merge_ids: Optional[dict[int, int]] = None,
-                       nc: int = None,
+                       permute_ids: Optional[list[int]] = None,
+                       nc: Optional[int] = None,
                        class_names: Optional[List[str]] = None,
                        special_classes: Optional[Dict[str, str]] = None,
                        ) -> Path:
@@ -224,6 +225,7 @@ class DatasetManager:
             :param convert: Optional choice of ["datumaro", "robert"]. Triggers automatic conversion in DevilsYolo format before dataset creation.
             :param convert_id_blacklist: List of class IDs to ignore during conversion. Only used with convert.
             :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y
+            :param permute_ids: A list of indices used to permute the class IDs. The index of the list represents the old class ID, the value at that index represents the new class ID. This is applied after merging and blacklisting operations.
             :param nc: Optional number of classes (for dataset.yaml)
             :param class_names: Optional List of strings that specify class names in class_id order (for dataset.yaml)
             :param special_classes: Optional Dict of strings with keys in ['lines', 'ellipses'] and values in class_names (for dataset.yaml)
@@ -286,7 +288,7 @@ class DatasetManager:
                     raise ValueError(f"Unknown dataset type {convert}. Conversion failed...")
             out_folders = []
             for folder in folder_names:
-                img_dir, nc, class_names, special_classes = conversion_function(folder, convert_id_blacklist, merge_ids)
+                img_dir, nc, class_names, special_classes = conversion_function(folder, convert_id_blacklist, merge_ids, permute_ids)
                 out_folders.append(img_dir)
             folder_names = out_folders
 

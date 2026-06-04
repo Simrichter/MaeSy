@@ -43,7 +43,7 @@ def ellipse_to_cholesky(cx: float, cy: float, a: float, b: float, theta: float):
 
     return np.stack([cx, cy, l11, l21, l22], axis=-1)
 
-def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None):
+def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None, permute_ids: Optional[list[int]]=None):
     """
         Convert Image annotations from Robert's Unity simulator outputs to devils_yolo format.
         Returns output path, number of classes, class_names and special_classes dict (for create dataset)
@@ -52,6 +52,7 @@ def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[
             :param dataset_dir: Path to the root data folder
             :param class_id_blacklist: List of class ids to ignore during conversion
             :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y
+            :param permute_ids: A list of indices used to permute the class IDs. The index of the list represents the old class ID, the value at that index represents the new class ID. This is applied after merging and blacklisting operations.
 
         Returns:
             path: Path to images and labels
@@ -65,9 +66,6 @@ def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[
     print(f"Dataset path: {dataset_dir}")
     print("=" * 60)
 
-    if merge_ids is None:
-        merge_ids = {}
-
     name_to_id = {
         "Trionda Ball 2026(Clone)": 0,
         "K1(Clone)": 1,
@@ -76,8 +74,14 @@ def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[
         "CenterCircle": 4,
     }
 
+    if merge_ids is None:
+        merge_ids = {}
+
     if class_id_blacklist is None:
         class_id_blacklist = {}
+
+    if permute_ids is None or len(permute_ids) != len(set(name_to_id.values())):
+        permute_ids = range(len(name_to_id.values()))
 
     # apply merging and blacklisting operations
     id_to_name = {v: k for k, v in name_to_id.items()}
@@ -86,7 +90,9 @@ def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[
     for class_id in class_id_blacklist:
         del name_to_id[id_to_name[class_id]]
     # rebuild indices
-    translate_ids = {v: k for k, v in enumerate(set(name_to_id.values()))}
+    unique_ids = list(name_to_id.fromkeys(name_to_id.values()))
+    unique_ids[:] = [unique_ids[i] for i in permute_ids]
+    translate_ids = {v: k for k, v in enumerate(unique_ids)}
     name_to_id = {k: translate_ids[v] for k, v in name_to_id.items()}
     # build special classes dict
     special_classes = {}
@@ -188,7 +194,7 @@ def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[
     return out_path, len(name_to_id.values()), list(name_to_id.keys()), special_classes
 
 
-def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None) -> Tuple[str, int, list, dict]:
+def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None, permute_ids: Optional[list[int]]= None) -> Tuple[str, int, list, dict]:
         """
         Convert Image annotations exported from cvat in datumaro JSON format into DevilsYolo format.
         Lines are represented by their two endpoint coordinates in xyxy format.
@@ -198,7 +204,8 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
         Args:
             :param datumaro_dir: Path to the datumaro dataset root folder (the one that contains the annotations folder and the images folder)
             :param class_id_blacklist: List of class ids to ignore during conversion
-            :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y
+            :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y (only class ID y is kept afterward)
+            :param permute_ids: A list of indices used to permute the class IDs. The index of the list represents the old class ID, the value at that index represents the new class ID. This is applied after merging and blacklisting operations.
 
         Returns:
             path: Path to images and labels
@@ -211,11 +218,6 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
         print(f"Converting datumaro to DevilsYolo format")
         print(f"Dataset root path: {datumaro_dir}")
         print("=" * 60)
-
-        if merge_ids is None:
-            merge_ids = {}
-        if class_id_blacklist is None:
-            class_id_blacklist = []
 
         def _fix_multipoint_line(datadict):
             for (img_i, img_dat) in enumerate(datadict['items']):
@@ -250,15 +252,26 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
 
         id_to_name = {i: label["name"] for i, label in enumerate(data["categories"]["label"]["labels"])}
 
+        if merge_ids is None:
+            merge_ids = {}
+        if class_id_blacklist is None:
+            class_id_blacklist = []
+
         # update merge and blacklist information into id_to_name to return the correct nc, class_names and special_classes
         for k, v in merge_ids.items():
-            print(f"Merging class {id_to_name[v]} into class {id_to_name[k]}")
-            id_to_name[v] = id_to_name[k]
+            print(f"Merging class {id_to_name[k]} into class {id_to_name[v]}")
+            id_to_name[k] = id_to_name[v]
         for class_id in class_id_blacklist:
             print(f"Removing {class_id} ({id_to_name[class_id]}) from id_to_name due to blacklist")
             del id_to_name[class_id]
         # Rebuilding keys to ensure continuous class IDs and no duplicate names
-        new_id_to_name = {k: v for k, v in enumerate(set(id_to_name.values()))} # Only used to generate information for building the dataset.yaml file
+        unique_names = list(id_to_name.fromkeys(id_to_name.values()))
+        if permute_ids is None or len(permute_ids) == 0:
+            permute_ids = range(len(unique_names))
+        else:
+            assert len(permute_ids) == len(unique_names), f"Error: number of permute_ids ({len(permute_ids)}) does not match number of unique class names ({len(unique_names)}) after merging and blacklisting operations."
+        unique_names[:] = [unique_names[i] for i in permute_ids or range(len(unique_names))]
+        new_id_to_name = {k: v for k, v in enumerate(unique_names)} # Only used to generate information for building the dataset.yaml file
         name_to_new_id = {v: k for k, v in new_id_to_name.items()}
         translate_ids = {k: name_to_new_id[v] for k, v in id_to_name.items()}  # Usage: translate_ids[old_id] = new_id
         id_to_name = new_id_to_name

@@ -135,13 +135,14 @@ def main():
     dataset_creator_parser.add_argument("-s", "--split", type=float, nargs=3, metavar=('TRAIN', 'VAL', 'TEST'), default=None)
     dataset_creator_parser.add_argument("-d", "--delete", action="store_true", help="Delete original folders after creating dataset")
     dataset_creator_parser.add_argument("-r", "--resize", type=int, nargs=2, metavar=('WIDTH', 'HEIGHT'), default=None, help="Resize images to WIDTH HEIGHT")
-    dataset_creator_parser.add_argument("--labels", "-l", action="store_true", help="Whether to include labels in the created dataset (default: False)")
+    dataset_creator_parser.add_argument("--no-labels", action="store_true", help="Use to exclude labels in the created dataset (default: include labels)")
     dataset_creator_parser.add_argument("-t", "--step", type=int, default=1, help="Step size for sampling images from folders")
     dataset_creator_parser.add_argument("-i", "--start-index", type=int, default=0, help="Start index for sampling images from folders")
     dataset_creator_parser.add_argument("-c", "--cluster-method", type=str, choices=["resnet_kmeans", "resnet_faiss"], default=None, help="Clustering method to use for dataset creation")
     dataset_creator_parser.add_argument("--convert", type=str, choices=["datumaro", "robert"], default=None, help="Convert data from a different dataset type before clustering/dataset creation currently only works with single folder datapaths")
     dataset_creator_parser.add_argument("--convert-id-blacklist", type=int, nargs='+', default=[], help="Space-separated list of ids to blacklist when converting. Only works when --convert flag is used as well")
-    dataset_creator_parser.add_argument("--convert-merge-ids", type=int, nargs='+', default=[], help="Space-separated list of pairs of ids to merge into a single class when converting/creating the dataset. Only works when --convert flag is used as well. Example usage: --merge-ids 1 2 3 4 (will merge classes 1 into 2, and class 3 into 4)")
+    dataset_creator_parser.add_argument("--convert-merge-ids", type=int, nargs='+', default=[], help="Space-separated list of pairs of ids to merge together when converting/creating the dataset. Only works when --convert flag is used as well. Example usage: --merge-ids 1 2 3 4 (will merge class 1 into 2, and class 3 into 4. Only class IDs 2 and 4 are kept afterward)")
+    dataset_creator_parser.add_argument("--convert-permute-ids", type=int, nargs='+', default=[], help="Space-separated list of indices to permute the class IDs when converting/creating the dataset. Only works when --convert flag is used as well.")
     dataset_creator_parser.add_argument("-o", "--output-path", type=str, default="./data", help="Directory, in which the dataset will be saved (default: ./data)")
     dataset_creator_parser.add_argument("--left-right", "-lr", action="store_true", default=False, help="If set, expects matching images from stereo cameras. Assumes data_paths to lead to right images and expects 'left' folder next to 'right' folder")
 
@@ -153,8 +154,9 @@ def main():
     # dataset_convert_parser.add_argument("--output_format", help="Desired format of the dataset", choices=["devilsyolo"], default="devilsyolo")
     dataset_convert_parser.add_argument("-o", "--output-path", help="Output path for the created .txt label files", default="")
     dataset_convert_parser.add_argument("--convert-id-blacklist", type=int, nargs='+', default=[], help="Space-separated list of ids to blacklist when converting.")
-    dataset_convert_parser.add_argument("--convert-merge-ids", type=int, nargs='+', default=[],
-                                        help="Space-separated list of pairs of ids to merge into a single class when converting/creating the dataset. Only works when --convert flag is used as well. Example usage: --merge-ids 1 2 3 4 (will merge classes 1 into 2, and class 3 into 4)")
+    dataset_convert_parser.add_argument("--convert-merge-ids", type=int, nargs='+', default=[], help="Space-separated list of pairs of ids to merge into a single class when converting/creating the dataset. Only works when --convert flag is used as well. Example usage: --merge-ids 1 2 3 4 (will merge classes 1 into 2, and class 3 into 4. Only class IDs 2 and 4 are kept afterward)")
+    dataset_convert_parser.add_argument("--convert-permute-ids", type=int, nargs='+', default=[],
+                                        help="Space-separated list of indices to permute the class IDs when converting/creating the dataset. Only works when --convert flag is used as well.")
     args = parser.parse_args()
     # args = sys.argv[1:]
     match args.module:

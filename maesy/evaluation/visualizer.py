@@ -1,7 +1,7 @@
 import os
 import warnings
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import cv2
 import numpy as np
@@ -66,7 +66,7 @@ def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = 
         save_image(drawn/255, out_path)
         # save_image(img, out_path)
 
-def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_file:str= "", enable_lines: bool = True, enable_ellipses: bool = True):
+def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_file:str= "", enable_lines: bool = True, enable_ellipses: bool = True, special_classes: Optional[dict[str, int]]=None):
     """
         Visualizes bounding boxes and lines. Autodetects MaesyDataset or standard image folder
 
@@ -77,7 +77,8 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
             :param label_file: Path to a file that contains the class names in order (default: empty, i.e. use default class names / class names from MaesyDataset yaml)
             :param enable_lines: Whether to visualize lines
             :param enable_ellipses: Whether to visualize lines
-    """ # TODO: Update tooltips in commandline.py
+            :param special_classes: Optional dict to specify the class IDs special classes (for example: {"ellipses": 3, "lines": 5}s
+    """
     # TODO: Use MaesyDataset yaml for class names
 
 
@@ -120,6 +121,9 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
     else:
         name_coding = None
 
+    if special_classes is None:
+        special_classes = {}
+
     lbl_dir = input_dir if label_path=="" else Path(label_path)
 
     for file in os.listdir(input_dir):
@@ -132,19 +136,42 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
             if not os.path.exists(txt_path):
                 print(f"WARNING: No annotation file found for image {img_path}, skipping visualization.\n (Expected annotation file: {txt_path})")
                 continue
-            boxes = [BoundingBox.from_str(l, xyxy=True) for l in open(txt_path, "r").readlines()]
-            # print(boxes)
-            boxes = [box for box in boxes ] # TODO Filter is deactivated only for tests: if box.cls_id != 3
-            if len(boxes) == 0:
-                print(f"Empty annotations for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
-                continue
-            # img = draw_boxes_in_image(img_path, boxes, name_coding=name_coding).float() / 255.0
-            b = torch.stack([box.coordinates_as_tensor() for box in boxes])
-            img = read_image(img_path)[:3] # Convert RGBA to RGB by dropping alpha channel if necessary
-            img = _draw_boxes_in_tensor(img, b, labels=torch.tensor([box.cls() for box in boxes]), name_coding=name_coding, xyxy=True).float() / 255.0
+
+            boxes = []
+            labels = []
+            lines = []
+            ellipses = []
+            for l in open(txt_path, "r").readlines():
+                parts = l.split(" ")
+                cls_id = int(parts[0])
+                if cls_id not in special_classes.values():
+                    boxes.append((box := BoundingBox.from_str(l, xyxy=True)).coordinates_as_tensor())
+                    labels.append(box.cls())
+                elif cls_id == special_classes["lines"]:
+                    lines.append([float(x) for x in parts[1:]])
+                elif cls_id == special_classes["ellipses"]:
+                    ellipses.append([float(x) for x in parts[1:]])
+
+                if len(boxes) == 0:
+                    print(f"Empty annotations for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
+                    continue
+                # img = draw_boxes_in_image(img_path, boxes, name_coding=name_coding).float() / 255.0
+            img = read_image(img_path)[:3]  # Convert RGBA to RGB by dropping alpha channel if necessary
+            if len(boxes)>0:
+                b = torch.stack(boxes)
+                img = _draw_boxes_in_tensor(img, b, labels=torch.tensor(labels), name_coding=name_coding, xyxy=True)
+            img = _draw_lines_in_tensor(img, torch.tensor(lines))
+            img = _draw_ellipses_in_tensor(img, torch.tensor(ellipses))
+            img = img / 255.0
+
             # Annotiertes Bild speichern
             out_path = os.path.join(output_dir, file)
             save_image(img, out_path)
+
+            # drawn = draw_objects_in_tensor((img * 255).to(torch.uint8), targets["boxes"], targets["labels"][:len(targets["boxes"])], targets["line_points"],
+            #                                targets["ellipses"])
+            # out_path = os.path.join(output_dir, dataset.get_image_path(idx).name)
+            # save_image(drawn / 255, out_path)
 
     print(f"Fertig! Annotierte Bilder liegen in: {output_dir}")
 

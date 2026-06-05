@@ -19,7 +19,7 @@ from maesy.training import DetectionTrainer, TrainingConfig
 from maesy.training.utils import collate_detection_fn
 
 # Import dataset
-from maesy.dataset import MaesyDataset
+from maesy.dataset import MaesyDataset, MultiDataset
 from maesy.dataset.od_augmentations import ODTrainTransforms, ODValTransforms
 
 
@@ -76,7 +76,7 @@ class ODTrainingConfig(TrainingConfig):
 
 def train_vit_detector(
     model_info: str,
-    dataset_path: str,
+    dataset_paths: list[str],
     output_dir: str,
     finetune: bool,
     continue_training_from_checkpoint: bool,
@@ -95,7 +95,7 @@ def train_vit_detector(
 
     Args:
         :param model_info: String that specifies the model configuration to be used. Either a path to a checkpoint, or a model architecture like "rt-detr"
-        :param dataset_path: Path to object detection dataset
+        :param dataset_paths: List of paths to object detection MaesyDatasets
         :param output_dir: Directory to save checkpoints
         :param finetune: If set, finetuning parameters are used in config
         :param continue_training_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
@@ -118,8 +118,8 @@ def train_vit_detector(
     special_class_deactivation_dict = {'line_class_id': None if enable_line_detection else -1,
                                        'ellipse_class_id': None if enable_ellipse_detection else -1}
 
-    train_dataset = MaesyDataset(dataset_path, "train", "detection", train_transforms, enable_lines=enable_line_detection, enable_ellipses=enable_ellipse_detection)
-    val_dataset = MaesyDataset(dataset_path, "val", "detection", val_transforms, enable_lines=enable_line_detection, enable_ellipses=enable_ellipse_detection)
+    train_dataset = MultiDataset([MaesyDataset(dataset_path, "train", "detection", train_transforms, enable_lines=enable_line_detection, enable_ellipses=enable_ellipse_detection) for dataset_path in dataset_paths])
+    val_dataset = MultiDataset([MaesyDataset(dataset_path, "val", "detection", val_transforms, enable_lines=enable_line_detection, enable_ellipses=enable_ellipse_detection) for dataset_path in dataset_paths])
     assert train_dataset.get_special_classes() == val_dataset.get_special_classes(), "Error, train and val datasets must have same special classes!"
 
     # Create training configuration

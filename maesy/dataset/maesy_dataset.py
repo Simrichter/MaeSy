@@ -27,9 +27,9 @@ class MaesyDataset(Dataset):
             start_index: int = 0,
             step: int = 1,
             repeat_factor: int = 1,
-            enable_lines=False,
-            enable_ellipses=False,
-            use_first_n: int = None
+            enable_lines: bool = False,
+            enable_ellipses: bool = False,
+            use_first_n: Optional[int] = None
     ):
         """
         Initialize ObjectDetectionDataset.
@@ -339,10 +339,8 @@ class MaesyDataset(Dataset):
     def get_image_path(self, idx: int) -> Path:
         """
         Get the full path to an image at the given index.
-
         Args:
             idx: Index of the image
-
         Returns:
             Full path to the image file
         """
@@ -360,5 +358,7 @@ class MaesyDataset(Dataset):
     def get_num_classes(self) -> int:
         """
         Get the number of classes according to dataset.yaml
+        Returns:
+            Number of classes
         """
         return self.num_classes

@@ -96,10 +96,16 @@ class MaesyDataset(Dataset):
             elif self.num_classes != -1 and self.num_classes != len(self.name_to_id):
                 raise ValueError(f"Mismatch in dataset.yaml\nnc: {self.num_classes}, but {len(self.name_to_id)} class names were found.")
 
-            self.special_classes = {'line_class_id': self.name_to_id.get(yaml_data.get("lines", None), -1),
-                                    'ellipse_class_id': self.name_to_id.get(yaml_data.get("ellipses", None), -1)}
-            self.enable_lines = enable_lines
-            self.enable_ellipses = enable_ellipses
+            self.special_classes = {'line_class_id': self.name_to_id.get(yaml_data.get("lines"), -1),
+                                    'ellipse_class_id': self.name_to_id.get(yaml_data.get("ellipses"), -1)}
+            self.enable_lines = enable_lines and self.special_classes["line_class_id"] != -1
+            self.enable_ellipses = enable_ellipses and self.special_classes["ellipse_class_id"] != -1
+
+            # Correct num_classes count if lines/ellipses are disabled, but would have been present in the dataset otherwise
+            if not self.enable_lines and self.special_classes["line_class_id"] != -1:
+                self.num_classes -= 1
+            if not self.enable_ellipses and self.special_classes["ellipse_class_id"] != -1:
+                self.num_classes -= 1
 
             self.annotations = []
             for img in self.images:

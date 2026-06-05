@@ -127,8 +127,14 @@ class DatasetManager:
                 raise ValueError(f"Unknown clustering method {cluster_method}")
 
     @staticmethod
-    def _copy_resize(source_paths: List[Path], target_paths: List[Path], resize: int | List[int] | None,
-                     label_target_paths: Optional[List[Path]] = None):
+    def _copy_resize(source_paths: List[Path], target_paths: List[Path], resize: List[int] | None, label_target_paths: Optional[List[Path]] = None):
+
+        def _check_collision(path) -> str:
+            while os.path.exists(path):  # name collision
+                path = path.parent / f"{path.stem}_copy{path.suffix}"
+            return path
+
+        collision_count = 0
         if resize is not None:
             if len(resize) > 2:
                 raise ValueError(
@@ -141,18 +147,20 @@ class DatasetManager:
                         img = img.resize((resize[0], resize[1] if len(resize) == 2 else resize[0]))
                         if not os.path.exists(target_path.parent):
                             target_path.parent.mkdir(parents=True, exist_ok=True)
+                        target_path = _check_collision(target_path)
                         img.save(target_path)#/ img_file.name
         else:
-            for img_file, target_path in tqdm(zip(source_paths, target_paths),
-                                              desc=f"Copying {len(source_paths)} files"):
+            for img_file, target_path in tqdm(zip(source_paths, target_paths), desc=f"Copying {len(source_paths)} files"):
                 if not os.path.exists(target_path.parent):
                     target_path.parent.mkdir(parents=True, exist_ok=True)
+                target_path = _check_collision(target_path)
                 shutil.copy(img_file, target_path)
 
         if label_target_paths is not None:
             for img_file, target_path in tqdm(zip(source_paths, label_target_paths), desc=f"Copying label files"):
                 label_file = img_file.with_suffix('.txt')  # Assuming label files have the same name but .json extension
                 if label_file.exists():
+                    target_path = _check_collision(target_path)
                     shutil.copy(label_file, target_path) #/ label_file.name
 
     @staticmethod
@@ -244,6 +252,8 @@ class DatasetManager:
         # Set up dataset folder structure
         # Always using YOLO-Style dataset structure (with train/val/test top-level folders and images/labels subfolders)
         dataset_dir = self.data_root / dataset_name
+        if os.path.exists(dataset_dir):
+            raise ValueError(f"Dataset directory {dataset_dir} already exists. Please choose a different name or delete the existing folder.")
         splits = [s for i, s in enumerate(["train", "val", "test"])]
         split_paths = [dataset_dir / split for split in splits]
         os.makedirs(dataset_dir, exist_ok=True)

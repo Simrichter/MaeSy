@@ -298,7 +298,7 @@ def infer_vit_detector(
             # TODO: Add inference for lines + ellipses
     if visualize:
         from maesy.evaluation import visualize_data
-        visualize_data(str(out_path), "")
+        visualize_data(str(out_path), "", special_classes={"lines": model.head.config.line_class_id, "ellipses": model.head.config.ellipse_class_id})
 
 def export_vit_detector(
     model_info: str,

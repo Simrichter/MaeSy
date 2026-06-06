@@ -2,7 +2,7 @@ from typing import Dict
 
 from torch.utils.data import Dataset
 
-from maesy.dataset import MaesyDataset
+from .maesy_dataset import MaesyDataset
 
 
 class MultiDataset(Dataset):

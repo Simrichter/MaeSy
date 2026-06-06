@@ -15,6 +15,7 @@ from tqdm import tqdm
 from maesy import ObjectDetectionDataset
 from maesy.dataset import MaesyDataset
 from maesy.dataset.bounding_box import BoundingBox
+from maesy.dataset.od_augmentations import ODTrainTransforms
 from maesy.training.utils import collate_detection_fn, handle_raw_batch
 
 
@@ -66,21 +67,22 @@ def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = 
         save_image(drawn/255, out_path)
         # save_image(img, out_path)
 
-def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_file:str= "", enable_lines: bool = True, enable_ellipses: bool = True, special_classes: Optional[dict[str, int]]=None):
+def visualize_data(input_dir: str, output_dir: str, splits: list[str]= ["train", "val", "test"], label_path:str= "", label_file:str= "", enable_lines: bool = True, enable_ellipses: bool = True, special_classes: Optional[dict[str, int]]=None, apply_transforms: bool = False):
     """
         Visualizes bounding boxes and lines. Autodetects MaesyDataset or standard image folder
 
         Args:
             :param input_dir: Root folder of MaesyDataset or path to images (autodetects)
             :param output_dir: Output folder to be created. Default: 'Visualized' subfolder in the input directory
+            :param splits: List of splits to visualize. Default: ["train", "val", "test"]
             :param label_path: Path to a folder that contains the annotation text files (Leave empty, if MaesyDataset or annotations in input_dir)
             :param label_file: Path to a file that contains the class names in order (default: empty, i.e. use default class names / class names from MaesyDataset yaml)
             :param enable_lines: Whether to visualize lines
             :param enable_ellipses: Whether to visualize lines
-            :param special_classes: Optional dict to specify the class IDs special classes (for example: {"ellipses": 3, "lines": 5}s
+            :param special_classes: Optional dict to specify the class IDs special classes (for example: {"ellipses": 3, "lines": 5})
+            :param apply_transforms: Whether to apply the train-transforms for visualization
     """
     # TODO: Use MaesyDataset yaml for class names
-
 
     if output_dir!="" and os.path.exists(output_dir):
         raise ValueError(f"Failed: Output directory {output_dir} already exists. Leave unspecified to create a 'visualized' subfolder in the input directory.")
@@ -93,9 +95,9 @@ def visualize_data(input_dir: str, output_dir: str, label_path:str= "", label_fi
     print("=" * 60)
 
     datasets = []
-    for split in ["train", "val", "test"]:
+    for split in splits:
         try:
-            datasets.append(MaesyDataset(input_dir, split, "detection", enable_lines=enable_lines, enable_ellipses=enable_ellipses))
+            datasets.append(MaesyDataset(input_dir, split, "detection", enable_lines=enable_lines, enable_ellipses=enable_ellipses, transforms=ODTrainTransforms(image_size=224) if apply_transforms else None))
         except AssertionError as e:
             ...
             print(e)

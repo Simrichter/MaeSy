@@ -13,6 +13,9 @@ from torchvision.transforms import functional as F
 from torchvision.transforms import RandomAffine, RandomResizedCrop
 
 
+_EPS = 1e-8
+
+
 def _get_hw(image: torch.Tensor) -> Tuple[int, int]:
     return int(image.shape[-2]), int(image.shape[-1])
 
@@ -21,6 +24,15 @@ def _ensure_float_image(image: torch.Tensor) -> torch.Tensor:
     if torch.is_floating_point(image):
         return image
     return image.to(dtype=torch.float32).div(255.0)
+
+
+def _clamp_unit_interval(values: torch.Tensor) -> torch.Tensor:
+    if values.numel() == 0:
+        return values
+    values = values.clone()
+    values = torch.where(values.abs() < _EPS, torch.zeros_like(values), values)
+    values = torch.where((1.0 - values).abs() < _EPS, torch.ones_like(values), values)
+    return values.clamp(0.0, 1.0)
 
 
 def _apply_affine_to_points(
@@ -112,13 +124,13 @@ def _clip_line_to_bounds(
 
     def _code(x: float, y: float) -> int:
         code = 0
-        if x < x_min:
+        if x < x_min - _EPS:
             code |= 1
-        elif x > x_max:
+        elif x > x_max + _EPS:
             code |= 2
-        if y < y_min:
+        if y < y_min - _EPS:
             code |= 4
-        elif y > y_max:
+        elif y > y_max + _EPS:
             code |= 8
         return code
 
@@ -129,22 +141,40 @@ def _clip_line_to_bounds(
 
     while True:
         if code0 == 0 and code1 == 0:
-            return torch.tensor([x0, y0], dtype=p0.dtype), torch.tensor([x1, y1], dtype=p1.dtype)
+            c0 = torch.tensor([x0, y0], dtype=p0.dtype, device=p0.device)
+            c1 = torch.tensor([x1, y1], dtype=p1.dtype, device=p1.device)
+            c0 = torch.stack([c0[0].clamp(x_min, x_max), c0[1].clamp(y_min, y_max)])
+            c1 = torch.stack([c1[0].clamp(x_min, x_max), c1[1].clamp(y_min, y_max)])
+            if torch.dist(c0, c1) <= _EPS:
+                return None
+            return c0, c1
         if code0 & code1:
             return None
         out_code = code0 if code0 != 0 else code1
 
         if out_code & 8:
-            x = x0 + (x1 - x0) * (y_max - y0) / (y1 - y0 + 1e-12)
+            denom = y1 - y0
+            if abs(denom) <= _EPS:
+                return None
+            x = x0 + (x1 - x0) * (y_max - y0) / denom
             y = y_max
         elif out_code & 4:
-            x = x0 + (x1 - x0) * (y_min - y0) / (y1 - y0 + 1e-12)
+            denom = y1 - y0
+            if abs(denom) <= _EPS:
+                return None
+            x = x0 + (x1 - x0) * (y_min - y0) / denom
             y = y_min
         elif out_code & 2:
-            y = y0 + (y1 - y0) * (x_max - x0) / (x1 - x0 + 1e-12)
+            denom = x1 - x0
+            if abs(denom) <= _EPS:
+                return None
+            y = y0 + (y1 - y0) * (x_max - x0) / denom
             x = x_max
         else:
-            y = y0 + (y1 - y0) * (x_min - x0) / (x1 - x0 + 1e-12)
+            denom = x1 - x0
+            if abs(denom) <= _EPS:
+                return None
+            y = y0 + (y1 - y0) * (x_min - x0) / denom
             x = x_min
 
         if out_code == code0:
@@ -166,7 +196,7 @@ def _clip_lines(line_points: torch.Tensor, width: float, height: float) -> torch
         if result is None:
             continue
         c0, c1 = result
-        if torch.dist(c0, c1) <= 1.0:
+        if torch.dist(c0, c1) <= _EPS:
             continue
         clipped.append(torch.cat([c0, c1]))
     if not clipped:
@@ -181,15 +211,19 @@ def _hflip_targets(target: Dict[str, torch.Tensor], width: float) -> Dict[str, t
         x_max = boxes[:, 2].clone()
         boxes[:, 0] = width - x_max
         boxes[:, 2] = width - x_min
+        boxes[:, 0::2] = _clamp_unit_interval(boxes[:, 0::2])
+        boxes[:, 1::2] = _clamp_unit_interval(boxes[:, 1::2])
         target["boxes"] = boxes
     if target.get("line_points") is not None and target["line_points"].numel() > 0:
         lines = target["line_points"].clone()
         lines[:, [0, 2]] = width - lines[:, [0, 2]]
-        target["line_points"] = lines
+        target["line_points"] = _clip_lines(lines, 1.0, 1.0)
     if target.get("ellipses") is not None and target["ellipses"].numel() > 0:
         ellipses = target["ellipses"].clone()
         ellipses[:, 0] = width - ellipses[:, 0]
         ellipses[:, 5] = -ellipses[:, 5]
+        ellipses[:, 0] = _clamp_unit_interval(ellipses[:, 0])
+        ellipses[:, 1] = _clamp_unit_interval(ellipses[:, 1])
         target["ellipses"] = ellipses
     return target
 
@@ -199,32 +233,6 @@ def _resize_targets(
     old_size: Tuple[int, int],
     new_size: Tuple[int, int],
 ) -> Dict[str, torch.Tensor]:
-    old_h, old_w = old_size
-    new_h, new_w = new_size
-    scale_x = new_w / float(old_w)
-    scale_y = new_h / float(old_h)
-
-    boxes = target["boxes"]
-    if boxes.numel() > 0:
-        boxes = boxes.clone()
-        boxes[:, [0, 2]] *= scale_x
-        boxes[:, [1, 3]] *= scale_y
-        target["boxes"] = boxes
-
-    if target.get("line_points") is not None and target["line_points"].numel() > 0:
-        lines = target["line_points"].clone()
-        lines[:, [0, 2]] *= scale_x
-        lines[:, [1, 3]] *= scale_y
-        target["line_points"] = lines
-
-    if target.get("ellipses") is not None and target["ellipses"].numel() > 0:
-        ellipses = target["ellipses"].clone()
-        ellipses[:, 0] *= scale_x
-        ellipses[:, 1] *= scale_y
-        ellipses[:, 2] += math.log(scale_x)
-        ellipses[:, 3] += math.log(scale_y)
-        target["ellipses"] = ellipses
-
     return target
 
 
@@ -234,33 +242,41 @@ def _crop_targets(
     left: int,
     height: int,
     width: int,
+    img_height: int,
+    img_width: int,
 ) -> Dict[str, torch.Tensor]:
     if target.get("boxes") is not None:
         boxes = target["boxes"].clone()
-        boxes[:, [0, 2]] -= float(left)
-        boxes[:, [1, 3]] -= float(top)
+        boxes[:, [0, 2]] = (boxes[:, [0, 2]]*img_width - float(left))/width
+        boxes[:, [1, 3]] = (boxes[:, [1, 3]]*img_height - float(top))/height
         target["boxes"] = boxes
 
     if target.get("line_points") is not None and target["line_points"].numel() > 0:
         lines = target["line_points"].clone()
-        lines[:, [0, 2]] -= float(left)
-        lines[:, [1, 3]] -= float(top)
+        lines[:, [0, 2]] = (lines[:, [0, 2]]*img_width - float(left))/width
+        lines[:, [1, 3]] = (lines[:, [1, 3]]*img_height - float(top))/height
         target["line_points"] = lines
 
     if target.get("ellipses") is not None and target["ellipses"].numel() > 0:
         ellipses = target["ellipses"].clone()
-        ellipses[:, 0] -= float(left)
-        ellipses[:, 1] -= float(top)
+        ellipses[:, 0] = (ellipses[:, 0]*img_width - float(left))/width
+        ellipses[:, 1] = (ellipses[:, 1]*img_height - float(top))/height
+        ellipses[:, 2] += math.log(img_width / float(width))
+        ellipses[:, 3] += math.log(img_height / float(height))
         target["ellipses"] = ellipses
 
     if target.get("line_points") is not None:
-        target["line_points"] = _clip_lines(target["line_points"], width, height)
+        target["line_points"] = _clip_lines(target["line_points"], 1.0, 1.0)
 
     if target.get("boxes") is not None and target["boxes"].numel() > 0:
         boxes = target["boxes"]
-        boxes[:, 0::2] = boxes[:, 0::2].clamp(0.0, float(width))
-        boxes[:, 1::2] = boxes[:, 1::2].clamp(0.0, float(height))
+        boxes[:, 0::2] = _clamp_unit_interval(boxes[:, 0::2])
+        boxes[:, 1::2] = _clamp_unit_interval(boxes[:, 1::2])
         target["boxes"] = boxes
+
+    if target.get("ellipses") is not None and target["ellipses"].numel() > 0:
+        target["ellipses"][:, 0] = _clamp_unit_interval(target["ellipses"][:, 0])
+        target["ellipses"][:, 1] = _clamp_unit_interval(target["ellipses"][:, 1])
 
     return target
 
@@ -283,47 +299,45 @@ def apply_affine_to_target(
         scale=scale,
         shear=list(shear),
         interpolation=interpolation,
-        fill=fill,
+        fill=[*fill],
     )
 
-    center = [width * 0.5, height * 0.5]
-    center_f = [c - s * 0.5 for c, s in zip(center, [width, height])]
-    matrix = F._get_inverse_affine_matrix(center_f, angle, list(translate), scale, list(shear), inverted=False)
+    translate_norm = [translate[0] / float(width), translate[1] / float(height)]
+    matrix = F._get_inverse_affine_matrix([0.5, 0.5], angle, translate_norm, scale, list(shear), inverted=False)
     matrix = torch.tensor(matrix, dtype=target["boxes"].dtype if target.get("boxes") is not None else torch.float32)
 
     if target.get("boxes") is not None:
         boxes = target["boxes"].to(dtype=matrix.dtype)
-        boxes = _apply_affine_to_boxes(boxes, matrix, width, height)
-        boxes[:, 0::2] = boxes[:, 0::2].clamp(0.0, float(width))
-        boxes[:, 1::2] = boxes[:, 1::2].clamp(0.0, float(height))
+        boxes = _apply_affine_to_boxes(boxes, matrix, 1.0, 1.0)
+        boxes[:, 0::2] = _clamp_unit_interval(boxes[:, 0::2])
+        boxes[:, 1::2] = _clamp_unit_interval(boxes[:, 1::2])
         target["boxes"] = boxes
 
     if target.get("line_points") is not None:
         lines = target["line_points"].to(dtype=matrix.dtype)
-        lines = _apply_affine_to_lines(lines, matrix, width, height)
-        target["line_points"] = _clip_lines(lines, width, height)
+        lines = _apply_affine_to_lines(lines, matrix, 1.0, 1.0)
+        target["line_points"] = _clip_lines(lines, 1.0, 1.0)
 
     if target.get("ellipses") is not None:
         ellipses = target["ellipses"].to(dtype=matrix.dtype)
         points = ellipses[:, :2]
-        warped = _apply_affine_to_points(points, matrix, width, height)
+        warped = _apply_affine_to_points(points, matrix, 1.0, 1.0)
         ellipses[:, :2] = warped
         ellipses = _rotate_ellipses(ellipses, angle)
         ellipses = _scale_ellipses(ellipses, scale, scale)
+        ellipses[:, 0] = _clamp_unit_interval(ellipses[:, 0])
+        ellipses[:, 1] = _clamp_unit_interval(ellipses[:, 1])
         target["ellipses"] = ellipses
 
     return image, target
 
 
-def apply_hflip_to_target(
+def apply_hflip(
     image: torch.Tensor,
     target: Dict[str, torch.Tensor],
 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-    height, width = _get_hw(image)
     image = F.hflip(image)
-    target = _hflip_targets(target, float(width))
-    if target.get("line_points") is not None:
-        target["line_points"] = _clip_lines(target["line_points"], width, height)
+    target = _hflip_targets(target, 1.0)
     return image, target
 
 
@@ -331,10 +345,10 @@ class ODTrainTransforms:
     def __init__(
         self,
         image_size: int = 224,
-        p_affine: float = 0.7,
+        p_affine: float = 1, #0.7,
         p_hflip: float = 0.5,
         p_crop: float = 0.2,
-        affine_degrees: Tuple[float, float] = (-8.0, 8.0),
+        affine_degrees: Tuple[float, float] = (-5.0, 5.0),
         affine_translate: Tuple[float, float] = (0.15, 0.15),
         affine_scale: Tuple[float, float] = (0.95, 1.05),
         crop_scale: Tuple[float, float] = (0.85, 1.0),
@@ -362,7 +376,7 @@ class ODTrainTransforms:
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         height, width = _get_hw(image)
         top, left, crop_h, crop_w = RandomResizedCrop.get_params(
-            image, scale=self.crop_scale, ratio=(1.0, 1.0)
+            image, scale=list(self.crop_scale), ratio=[1., 1.]#ratio=[0.8235, 0.8235]
         )
         image = F.resized_crop(
             image,
@@ -374,8 +388,7 @@ class ODTrainTransforms:
             interpolation=InterpolationMode.BILINEAR,
             antialias=True,
         )
-        target = _crop_targets(target, top, left, crop_h, crop_w)
-        target = _resize_targets(target, (crop_h, crop_w), (self.image_size, self.image_size))
+        target = _crop_targets(target, top, left, crop_h, crop_w, height, width)
         return image, target
 
     def _resize_to_output(
@@ -383,62 +396,65 @@ class ODTrainTransforms:
         image: torch.Tensor,
         target: Dict[str, torch.Tensor],
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        height, width = _get_hw(image)
         image = F.resize(
             image,
             size=[self.image_size, self.image_size],
             interpolation=InterpolationMode.BILINEAR,
             antialias=True,
         )
-        target = _resize_targets(target, (height, width), (self.image_size, self.image_size))
-        return image, target
+        return image, _resize_targets(target, _get_hw(image), (self.image_size, self.image_size))
 
     def __call__(self, image: torch.Tensor, target: Optional[Dict[str, torch.Tensor]] = None):
         image = _ensure_float_image(image)
-        if target is None:
-            height, width = _get_hw(image)
-            image = F.resize(
-                image,
-                size=[self.image_size, self.image_size],
-                interpolation=InterpolationMode.BILINEAR,
-                antialias=True,
-            )
-            return self.normalize(image)
-
+        has_target = target is not None
+        target_dict: Dict[str, torch.Tensor] = {} if target is None else target
+        # if target is None: # TODO: Why no transforms without targets??
+        #     height, width = _get_hw(image)
+        #     image = F.resize(
+        #         image,
+        #         size=[self.image_size, self.image_size],
+        #         interpolation=InterpolationMode.BILINEAR,
+        #         antialias=True,
+        #     )
+        #     return self.normalize(image)
+        #
         if random.random() < self.p_crop:
-            image, target = self._random_resized_crop(image, target)
+            image, target_dict = self._random_resized_crop(image, target_dict)
         else:
-            image, target = self._resize_to_output(image, target)
+            image, target_dict = self._resize_to_output(image, target_dict)
 
-        if random.random() < self.p_affine:
-            height, width = _get_hw(image)
-            angle, translate, scale, shear = RandomAffine.get_params(
-                degrees=self.affine_degrees,
-                translate=self.affine_translate,
-                scale_ranges=self.affine_scale,
-                shears=None,
-                img_size=[width, height],
-            )
-            image, target = apply_affine_to_target(
-                image,
-                target,
-                angle=angle,
-                translate=translate,
-                scale=scale,
-                shear=(0.0, 0.0),
-            )
+        # if random.random() < self.p_affine:
+        #     height, width = _get_hw(image)
+        #     angle, translate, scale, shear = RandomAffine.get_params(
+        #         degrees=[*self.affine_degrees],
+        #         translate=[*self.affine_translate],
+        #         scale_ranges=[*self.affine_scale],
+        #         shears=None,
+        #         img_size=[width, height],
+        #     )
+        #     image, target_dict = apply_affine_to_target(
+        #         image,
+        #         target_dict,
+        #         angle=angle,
+        #         translate=translate,
+        #         scale=scale,
+        #         shear=(0.0, 0.0),
+        #     )
 
         if random.random() < self.p_hflip:
-            image, target = apply_hflip_to_target(image, target)
+            image, target_dict = apply_hflip(image, target_dict)
 
         image = self.color_jitter(image)
         image = self.random_autocontrast(image)
         image = self.random_grayscale(image)
         image = self.random_blur(image)
         image = self.random_sharpness(image)
-        image = self.normalize(image)
-        image = self.random_erasing(image)
-        return image, target
+        # image = self.normalize(image)
+        #
+        # image = self.random_erasing(image)
+        if has_target:
+            return image, target_dict
+        return image
 
 
 class ODValTransforms:

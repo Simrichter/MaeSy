@@ -20,7 +20,7 @@ def main(args):
             )
         case "visualize":
             from maesy.evaluation import visualize_data
-            visualize_data(args.imgpath, args.out, label_path=args.labels, label_file=args.label_file, special_classes={"lines": args.line_class_id, "ellipses": args.ellipse_class_id})
+            visualize_data(args.imgpath, args.out, args.splits, label_path=args.labels, label_file=args.label_file, special_classes={"lines": args.line_class_id, "ellipses": args.ellipse_class_id}, apply_transforms=args.transforms)
 
         case "test":
             from maesy.evaluation import Evaluator

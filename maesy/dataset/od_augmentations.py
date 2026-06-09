@@ -400,16 +400,7 @@ class ODTrainTransforms:
         image = _ensure_float_image(image)
         has_target = target is not None
         target_dict: Dict[str, torch.Tensor] = {} if target is None else target
-        # if target is None: # TODO: Why no transforms without targets??
-        #     height, width = _get_hw(image)
-        #     image = F.resize(
-        #         image,
-        #         size=[self.image_size, self.image_size],
-        #         interpolation=InterpolationMode.BILINEAR,
-        #         antialias=True,
-        #     )
-        #     return self.normalize(image)
-        #
+
         if random.random() < self.p_crop:
             image, target_dict = self._random_resized_crop(image, target_dict)
         else:
@@ -441,7 +432,7 @@ class ODTrainTransforms:
         image = self.random_grayscale(image)
         image = self.random_blur(image)
         image = self.random_sharpness(image)
-        # image = self.normalize(image) # TODO: only deactivated for testing with visualizations
+        image = self.normalize(image) # Only deactivate for viszualizations?
 
         # image = self.random_erasing(image) # (i dont want this anymore)
         if has_target:

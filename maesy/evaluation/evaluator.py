@@ -28,7 +28,7 @@ class Evaluator:
         dataset_path: str,
         device: str = "",
         split: str = "test",
-        output_dir: str | None = None,
+        output_name: str = "",
     ):
         """
         Initialize evaluator.
@@ -38,7 +38,7 @@ class Evaluator:
             :param dataset_path: Path to the MaeSyDataset with a test split to evaluate on
             :param device: Device to run evaluation on
             :param split: The dataset's split to evaluate on. Default: 'test'
-            :param output_dir: The output folder for the results. Default: 'test_results' subfolder in checkpoint folder
+            :param output_name: The output folder name for the results. Created as a subfolder in the checkpoint folder. Default: 'test_results'
         """
         if device == "":
             device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -64,7 +64,7 @@ class Evaluator:
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False, collate_fn=collate_detection_fn)
         self.inferer = Inferer(model=self.model, data_loader=dataloader, device=device)
         checkpoint_dir = os.path.dirname(os.path.abspath(checkpoint_path))
-        self.output_dir = output_dir or os.path.join(checkpoint_dir, "test_results")
+        self.output_dir = os.path.join(checkpoint_dir, "test_results" if output_name == "" else output_name)
         self.class_labels = [
             dataset.id_to_name.get(i, str(i))
             for i in range(self.model.config.num_classes)

@@ -72,6 +72,7 @@ def main():
     test.add_argument("dataset", help="Path to dataset root directory or yaml file")
     test.add_argument("checkpoint", help="Path to model checkpoint file")
     test.add_argument("--split", "-s", type=str, default="test", choices=["train", "val", "test"], help="The dataset's split to evaluate on. Default: 'test'")
+    test.add_argument("--output-name", "-o", type=str, default="", help="The output folder name for the results. Created as a subfolder in the checkpoint folder. Default: 'test_results'")
     test.add_argument("--device", type=str, default="", help="Device to run evaluation on (default: auto-detect CUDA if available, otherwise CPU)")
 
     infer = eval_parser.add_parser("infer", help="Run inference on a folder of images")

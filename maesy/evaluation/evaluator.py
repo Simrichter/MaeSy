@@ -38,19 +38,24 @@ class Evaluator:
             :param dataset_path: Path to the MaeSyDataset with a test split to evaluate on
             :param device: Device to run evaluation on
             :param split: The dataset's split to evaluate on. Default: 'test'
-            :param output_name: The output folder name for the results. Created as a subfolder in the checkpoint folder. Default: 'test_results'
+            :param output_name: The output folder name for the results. Created as a subfolder in the checkpoint folder. Default: 'test_results/[dataset]/[checkpoint]'
         """
         if device == "":
             device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         else:
             device=torch.device(device)
 
+        checkpoint_dir = os.path.dirname(os.path.abspath(checkpoint_path))
+        self.dataset_name = os.path.basename(os.path.abspath(dataset_path))
+        self.checkpoint_name = os.path.basename(os.path.abspath(checkpoint_path)).removesuffix('.pth')
+        self.output_dir = os.path.join(checkpoint_dir, f"test_results/{self.dataset_name}/{self.checkpoint_name}" if output_name == "" else output_name)
+
         # Load model
-        self.model = create_model_from_checkpoint(checkpoint_path)  # CheckpointHandler(device=device).load_model(checkpoint_path)
+        self.model = create_model_from_checkpoint(checkpoint_path)
         self.model.to(device)
         self.model.eval()
 
-        test_transforms = transforms.Compose(
+        test_transforms = transforms.Compose( # TODO: make use of OD-Transforms?
             [  # TODO: make blank image folder possible again, "auto-infer" split? Maybe through 'None' -> All splits
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
@@ -63,8 +68,6 @@ class Evaluator:
         self.special_classes = dataset.get_special_classes()
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False, collate_fn=collate_detection_fn)
         self.inferer = Inferer(model=self.model, data_loader=dataloader, device=device)
-        checkpoint_dir = os.path.dirname(os.path.abspath(checkpoint_path))
-        self.output_dir = os.path.join(checkpoint_dir, "test_results" if output_name == "" else output_name)
         self.class_labels = [
             dataset.id_to_name.get(i, str(i))
             for i in range(self.model.config.num_classes)
@@ -128,7 +131,7 @@ class Evaluator:
         confusion_csv = self._save_confusion_matrix_csv(confusion_matrix)
 
         metrics_to_print = self._filter_metrics_for_output(metrics)
-        self._print_and_save_metrics(metrics_to_print, class_counts)
+        self._print_and_save_metrics(self.dataset_name, self.checkpoint_name, metrics_to_print, class_counts)
 
         return metrics
 
@@ -447,9 +450,12 @@ class Evaluator:
             if key not in {"curves", "plot_paths"}
         }
 
-    def _print_and_save_metrics(self, metrics: Dict[str, Any], class_counts: Dict[str, int]) -> None:
+    def _print_and_save_metrics(self, dataset_name: str, checkpoint_name: str, metrics: Dict[str, Any], class_counts: Dict[str, int]) -> None:
         lines: list[str] = []
         lines.append("Evaluation Metrics")
+        lines.append("=" * 72)
+        lines.append(f"{'Dataset:':32s} {dataset_name}")
+        lines.append(f"{'Checkpoint:':32s} {checkpoint_name}")
         lines.append("=" * 72)
         for key in sorted(metrics.keys()):
             value = metrics[key]

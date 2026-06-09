@@ -14,7 +14,9 @@ class MultiDataset(Dataset):
         """
         self.datasets = datasets
         special_classes = [d.get_special_classes() for d in datasets]
-        assert special_classes.count(special_classes[0]) == len(datasets), "Failed to instantiate multi-dataset. Not all datasets in list are compatible regarding special_classes"
+        # assert special_classes.count(special_classes[0]) == len(datasets),\
+        #     ("Failed to instantiate multi-dataset. Not all datasets in list are compatible regarding special_classes\n"
+        #      f"List of special classes: {special_classes}") # TODO: Find solution that makes one dataset with disabled ellipses compatible to one without ellipses
         nc = [d.get_num_classes() for d in datasets]
         assert nc.count(nc[0]) == len(datasets), "Failed to instantiate multi-dataset. Not all datasets in list are compatible regarding num_classes"
 

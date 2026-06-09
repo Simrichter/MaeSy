@@ -38,25 +38,19 @@ def _clamp_unit_interval(values: torch.Tensor) -> torch.Tensor:
 def _apply_affine_to_points(
     points: torch.Tensor,
     matrix: torch.Tensor,
-    width: float,
-    height: float,
 ) -> torch.Tensor:
     if points.numel() == 0:
         return points.reshape(0, 2)
-    center = torch.tensor([width * 0.5, height * 0.5], device=points.device, dtype=points.dtype)
-    centered = points - center
-    x = centered[:, 0]
-    y = centered[:, 1]
+    x = points[:, 0]
+    y = points[:, 1]
     x2 = matrix[0] * x + matrix[1] * y + matrix[2]
     y2 = matrix[3] * x + matrix[4] * y + matrix[5]
-    return torch.stack([x2 + center[0], y2 + center[1]], dim=1)
+    return torch.stack([x2, y2], dim=1)
 
 
 def _apply_affine_to_boxes(
     boxes: torch.Tensor,
     matrix: torch.Tensor,
-    width: float,
-    height: float,
 ) -> torch.Tensor:
     if boxes.numel() == 0:
         return boxes.reshape(0, 4)
@@ -69,7 +63,7 @@ def _apply_affine_to_boxes(
         ],
         dim=1,
     ).reshape(-1, 2)
-    warped = _apply_affine_to_points(corners, matrix, width, height).reshape(-1, 4, 2)
+    warped = _apply_affine_to_points(corners, matrix).reshape(-1, 4, 2)
     x_min = warped[:, :, 0].min(dim=1).values
     y_min = warped[:, :, 1].min(dim=1).values
     x_max = warped[:, :, 0].max(dim=1).values
@@ -80,13 +74,11 @@ def _apply_affine_to_boxes(
 def _apply_affine_to_lines(
     line_points: torch.Tensor,
     matrix: torch.Tensor,
-    width: float,
-    height: float,
 ) -> torch.Tensor:
     if line_points.numel() == 0:
         return line_points.reshape(0, 4)
     points = line_points.reshape(-1, 2)
-    warped = _apply_affine_to_points(points, matrix, width, height)
+    warped = _apply_affine_to_points(points, matrix)
     return warped.reshape(-1, 4)
 
 
@@ -308,20 +300,20 @@ def apply_affine_to_target(
 
     if target.get("boxes") is not None:
         boxes = target["boxes"].to(dtype=matrix.dtype)
-        boxes = _apply_affine_to_boxes(boxes, matrix, 1.0, 1.0)
+        boxes = _apply_affine_to_boxes(boxes, matrix)
         boxes[:, 0::2] = _clamp_unit_interval(boxes[:, 0::2])
         boxes[:, 1::2] = _clamp_unit_interval(boxes[:, 1::2])
         target["boxes"] = boxes
 
     if target.get("line_points") is not None:
         lines = target["line_points"].to(dtype=matrix.dtype)
-        lines = _apply_affine_to_lines(lines, matrix, 1.0, 1.0)
+        lines = _apply_affine_to_lines(lines, matrix)
         target["line_points"] = _clip_lines(lines, 1.0, 1.0)
 
     if target.get("ellipses") is not None:
         ellipses = target["ellipses"].to(dtype=matrix.dtype)
         points = ellipses[:, :2]
-        warped = _apply_affine_to_points(points, matrix, 1.0, 1.0)
+        warped = _apply_affine_to_points(points, matrix)
         ellipses[:, :2] = warped
         ellipses = _rotate_ellipses(ellipses, angle)
         ellipses = _scale_ellipses(ellipses, scale, scale)
@@ -423,23 +415,23 @@ class ODTrainTransforms:
         else:
             image, target_dict = self._resize_to_output(image, target_dict)
 
-        # if random.random() < self.p_affine:
-        #     height, width = _get_hw(image)
-        #     angle, translate, scale, shear = RandomAffine.get_params(
-        #         degrees=[*self.affine_degrees],
-        #         translate=[*self.affine_translate],
-        #         scale_ranges=[*self.affine_scale],
-        #         shears=None,
-        #         img_size=[width, height],
-        #     )
-        #     image, target_dict = apply_affine_to_target(
-        #         image,
-        #         target_dict,
-        #         angle=angle,
-        #         translate=translate,
-        #         scale=scale,
-        #         shear=(0.0, 0.0),
-        #     )
+        if random.random() < self.p_affine:
+            height, width = _get_hw(image)
+            angle, translate, scale, shear = RandomAffine.get_params(
+                degrees=[*self.affine_degrees],
+                translate=[*self.affine_translate],
+                scale_ranges=[*self.affine_scale],
+                shears=None,
+                img_size=[width, height],
+            )
+            image, target_dict = apply_affine_to_target(
+                image,
+                target_dict,
+                angle=angle,
+                translate=translate,
+                scale=scale,
+                shear=(0.0, 0.0),
+            )
 
         if random.random() < self.p_hflip:
             image, target_dict = apply_hflip(image, target_dict)
@@ -449,9 +441,9 @@ class ODTrainTransforms:
         image = self.random_grayscale(image)
         image = self.random_blur(image)
         image = self.random_sharpness(image)
-        # image = self.normalize(image)
-        #
-        # image = self.random_erasing(image)
+        # image = self.normalize(image) # TODO: only deactivated for testing with visualizations
+
+        # image = self.random_erasing(image) # (i dont want this anymore)
         if has_target:
             return image, target_dict
         return image

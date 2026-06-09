@@ -5,14 +5,6 @@ import numpy as np
 import cv2
 import yaml
 from sensor_msgs.msg import Image
-
-try:
-    # Catch Unresolved Reference Errors, as this only works if Ros2 is sourced in executing terminal
-    from rclpy.serialization import deserialize_message
-    from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions
-except ModuleNotFoundError:
-    print("_"*60)
-    print(f"Warning: ROS2 Python libraries not found. If you need rosbag log functionality, source your ROS2 workspace")
 from tqdm import tqdm
 
 
@@ -30,6 +22,15 @@ exact_match
         :param output_dir: Directory to save the extracted images.
         :param exact_match: Whether to match topic names exactly or just by the last part (e.g. "/image_left_raw" matches "/camera/image_left_raw")
     """
+    # Attempt ROS2-related imports
+    try:
+        # Catch Unresolved Reference Errors, as this only works if Ros2 is sourced in executing terminal
+        from rclpy.serialization import deserialize_message
+        from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions
+    except ModuleNotFoundError:
+        print("_" * 60)
+        raise EnvironmentError("ROS2 Python libraries not found. If you need rosbag log functionality, source your ROS2 workspace")
+
     save_path = Path(output_dir)/Path(bag_path).name.removesuffix(".mcap")
     topic_dirs = {topic: save_path/(Path(topic.lstrip("/"))) for topic in topic_name}
     for topic_dir in topic_dirs.values():

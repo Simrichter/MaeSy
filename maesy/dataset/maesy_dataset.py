@@ -26,7 +26,6 @@ class MaesyDataset(Dataset):
             transforms: Optional[Callable] = None,
             start_index: int = 0,
             step: int = 1,
-            repeat_factor: int = 1,
             enable_lines: bool = False,
             enable_ellipses: bool = False,
             use_first_n: Optional[int] = None
@@ -41,7 +40,7 @@ class MaesyDataset(Dataset):
             :param transforms: Optional transforms to apply
             :param start_index: The index from which to start
             :param step: The step size for sampling images (e.g., step=2 will take every other image)
-            :param repeat_factor: The factor by which to repeat the dataset (e.g., repeat_factor=2 will repeat the dataset twice, effectively doubling its size)
+            # :param repeat_factor: The factor by which to repeat the dataset (e.g., repeat_factor=2 will repeat the dataset twice, effectively doubling its size)
             :param enable_lines: Whether to include line annotations (if line_class_id is defined in dataset.yaml)
             :param enable_ellipses: Whether to include ellipse annotations (if ellipse_class_id is defined in dataset.yaml)
             :param use_first_n: If not None, only use the first n samples from the dataset (after applying start_index and step)
@@ -69,9 +68,11 @@ class MaesyDataset(Dataset):
         else:
             yaml_data = {}
 
+        repeat_factor = yaml_data.get("repeat_factor", 1) # Default value is 1, but could be increased for overfitting tests
+
         dataset_dir = yaml_data.get("path", dataset_dir)
         self.box_format = str(yaml_data.get("box_format", "")).lower()
-        if self.box_format not in {"xyxy", "cxcywh"}:
+        if self.box_format not in {"xyxy", "cxcywh"} and annotation_type == "detection":
             raise ValueError(f"Unsupported box_format '{self.box_format}' in dataset.yaml. Expected 'xyxy' or 'cxcywh'.")
 
         split_path = Path(dataset_dir) / yaml_data.get(split, split)

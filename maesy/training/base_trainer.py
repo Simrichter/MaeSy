@@ -373,7 +373,7 @@ class BaseTrainer(ABC):
                 print(val_msg)
 
                 # Save best model
-                if val_out['val_losses/total_loss'] < self.best_val_loss:
+                if val_out['val_losses/total_loss'] < self.best_val_loss and self.config.save_checkpoints:
                     self.best_val_loss = val_out['val_losses/total_loss']
                     self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config,
                                                             'best_model.pth', self.scheduler)
@@ -396,17 +396,16 @@ class BaseTrainer(ABC):
                         print(f"Early stopping at epoch {self.current_epoch + 1} as learning rate has reached minimum threshold.")
                         break
 
-            # Save most recent epoch
-            self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, 'latest_model.pth', self.scheduler)
+            if self.config.save_checkpoints:
+                # Save most recent epoch
+                self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, 'latest_model.pth', self.scheduler)
 
-            # Save checkpoint periodically
-            if (self.current_epoch + 1) % self.config.save_frequency == 0:
-                self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, f'checkpoint_epoch_{self.current_epoch + 1}.pth', self.scheduler)
+                # Save checkpoint periodically
+                if (self.current_epoch + 1) % self.config.save_frequency == 0:
+                    self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, f'checkpoint_epoch_{self.current_epoch + 1}.pth', self.scheduler)
 
         # Save final model
-        self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer,
-                                                self.best_val_loss, self.config,
-                                                'final_model.pth', self.scheduler)
+        self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config,'final_model.pth', self.scheduler)
         if self. enable_wandb: self.wandb_run.finish()
         print("Training completed!")
 

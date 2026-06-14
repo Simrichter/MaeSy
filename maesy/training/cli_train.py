@@ -25,6 +25,7 @@ def main(args):
             override_params=op,
             seed=getattr(args, "seed", 42),
             device=args.device,
+            fast_mode=args.fast_mode,
         )
     elif args.mode == "mae":
         from maesy.training.train_setups import train_mae

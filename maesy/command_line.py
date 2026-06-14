@@ -48,6 +48,7 @@ def main():
     # od_parser.add_argument("--line-class-id", type=int, default=-1, help="Class id that should be treated as a line target (x1 y1 x2 y2)")
     od_parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
     od_parser.add_argument("--device", type=str, default="auto", help="Device to run training on. Default: Auto-detect gpu, fallback to cpu")
+    od_parser.add_argument("--fast-mode", action="store_true", help="Reduce time-consuming operations. For example, no checkpoints are saved, only the final one.")
 
 
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")

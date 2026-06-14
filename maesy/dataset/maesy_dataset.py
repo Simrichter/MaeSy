@@ -52,7 +52,6 @@ class MaesyDataset(Dataset):
         if dataset_dir.endswith((".yaml", ".yml")):
             yaml_path = dataset_dir
         else:
-            yaml_path = None
             yaml_candidates = [c for c in os.listdir(dataset_dir) if c.endswith((".yaml", ".yml"))]
             if len(yaml_candidates) < 1:
                 raise ValueError(f"No dataset.yaml file found in dataset directory {dataset_dir}")
@@ -68,7 +67,10 @@ class MaesyDataset(Dataset):
         else:
             yaml_data = {}
 
-        repeat_factor = yaml_data.get("repeat_factor", 1) # Default value is 1, but could be increased for overfitting tests
+        if split == "train": # Only repeat if in train mode. Validation and testing should remain unrepeated
+            repeat_factor = yaml_data.get("repeat_factor", 1) # Default value is 1, but could be increased for overfitting tests
+        else:
+            repeat_factor = 1
 
         dataset_dir = yaml_data.get("path", dataset_dir)
         self.box_format = str(yaml_data.get("box_format", "")).lower()

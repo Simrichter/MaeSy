@@ -88,7 +88,9 @@ def train_vit_detector(
     denoising_box_noise_scale: float = 0.4,
     enable_line_detection: bool = True,
     enable_ellipse_detection: bool = True,
-    seed: int = 42
+    override_params: dict = {},
+    seed: int = 42,
+    device: str = "auto",
 ):
     """
     Train an object detection model with the selected detector architecture.
@@ -124,10 +126,10 @@ def train_vit_detector(
 
     # Create training configuration
     training_config = ODTrainingConfig(
-        batch_size= 48, # 64 l# TODO: Everything apart from largest model config (rt-detr6) was with 64
+        batch_size= override_params.get("batch_size", 48), # 64 l# TODO: Everything apart from largest model config (rt-detr6) was with 64
         num_epochs=3000,
-        learning_rate=5e-6 if finetune else 1e-5,
-        backbone_learning_rate=5e-7 if finetune else 1e-6,
+        learning_rate= override_params.get("learning_rate", 5e-6 if finetune else 5e-5),
+        backbone_learning_rate=5e-7 if finetune else 5e-6,
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler= "plateau", # "cosine",
@@ -153,6 +155,7 @@ def train_vit_detector(
         ellipse_loss_coef = 2.0,
         ellipse_shape_coef=1.0,
         dn_loss_coef = 1.0,
+        device=torch.device("cuda" if torch.cuda.is_available() else 'cpu') if device=="auto" else torch.device(device)
     )
 
     # Create dataloaders with custom collate function
@@ -197,9 +200,27 @@ def train_vit_detector(
             config["enable_ellipse_detection"] = True
         else:
             config["enable_ellipse_detection"] = False
+        config["enable_denoising"] = enable_denoising
+        config["denoising_num_queries"] = denoising_num_queries
+        config["denoising_label_noise_ratio"] = denoising_label_noise_ratio
+        config["denoising_box_noise_scale"] = denoising_box_noise_scale
         model = create_model_from_config(config)
     elif model_info.endswith(".pth"):
         model = create_model_from_checkpoint(model_info)
+        # Apply denoising parameters to the loaded model's config
+        model.config.enable_denoising = enable_denoising
+        model.config.denoising_num_queries = denoising_num_queries
+        model.config.denoising_label_noise_ratio = denoising_label_noise_ratio
+        model.config.denoising_box_noise_scale = denoising_box_noise_scale
+        # Recreate denoising query content if needed
+        model.head.config.enable_denoising = enable_denoising
+        model.head.config.denoising_num_queries = denoising_num_queries
+        model.head.config.denoising_label_noise_ratio = denoising_label_noise_ratio
+        model.head.config.denoising_box_noise_scale = denoising_box_noise_scale
+        if enable_denoising and denoising_num_queries > 0:
+            model.head.dn_query_content = torch.nn.Embedding(denoising_num_queries, model.head.config.embed_dim)
+        else:
+            model.head.dn_query_content = None
     else:
         raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
 
@@ -281,21 +302,21 @@ def infer_vit_detector(
     images_dir = dataset.images_dir
     out_path = Path(out_path)
     out_path.mkdir(parents=True, exist_ok=True)
-    save_all_predictions = False  # Intentionally keep all query outputs for debugging.
     for img, pred in tqdm(zip(dataset.images, preds)):
         img_path = images_dir/img
         shutil.copy(img_path, out_path/img)
         with open(out_path/Path(img).with_suffix(".txt"), "w") as f:
-            # boxes = torch.unbind(p[1]["boxes"], dim=0)
-            # print(p[1]["boxes"])
             boxes = pred["boxes"]
             labels = pred["labels"]
             scores = pred["scores"]
             for box, label, score in zip(boxes, labels, scores):
                 cx, cy, w, h = box
-                if save_all_predictions or (score >= 0.3):
-                    f.write(f"{label.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
-            # TODO: Add inference for lines + ellipses
+                f.write(f"{label.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
+            for line in pred["line_points"]:
+                f.write(f"{model.head.config.line_class_id} {line[0].item()} {line[1].item()} {line[2].item()} {line[3].item()}\n")
+            for ellipse in pred["ellipses"]:
+                f.write(f"{model.head.config.ellipse_class_id} {ellipse[0].item()} {ellipse[1].item()} {ellipse[2].item()} {ellipse[3].item()} {ellipse[4].item()} {ellipse[5].item()}\n")
+
     if visualize:
         from maesy.evaluation import visualize_data
         visualize_data(str(out_path), "", special_classes={"lines": model.head.config.line_class_id, "ellipses": model.head.config.ellipse_class_id})

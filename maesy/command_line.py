@@ -43,8 +43,11 @@ def main():
     od_parser.add_argument("--dn-box-noise", type=float, default=0.4, help="Box/line noise scale for denoising branch (default: 0.4)")
     od_parser.add_argument("--enable-line-detection", action="store_true", help="Enable optional line endpoint prediction branch")
     od_parser.add_argument("--enable-ellipse-detection", action="store_true", help="Enable optional Ellipse prediction branch")
+    od_parser.add_argument("--learning-rate", type=float, default=-1.0, help="Override learning rate")
+    od_parser.add_argument("--batch-size", type=int, default=-1, help="Override batch size")
     # od_parser.add_argument("--line-class-id", type=int, default=-1, help="Class id that should be treated as a line target (x1 y1 x2 y2)")
     od_parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
+    od_parser.add_argument("--device", type=str, default="auto", help="Device to run training on. Default: Auto-detect gpu, fallback to cpu")
 
 
     mae_parser = train_parser.add_parser("mae", help="Train a backbone with MAE")
@@ -118,7 +121,7 @@ def main():
     log_extract_parser = data_subs.add_parser('extract_log',
                                               help="Extract images from log files (e.g. ROS bag or MCAP)")
     log_extract_parser.add_argument("bag_path", help="Path to the log file (e.g. ROS bag or MCAP)")
-    log_extract_parser.add_argument("--topic_name",
+    log_extract_parser.add_argument("--topic-name",
                                     help="Space-separated list of topics to extract images from (default [/image_left_raw])",
                                     nargs="+", default=["/image_left_raw"])
     log_extract_parser.add_argument("--output_dir", help="Directory to save the extracted images",

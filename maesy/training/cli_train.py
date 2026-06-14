@@ -1,11 +1,17 @@
 def main(args):
     if args.mode == "od":
         from maesy.training.train_setups import train_vit_detector
+        op = {}
+        if args.learning_rate != -1:
+            op["learning_rate"] = args.learning_rate
+        if args.batch_size != -1:
+            op["batch_size"] = args.batch_size
+
         train_vit_detector(
-            args.model,
-            args.dataset,
-            args.output,
-            args.finetune,
+            model_info=args.model,
+            dataset_paths=args.dataset,
+            output_dir=args.output,
+            finetune=args.finetune,
             enable_wandb=args.wandb,
             continue_training_from_checkpoint=args.resume,
             pretrained_backbone=args.backbone,
@@ -16,7 +22,9 @@ def main(args):
             denoising_box_noise_scale=getattr(args, "dn_box_noise", 0.4),
             enable_line_detection=getattr(args, "enable_line_detection", False),
             enable_ellipse_detection=getattr(args, "enable_ellipse_detection", False),
+            override_params=op,
             seed=getattr(args, "seed", 42),
+            device=args.device,
         )
     elif args.mode == "mae":
         from maesy.training.train_setups import train_mae

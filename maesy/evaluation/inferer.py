@@ -25,7 +25,7 @@ class Inferer:
 
         Args:
             model: Model to run inference on
-            data_loader: Data loader for inference (optional for single batch inference)
+            data_loader: Data loader for inference
             device: Device to run inference on
         """
         self.model = model

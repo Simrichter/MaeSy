@@ -8,7 +8,6 @@ import numpy as np
 import torch
 
 from maesy.dataset import sanitize_xyxy
-from maesy.model.rt_detr import decode_detr_predictions
 
 
 def compute_iou(box1: np.ndarray, box2: np.ndarray) -> float:

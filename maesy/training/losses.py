@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Dict, List, Optional
+
+import torchvision
 from scipy.optimize import linear_sum_assignment
 from abc import ABC, abstractmethod
 
@@ -47,6 +49,9 @@ class DetectionLoss(BaseLoss):
             giou_loss_coef: float = 2.0,
             eos_coef: float = 0.1,  # Weight for no-object class
             label_smoothing: float = 0.0,
+            use_focal: bool = True,
+            focal_gamma: int = 2,
+            focal_alpha: float = 0.25,
             aux_loss_coef: float = 0.5,
             enc_loss_coef: float = 0.3,
             line_loss_coef: float = 2.0,
@@ -69,9 +74,13 @@ class DetectionLoss(BaseLoss):
             :param bbox_loss_coef: Coefficient for bbox loss
             :param class_loss_coef: Coefficient for classification loss
             :param giou_loss_coef: Coefficient for GIoU loss
-            :param eos_coef: Coefficient for no-object class
+            :param eos_coef: Coefficient for no-object class (for Cross-entropy loss)
             :param label_smoothing: Value for label smoothing in cross-entropy loss
+            :param use_focal: Whether to use Focal Loss instead of CE loss
+            :param focal_gamma: The gamma value for Focal Loss
+            :param focal_alpha: The alpha value for Focal Loss
             :param aux_loss_coef: Coefficient for weighting of auxiliary loss
+            :param enc_loss_coef: Coefficient for weighting of the total encoder loss
             :param line_loss_coef: Coefficient for loss of line-detection head
             :param line_angle_loss_coef: Coefficient for line angle loss component
             :param line_length_loss_coef: Coefficient for line log-length loss component
@@ -89,8 +98,12 @@ class DetectionLoss(BaseLoss):
         self.bbox_loss_coef = bbox_loss_coef
         self.class_loss_coef = class_loss_coef
         self.giou_loss_coef = giou_loss_coef
-        self.aux_loss_coef = aux_loss_coef
+        self.label_smoothing = label_smoothing
+        self.use_focal = use_focal
+        self.focal_gamma = focal_gamma
+        self.focal_alpha = focal_alpha
         self.enc_loss_coef = enc_loss_coef
+        self.aux_loss_coef = aux_loss_coef
         self.line_loss_coef = line_loss_coef
         self.line_angle_loss_coef = line_angle_loss_coef
         self.line_length_loss_coef = line_length_loss_coef
@@ -101,7 +114,6 @@ class DetectionLoss(BaseLoss):
         self.line_class_id = line_class_id
         self.enable_ellipse_detection = enable_ellipse_detection
         self.ellipse_class_id = ellipse_class_id
-
         self.device = device
 
         self.reset_metrics()
@@ -112,7 +124,6 @@ class DetectionLoss(BaseLoss):
         empty_weight = empty_weight.to(self.device)
         self.register_buffer('empty_weight', empty_weight)
 
-        self.label_smoothing = label_smoothing
 
     def reset_metrics(self):
         """
@@ -211,12 +222,14 @@ class DetectionLoss(BaseLoss):
         idx = self._get_src_permutation_idx(indices)
         target_classes[idx] = target_classes_o
         # Now, target_classes has shape [B, num_queries], where all non-used entries get class "None" and the matched entries get their correct class.
-        loss_ce = F.cross_entropy(
-            pred_logits.transpose(1, 2),
-            target_classes,
-            weight=self.empty_weight,
-            label_smoothing=self.label_smoothing
-        )
+
+        if self.use_focal:
+            target = F.one_hot(target_classes, num_classes=self.num_classes+1).to(dtype=torch.float)#[..., :-1]
+            loss = torchvision.ops.sigmoid_focal_loss(pred_logits, target, self.focal_alpha, self.focal_gamma, reduction="none")
+            loss_cls = loss.mean(1).sum() * pred_logits.shape[1] / target_boxes.shape[0]
+        else:
+            loss_cls = F.cross_entropy(pred_logits.transpose(1, 2), target_classes, weight=self.empty_weight, label_smoothing=self.label_smoothing)
+
 
         num_matched_targets = target_classes_o.shape[0]
         if num_matched_targets > 0:
@@ -224,7 +237,7 @@ class DetectionLoss(BaseLoss):
             src_boxes = pred_boxes[idx] # Selecting the boxes selected by the hungarian matching
             src_lines = pred_lines[idx] if pred_lines is not None else None
             src_ellipses = pred_ellipses[idx] if pred_ellipses is not None else None
-            # This selected the two chosen target boxes in correct order)
+
             box_mask = ~ (line_mask | ellipse_mask)
             num_box_matches = int(box_mask.sum().item())
             num_line_matches = int(line_mask.sum().item())
@@ -310,7 +323,7 @@ class DetectionLoss(BaseLoss):
             loss_ellipse = torch.tensor(0.0, device=pred_logits.device)
 
         return {
-            'loss_ce': loss_ce * self.class_loss_coef,
+            'loss_ce': loss_cls * self.class_loss_coef,
             'loss_bbox': loss_bbox * self.bbox_loss_coef,
             'loss_giou': loss_giou * self.giou_loss_coef,
             'loss_line': loss_line * self.line_loss_coef,
@@ -325,6 +338,8 @@ class DetectionLoss(BaseLoss):
 
         pred_logits = dn_outputs["pred_logits"]
         pred_boxes = dn_outputs["pred_boxes"]
+        pred_lines = dn_outputs.get("pred_lines")
+        target_lines = dn_outputs.get("target_lines")
         target_labels = dn_outputs["target_labels"]
         target_boxes = dn_outputs["target_boxes"]
         valid_mask = dn_outputs["target_valid_mask"]
@@ -345,7 +360,7 @@ class DetectionLoss(BaseLoss):
         else:
             line_mask = torch.zeros_like(labels_valid, dtype=torch.bool)
 
-        if self.enable_line_detection and self.ellipse_class_id >= 0:
+        if self.enable_ellipse_detection and self.ellipse_class_id >= 0:
             ellipse_class_mask = labels_valid == self.ellipse_class_id
         else:
             ellipse_class_mask = torch.zeros_like(labels_valid, dtype=torch.bool)
@@ -355,8 +370,7 @@ class DetectionLoss(BaseLoss):
 
         if box_mask.any():
             loss_bbox = F.l1_loss(boxes_valid[box_mask], target_boxes_valid[box_mask])
-            giou_matrix = self._generalized_box_iou(boxes_valid[box_mask],                target_boxes_valid[box_mask],
-            )
+            giou_matrix = self._generalized_box_iou(boxes_valid[box_mask], target_boxes_valid[box_mask])
             loss_giou = (1 - torch.diag(giou_matrix)).mean()
         else:
             loss_bbox = torch.tensor(0.0, device=pred_logits.device)
@@ -625,7 +639,6 @@ class DetectionLoss(BaseLoss):
 
         batch_size, num_queries = pred_logits.shape[:2]
         # Flatten to compute cost matrices
-        out_prob = pred_logits.float().flatten(0, 1).clamp(-20, 20).log_softmax(-1)  # [B*num_queries, num_classes + 1]
         out_bbox = pred_boxes.flatten(0, 1)  # [B*num_queries, 4]
         indices = []
 
@@ -705,7 +718,15 @@ class DetectionLoss(BaseLoss):
             cost_bbox[:, :len(tgt_bbox)] = torch.cdist(out_bbox[i * num_queries:(i + 1) * num_queries], tgt_bbox, p=1)
 
             # Classification cost
-            cost_class = -out_prob[i * num_queries:(i + 1) * num_queries][:, tgt_ids]
+            if self.use_focal:
+                out_prob = F.sigmoid(pred_logits.flatten(0, 1))
+                out_prob = out_prob[i * num_queries:(i + 1) * num_queries][:, tgt_ids]
+                neg_cost_class = (1 - self.focal_alpha) * (out_prob ** self.focal_gamma) * (-(1 - out_prob + 1e-8).log())
+                pos_cost_class = self.focal_alpha * ((1 - out_prob) ** self.focal_gamma) * (-(out_prob + 1e-8).log())
+                cost_class = pos_cost_class - neg_cost_class
+            else:
+                out_prob = pred_logits.float().flatten(0, 1).softmax(-1) # .clamp(-20, 20).log_softmax(-1) (old attempt of stabilizing training)
+                cost_class = -out_prob[i * num_queries:(i + 1) * num_queries][:, tgt_ids]
 
             # GIoU cost
             cost_giou = torch.zeros(num_queries, len(tgt_ids), device=out_bbox.device)

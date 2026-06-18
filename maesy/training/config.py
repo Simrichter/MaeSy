@@ -34,6 +34,7 @@ class TrainingConfig:
     lr_step_factor: float = 0.3  # For step scheduler
     
     # Checkpoint and logging
+    save_checkpoints: bool = True
     save_dir: str = "./checkpoints"
     save_frequency: int = 10 # Save every n epochs
     log_frequency: int = 10 # Log every n global steps

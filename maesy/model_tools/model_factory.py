@@ -5,7 +5,6 @@ from typing import Dict
 import torch
 import yaml
 
-import maesy
 from maesy.model import (
     BaseModel,
     DETR,
@@ -17,18 +16,18 @@ from maesy.model import (
     MaskedAutoencoderMultiscale,
     MaskedAutoencoderViT,
 )
-from maesy.model_tools import CheckpointHandler
+from maesy.model_tools.checkpoint_handler import CheckpointHandler
 
 known_architectures = [config.rstrip(".yaml") for config in os.listdir((Path(os.path.realpath(__file__)).parent.parent.parent)/"cfg")]# ["rt-detr", "detr", "mae", "mae-multiscale"]
 
-def _print_model_info(model: BaseModel):
+def _print_model_info(model: "BaseModel"):
     """Utility function to print model information."""
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
 
-def create_model_from_config(config: Dict) -> BaseModel:
+def create_model_from_config(config: Dict) -> "BaseModel":
     """
         Creates a model according to the provided config.
 
@@ -59,7 +58,7 @@ def create_model_from_config(config: Dict) -> BaseModel:
         case _:
             raise ValueError(f"Model type '{config.get('type', '')}' not recognized. Supported types: ['mae', 'mae-multiscale', 'detr', 'rt_detr']")
 
-def create_model_from_checkpoint(checkpoint: str) -> BaseModel:
+def create_model_from_checkpoint(checkpoint: str) -> "BaseModel":
     """
     Creates a model according to the provided checkpoint.
 
@@ -89,7 +88,7 @@ def read_yaml(path:str) -> Dict:
     with open(path, "r") as f:
         return yaml.full_load(f)
 
-def create_model(model: str, config) -> BaseModel:
+def create_model(model: str, config) -> "BaseModel":
     """
 
     Parameters

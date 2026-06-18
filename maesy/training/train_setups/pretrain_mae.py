@@ -3,11 +3,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch
-from imageio import v2
+
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2 as transforms
 
-from maesy.model_tools import create_model_from_config
+from maesy.model_tools.model_factory import create_model_from_config
 from maesy.training import mae_trainer, TrainingConfig
 from maesy.dataset import UnlabeledDataset, MaesyDataset
 from maesy.model_tools.model_factory import create_model, known_architectures, read_yaml, create_model_from_checkpoint

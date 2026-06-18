@@ -230,7 +230,8 @@ class BaseTrainer(ABC):
                 line_class_id=getattr(self.model.config, "line_class_id", -1),
                 ellipse_class_id=getattr(self.model.config, "ellipse_class_id", -1),
                 eos_coef=getattr(self.config, "eos_coef", 0.1),
-                device=self.device
+                device=self.device,
+                use_focal=getattr(self.config, "use_focal_loss", False),
             )
             return loss
         elif self.config.criterion == "MaskedMSE":
@@ -400,9 +401,9 @@ class BaseTrainer(ABC):
                 # Save most recent epoch
                 self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, 'latest_model.pth', self.scheduler)
 
-                # Save checkpoint periodically
-                if (self.current_epoch + 1) % self.config.save_frequency == 0:
-                    self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, f'checkpoint_epoch_{self.current_epoch + 1}.pth', self.scheduler)
+            # Save checkpoint periodically (even in fast mode)
+            if (self.current_epoch + 1) % self.config.save_frequency == 0:
+                self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config, f'checkpoint_epoch_{self.current_epoch + 1}.pth', self.scheduler)
 
         # Save final model
         self.checkpoint_handler.save_checkpoint(self.current_epoch, self.global_step, self.model, self.optimizer, self.best_val_loss, self.config,'final_model.pth', self.scheduler)

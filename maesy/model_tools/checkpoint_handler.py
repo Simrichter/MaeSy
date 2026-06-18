@@ -1,9 +1,10 @@
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, TYPE_CHECKING
 
 import torch
 
-from maesy.model import BaseModel
+if TYPE_CHECKING:
+    from maesy.model import BaseModel
 
 class CheckpointHandler:
     @staticmethod
@@ -106,7 +107,7 @@ class CheckpointHandler:
             raise ValueError(
                 f"Incompatible model architecture. Checkpoint backbone type: {checkpoint['backbonetype']}, actual backbone type: {model.backbone.type}. Checkpoint head type: {checkpoint['headtype']}, actual head type: {model.head.type}.")
 
-    def load_model(self, filepath: str, model=None) -> BaseModel:
+    def load_model(self, filepath: str, model=None) -> "BaseModel":
         """
         Load model with weights.
         No optimizer or scheduler states are loaded.

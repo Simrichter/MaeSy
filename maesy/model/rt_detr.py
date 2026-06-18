@@ -1,7 +1,7 @@
 """RT-DETR style detector integrated with the MaeSy BaseModel contracts."""
 
 from dataclasses import dataclass
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict, List, Optional
 
 import torch
 
@@ -21,6 +21,7 @@ class RTDETRConfig:
 
     num_classes: int = 80
     num_queries: int = 100
+    softmax_activated: bool = False
 
     embed_dim: int = 256
     num_decoder_layers: int = 6
@@ -42,8 +43,8 @@ class RTDETRConfig:
     num_rep_blocks_in_fusion: int = 3
 
 
-def decode_detr_predictions(
-        pred_logits: torch.Tensor,
+def _decode_detr_predictions(
+    pred_logits: torch.Tensor,
     pred_boxes: torch.Tensor,
     pred_lines: torch.Tensor | None = None,
     pred_ellipses: torch.Tensor | None = None,
@@ -51,6 +52,7 @@ def decode_detr_predictions(
     ellipse_class_id: int | None = None,
     no_object_class: int | None = None,
     score_threshold: float = 0.0,
+    softmax_activated: bool = True
 ) -> List[Dict[str, torch.Tensor]]:
     """
     Decode DETR outputs to a list of ``xyxy`` detections per image.
@@ -64,6 +66,7 @@ def decode_detr_predictions(
         :param ellipse_class_id: Int specifying the cls_id for ellipses
         :param no_object_class: Int specifying the cls_id for no objects. Defaults to last cls_id
         :param score_threshold: Threshold to filter predictions with too low confidence
+        :param softmax_activated: whether the class probabilities are meant as logits for softmax (or sigmoid if set to false)
 
     Returns:
         List of dicts containing:
@@ -77,7 +80,7 @@ def decode_detr_predictions(
     if no_object_class is None:
         no_object_class = pred_logits.shape[-1] - 1
 
-    probs = pred_logits.softmax(-1)
+    probs = pred_logits.softmax(-1) if softmax_activated else pred_logits.sigmoid()
     scores, labels = probs.max(-1)
     decoded: List[Dict[str, torch.Tensor]] = []
 
@@ -203,14 +206,14 @@ class RTDETR(BaseModel):
                 num_rep_blocks_in_fusion=config.num_rep_blocks_in_fusion
             )
 
-        self.head = RTDETRHead(head_conf)
+        self.head:RTDETRHead = RTDETRHead(head_conf)
 
         print(
             f"Created RT-DETR model with backbone {self.backbone.type} and head {self.head.type}"
             # f"\n Feature channels: {self.backbone.get_feature_channels()}"
         )
 
-    def update_head_conf(self, num_classes: int = None, special_classes: Dict[str, int] = None) -> None:
+    def update_head_conf(self, num_classes: Optional[int] = None, special_classes: Dict[str, int] = None) -> None:
         """
             Update the configs with new number of classes or special class IDs and create a new classification head
 
@@ -245,7 +248,7 @@ class RTDETR(BaseModel):
         score_threshold = kwargs.pop("score_threshold", 0.3)
         raw_out = self.forward(images, **kwargs)
 
-        predictions = decode_detr_predictions(
+        predictions = _decode_detr_predictions(
             pred_logits=raw_out["pred_logits"],
             pred_boxes=raw_out["pred_boxes"],
             pred_lines=raw_out.get("pred_lines"),
@@ -254,6 +257,7 @@ class RTDETR(BaseModel):
             ellipse_class_id=self.config.ellipse_class_id,
             no_object_class=raw_out["pred_logits"].shape[-1] - 1,
             score_threshold=score_threshold,
+            softmax_activated=self.config.softmax_activated
         )
 
         return raw_out, predictions, targets

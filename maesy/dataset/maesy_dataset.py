@@ -21,8 +21,8 @@ class MaesyDataset(Dataset):
     def __init__(
             self,
             dataset_dir: str,
-            split: str,
-            annotation_type: str,
+            split: str = "None",
+            annotation_type: str = "None",
             transforms: Optional[Callable] = None,
             start_index: int = 0,
             step: int = 1,
@@ -36,19 +36,34 @@ class MaesyDataset(Dataset):
         Args:
             :param dataset_dir: Path to the MaesyDataset root directory
             :param split: The split to be used (i.e. "train", "val", "test", etc.)
-            :param annotation_type: The type of dataset, choice of ["detection", "classification", "None"]
+            :param annotation_type: The type of dataset, choice of ["detection", "classification", "None", "image_folder"]
             :param transforms: Optional transforms to apply
             :param start_index: The index from which to start
             :param step: The step size for sampling images (e.g., step=2 will take every other image)
             # :param repeat_factor: The factor by which to repeat the dataset (e.g., repeat_factor=2 will repeat the dataset twice, effectively doubling its size)
             :param enable_lines: Whether to include line annotations (if line_class_id is defined in dataset.yaml)
             :param enable_ellipses: Whether to include ellipse annotations (if ellipse_class_id is defined in dataset.yaml)
-            :param use_first_n: If not None, only use the first n samples from the dataset (after applying start_index and step)
+            :param use_first_n: If not None, only use the first n samples from the dataset (after applying start_index, step, repeat_factor)
         """
 
         if not os.path.exists(dataset_dir):
             raise ValueError(f"Path '{dataset_dir}' does not exist.")
 
+        self.transforms = transforms
+
+        if annotation_type == "image_folder":
+            self.repeat_factor = 1 # image folders currently don't support repetition (because factor is set in dataset.yaml)
+            self._load_image_folder(dataset_dir)
+        else:
+            self._read_dataset_info(dataset_dir, split, annotation_type, enable_lines, enable_ellipses)
+
+        self.images = self.images[start_index::step] * self.repeat_factor
+        if use_first_n is not None:
+            self.images = self.images[:use_first_n]
+            self.annotations = self.annotations[:use_first_n]
+
+    def _read_dataset_info(self, dataset_dir: str, split: str, annotation_type: str, enable_lines: bool, enable_ellipses: bool):
+        assert split != "None", "Failed: Split must be specified for dataset types 'detection', 'classification' or 'None'!\nOnly type 'image_folder' does not require a split!"
         if dataset_dir.endswith((".yaml", ".yml")):
             yaml_path = dataset_dir
         else:
@@ -84,15 +99,13 @@ class MaesyDataset(Dataset):
         self.annotations_dir = split_path / "labels"
         assert self.images_dir.exists()
         assert self.annotations_dir.exists()
-        self.transforms = transforms
-        self.return_labels = annotation_type != "None"
+        self.return_labels = annotation_type not in ["None", "image_folder"]
 
-        self.id_to_name = {i:v for i,v in enumerate(yaml_data.get("names", []))}
-        self.name_to_id = {v:k for k,v in self.id_to_name.items()}
-
-        self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if img.endswith((".jpg", ".jpeg", ".png"))][start_index::step] * repeat_factor
+        self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if img.endswith((".jpg", ".jpeg", ".png"))]
 
         if self.return_labels:
+            self.id_to_name = {i: v for i, v in enumerate(yaml_data.get("names", []))}
+            self.name_to_id = {v: k for k, v in self.id_to_name.items()}
             self.num_classes = yaml_data.get("nc", -1)
             if self.num_classes == -1 and len(self.name_to_id) > 0:
                 raise ValueError(f"Value of nc not set properly in dataset.yaml. Found {len(self.name_to_id)} classes in dataset.yaml, but no 'nc' entry")
@@ -117,12 +130,16 @@ class MaesyDataset(Dataset):
                     raise FileNotFoundError(f"Annotation file {annotation_path} not found for image {img}")
                 self.annotations.append(annotation_path)
 
-        # self.annotations: List[Path] = [Path(ann) for ann in sorted(os.listdir(self.annotations_dir)) if ann.endswith(".txt")][start_index::step]*repeat_factor
-        if use_first_n is not None:
-            self.images = self.images[:use_first_n]
-            self.annotations = self.annotations[:use_first_n]
-
         print(f"Loaded {split} data...")
+        print("-" * 30)
+
+    def _load_image_folder(self, dataset_dir):
+        assert os.path.exists(dataset_dir), f"Failed: Image folder {dataset_dir} does not exist!"
+        self.return_labels = False
+        self.images_dir = dataset_dir
+        self.images: List[Path] = [Path(img) for img in sorted(os.listdir(dataset_dir)) if img.endswith((".jpg", ".jpeg", ".png"))]
+
+        print(f"Loaded image folder from path {dataset_dir}...")
         print("-" * 30)
 
     def __len__(self) -> int:
@@ -386,7 +403,11 @@ class MaesyDataset(Dataset):
             Returns:
                 A dict containing {name: class_id} pairs
         """
-        return self.special_classes #{"line_class_id": self.line_class_id, "ellipse_class_id": self.ellipse_class_id}
+        if self.return_labels:
+            return self.special_classes #{"line_class_id": self.line_class_id, "ellipse_class_id": self.ellipse_class_id}
+        else:
+            print("Warning: get_special_classes call to a dataset without labels!")
+            return {}
 
     def get_num_classes(self) -> int:
         """
@@ -394,4 +415,8 @@ class MaesyDataset(Dataset):
         Returns:
             Number of classes
         """
-        return self.num_classes
+        if self.return_labels:
+            return self.num_classes
+        else:
+            print("Warning: get_num_classes call to a dataset without labels!")
+            return 0

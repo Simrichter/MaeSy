@@ -26,6 +26,11 @@ class BaseModel(ABC, nn.Module):
             :param images: Input images [B, C, H, W]
             :param targets: Ground truth targets (format depends on the task)
             :param kwargs: Additional arguments for inference (e.g., confidence thresholds, etc.)
+
+        Returns:
+            raw_out: raw output of the model
+            preds: post-processed output of the model
+            targets: targets
         """
         raw_out = self.forward(images, **kwargs)
         preds = raw_out # At this point, model-specific post-processing steps can be applied (usually argmax on class logits, etc.)

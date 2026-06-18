@@ -1,14 +1,13 @@
 """Dataset manager for downloading and managing datasets."""
 
 import os
-import json
 import shutil
 import zipfile
 from math import ceil
 
 import requests
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, List
 
 import yaml
 from tqdm import tqdm
@@ -97,8 +96,8 @@ class DatasetManager:
 
         return dataset_dir
 
-    def cluster_data(self, folder_names: list[str], chosen_paths: list[str], num_clusters: int,
-                     cluster_method: str = "resnet_kmeans", step: int = 1, start_index: int = 0) -> List[Path]:
+    def cluster_data(self, folder_names: list[str], chosen_paths: list[str], cluster_method: str = "resnet_kmeans", step: int = 1, start_index: int = 0,
+                     batch_size: int = 256, **kwargs) -> List[Path]:
         """
             Clusters all images in the given folders into num_clusters clusters using the specified method.
             The paths of the images to be used are returned as a list
@@ -106,23 +105,25 @@ class DatasetManager:
         Arguments:
             :param folder_names: A list of paths to image data folders
             :param chosen_paths: List of already chosen image paths to include as initial representatives (pass None if not wanted)
-            :param num_clusters: The number of clusters to create (for resnet_kmeans)
-                                or a proxy for similarity threshold (for sequential_similarity)
             :param cluster_method: A string specifying the clustering method to use. Default is resnet_kmeans
                                    Options: "resnet_kmeans", "sequential_similarity"
             :param step: Step size for selecting images from folders. Default=1 (use all images)
             :param start_index: Start index for selecting images from folders. Default=0
+            :param batch_size: The batch size to be used for feature extraction. Default=256
+            :param kwargs: Additional specifications like 'num_clusters' or 'similarity_threshold'
+
             :return: A list of paths to the selected images
         """
         match cluster_method:
             case "resnet_faiss":
-                from maesy.dataset.clustering_methods.resnet_FAISS import cluster_with_faiss as cluster
-                # TODO: Make this a parameter?
-                similarity_threshold = 0.85
-                return cluster(folder_names, chosen_paths, similarity_threshold, step=step, start_index=start_index)
+                from maesy.dataset.clustering_methods.resnet_FAISS import ResnetFaiss
+                # return cluster(folder_names, chosen_paths, similarity_threshold, step=step, start_index=start_index)
+                return ResnetFaiss().run(paths=folder_names, chosen_paths=chosen_paths, step=step, start_index=start_index, similarity_threshold=kwargs.get("similarity_threshold", 0.85), batch_size=batch_size)
+                # TODO: Make threshold a param
             case "resnet_kmeans":
-                from maesy.dataset.clustering_methods.resnet_kmeans import cluster
-                return cluster(folder_names, n_c=num_clusters, step=step, start_index=start_index)
+                from maesy.dataset.clustering_methods.resnet_kmeans import ResnetKmeans
+                return ResnetKmeans().run(paths=folder_names, chosen_paths=chosen_paths, step=step, start_index=start_index, num_clusters=kwargs.get("num_clusters", 200), batch_size=batch_size)
+                # return cluster_with_kmeans(folder_names, n_c=num_clusters, step=step, start_index=start_index)
             case _:
                 raise ValueError(f"Unknown clustering method {cluster_method}")
 
@@ -212,6 +213,9 @@ class DatasetManager:
                        merge_ids: Optional[dict[int, int]] = None,
                        permute_ids: Optional[list[int]] = None,
                        nc: Optional[int] = None,
+                       similarity_threshold: Optional[float] = None,
+                       num_clusters: Optional[int] = None,
+                       cluster_batch_size: int = 256,
                        class_names: Optional[List[str]] = None,
                        special_classes: Optional[Dict[str, str]] = None,
                        ) -> Path:
@@ -279,9 +283,9 @@ class DatasetManager:
                     img_paths.extend(image_paths)
                 return img_paths
             else:
-                folder_path = self.cluster_data(folder_names, chosen_paths, cluster_method=cluster_method, num_clusters=500, step=step, start_index=start_index)
-                image_paths = [f for f in folder_path if
-                               f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
+                folder_path = self.cluster_data(folder_names, chosen_paths, cluster_method=cluster_method, step=step, start_index=start_index,
+                                                batch_size=cluster_batch_size, num_clusters=num_clusters, similarity_threshold=similarity_threshold)
+                image_paths = [f for f in folder_path if f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
                 if len(image_paths) == 0:
                     raise ValueError(f"No image files found after clustering. Exiting...")
                 return image_paths

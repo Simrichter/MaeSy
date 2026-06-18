@@ -125,7 +125,7 @@ def main():
     log_extract_parser.add_argument("--topic-name",
                                     help="Space-separated list of topics to extract images from (default [/image_left_raw])",
                                     nargs="+", default=["/image_left_raw"])
-    log_extract_parser.add_argument("--output_dir", help="Directory to save the extracted images",
+    log_extract_parser.add_argument("--output-dir", help="Directory to save the extracted images",
                                     default="./extracted_images")
     log_extract_parser.add_argument("--exact", action="store_true",
                                     help="Match topic names exactly (e.g. '/camera/image_left_raw' wont match '/image_left_raw'. If not set, will match by last part of topic name")

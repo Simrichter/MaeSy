@@ -31,10 +31,12 @@ exact_match
         print("_" * 60)
         raise EnvironmentError("ROS2 Python libraries not found. If you need rosbag log functionality, source your ROS2 workspace")
 
+    def _create_path_to_topic(topic: str) -> Path:
+        return save_path/(Path(topic.lstrip('/')))
+
     save_path = Path(output_dir)/Path(bag_path).name.removesuffix(".mcap")
-    topic_dirs = {topic: save_path/(Path(topic.lstrip("/"))) for topic in topic_name}
-    for topic_dir in topic_dirs.values():
-        os.makedirs(topic_dir, exist_ok=True)
+
+    topic_dirs = {}
     pbar = None
     meta_path = Path(bag_path).parent /"metadata.yaml"
     if os.path.exists(meta_path):
@@ -56,9 +58,11 @@ exact_match
     counter = 0
     while reader.has_next():
         topic, data, t = reader.read_next()
-        if not exact_match:
-            topic = f'/{topic.split("/")[-1]}'
-        if topic in topic_dirs:
+        if not exact_match and any([topic.endswith(t) for t in topic_name]):
+            topic_dirs[topic] = _create_path_to_topic(topic)
+            topic_dirs[topic].mkdir(parents=True, exist_ok=True)
+
+        if topic in topic_dirs.keys():
             msg = deserialize_message(data, Image)
 
             # Direkt aus Buffer lesen

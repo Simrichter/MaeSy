@@ -83,9 +83,9 @@ class MaesyDataset(Dataset):
             yaml_data = {}
 
         if split == "train": # Only repeat if in train mode. Validation and testing should remain unrepeated
-            repeat_factor = yaml_data.get("repeat_factor", 1) # Default value is 1, but could be increased for overfitting tests
+            self.repeat_factor = yaml_data.get("repeat_factor", 1) # Default value is 1, but could be increased for overfitting tests
         else:
-            repeat_factor = 1
+            self.repeat_factor = 1
 
         dataset_dir = yaml_data.get("path", dataset_dir)
         self.box_format = str(yaml_data.get("box_format", "")).lower()
@@ -95,15 +95,18 @@ class MaesyDataset(Dataset):
         split_path = Path(dataset_dir) / yaml_data.get(split, split)
         assert split_path.exists(), f"Requested split '{split}' does not exist in dataset at {dataset_dir}"
 
-        self.images_dir = split_path / "images"
-        self.annotations_dir = split_path / "labels"
-        assert self.images_dir.exists()
-        assert self.annotations_dir.exists()
+
         self.return_labels = annotation_type not in ["None", "image_folder"]
+
+        self.images_dir = split_path / "images"
+        assert self.images_dir.exists()
 
         self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if img.endswith((".jpg", ".jpeg", ".png"))]
 
         if self.return_labels:
+            self.annotations_dir = split_path / "labels"
+            assert self.annotations_dir.exists()
+
             self.id_to_name = {i: v for i, v in enumerate(yaml_data.get("names", []))}
             self.name_to_id = {v: k for k, v in self.id_to_name.items()}
             self.num_classes = yaml_data.get("nc", -1)

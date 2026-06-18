@@ -104,7 +104,7 @@ class ResnetFaiss(BaseClustering):
         index = faiss.IndexFlatIP(feature_dim)
 
         if existing_dataloader is not None:
-            for batch_tensor in tqdm(existing_dataloader):
+            for batch_tensor, _ in tqdm(existing_dataloader, desc="Loading existing data"):
                 batch_tensor = batch_tensor.to(self.device)
                 # Extract features
                 with torch.no_grad():
@@ -120,7 +120,7 @@ class ResnetFaiss(BaseClustering):
         # Process images in batches for efficiency
         print("Extracting features and selecting representatives with FAISS...")
 
-        for i, (batch_tensor, _) in enumerate(tqdm(new_dataloader)):
+        for i, (batch_tensor, _) in enumerate(tqdm(new_dataloader, desc="Clustering...")):
             batch_tensor = batch_tensor.to(self.device)
             # Extract features
             with torch.no_grad():

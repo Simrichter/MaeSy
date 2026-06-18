@@ -1,6 +1,7 @@
 import shutil
 from dataclasses import dataclass
 from typing import List, Any
+import logging
 
 import torch
 import torchvision
@@ -11,8 +12,9 @@ from tqdm import tqdm
 
 from maesy.evaluation.inferer import Inferer
 # Import models
-from maesy.model_tools import replace_bn_with_frozenbn, CheckpointHandler, read_yaml
-from maesy.model_tools.model_factory import create_model_from_config, known_architectures, create_model_from_checkpoint
+from maesy.model_tools.layer_manipulations import replace_bn_with_frozenbn
+from maesy.model_tools.checkpoint_handler import  CheckpointHandler
+from maesy.model_tools.model_factory import create_model_from_config, known_architectures, create_model_from_checkpoint, read_yaml
 
 # Import training components
 from maesy.training import DetectionTrainer, TrainingConfig
@@ -21,7 +23,6 @@ from maesy.training.utils import collate_detection_fn
 # Import dataset
 from maesy.dataset import MaesyDataset, MultiDataset
 from maesy.dataset.od_augmentations import ODTrainTransforms, ODValTransforms
-
 
 @dataclass
 class ODTrainingConfig(TrainingConfig):
@@ -45,7 +46,8 @@ class ODTrainingConfig(TrainingConfig):
     lr_step_size: int = 30  # For step scheduler
     lr_gamma: float = 0.1  # For step scheduler
 
-    # Loss coefficients
+    # Loss Function
+    use_focal_loss: bool = False,
     bbox_loss_coef: float = 5.0,
     class_loss_coef: float = 1.0,
     giou_loss_coef: float = 2.0
@@ -69,7 +71,7 @@ class ODTrainingConfig(TrainingConfig):
     num_workers: int = 4
 
     # Gradient clipping
-    max_grad_norm: float = 1.0
+    max_grad_norm: float = 10.0
 
     # Mixed precision training
     use_amp: bool = True
@@ -91,6 +93,8 @@ def train_vit_detector(
     override_params: dict = {},
     seed: int = 42,
     device: str = "auto",
+    fast_mode: bool = False,
+    debug: bool = False,
 ):
     """
     Train an object detection model with the selected detector architecture.
@@ -111,6 +115,27 @@ def train_vit_detector(
     print("Starting object detection training")
     print("=" * 60)
 
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s: %(message)s"
+    )
+
+    if debug:
+        # activate automatic anomaly detection in the gradient calculation
+        torch.autograd.set_detect_anomaly(True)
+        torch.autograd.profiler.emit_nvtx()
+
+        # Force attention to math backend, because fused operations might hide bugs
+        torch.backends.cuda.enable_flash_sdp(False)
+        torch.backends.cuda.enable_mem_efficient_sdp(False)
+        torch.backends.cuda.enable_math_sdp(True)
+
+        fast_mode = True # disable checkpointing
+        # enable debug outputs (and checks)
+        logger = logging.getLogger("MaeSy")
+        logger.setLevel(logging.DEBUG)
+        logger.debug("Debug logging is activated")
+
     torch.manual_seed(seed)
 
     train_transforms = ODTrainTransforms(image_size=224)
@@ -126,10 +151,10 @@ def train_vit_detector(
 
     # Create training configuration
     training_config = ODTrainingConfig(
-        batch_size= override_params.get("batch_size", 48), # 64 l# TODO: Everything apart from largest model config (rt-detr6) was with 64
+        batch_size= override_params.get("batch_size", 32), # 64 l# TODO: Everything apart from largest model config (rt-detr6) was with 64
         num_epochs=3000,
-        learning_rate= override_params.get("learning_rate", 5e-6 if finetune else 5e-5),
-        backbone_learning_rate=5e-7 if finetune else 5e-6,
+        learning_rate= override_params.get("learning_rate", 5e-6 if finetune else 1e-5),
+        backbone_learning_rate=5e-7 if finetune else 1e-6,
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler= "plateau", # "cosine",
@@ -140,13 +165,15 @@ def train_vit_detector(
         label_smoothing=0.0 if finetune else 0.1,
         save_frequency=100,
         log_frequency=50,
+        save_checkpoints=not fast_mode,
         save_dir=output_dir,
         criterion="DetectionLoss",  # "YOLOv8Loss", #
-        use_amp=True,
+        use_amp=False,
+        use_focal_loss=False,
         bbox_loss_coef = 5.0,
         class_loss_coef = 1.0,
         giou_loss_coef = 2.0,
-        eos_coef = 0.2,
+        eos_coef = 0.1, # Was 0.2 for most runs
         aux_loss_coef = 0.5,
         enc_loss_coef = 0.3,
         line_loss_coef = 2.0,
@@ -181,6 +208,7 @@ def train_vit_detector(
 
     if model_info.lower() in known_architectures:
         config = read_yaml(f"cfg/{model_info.lower()}.yaml")
+        config["softmax_activated"] = not training_config.use_focal_loss
         if config["num_classes"] != -1 and config["num_classes"] != train_dataset.get_num_classes():
             raise ValueError("num_classes parameter in model config does not match the datasets 'nc' parameter. Leave value in config on '-1' to enable auto-detect.")
         config["num_classes"] = train_dataset.get_num_classes()
@@ -208,6 +236,7 @@ def train_vit_detector(
     elif model_info.endswith(".pth"):
         model = create_model_from_checkpoint(model_info)
         # Apply denoising parameters to the loaded model's config
+        assert model.config.softmax_activated == (not training_config.use_focal_loss), f"Model config softmax_activated ({model.config.softmax_activated}) does not match expected value based on training config use_focal_loss ({training_config.use_focal_loss}). This might lead to unexpected behavior during training. Please make sure the model config and training config are compatible."
         model.config.enable_denoising = enable_denoising
         model.config.denoising_num_queries = denoising_num_queries
         model.config.denoising_label_noise_ratio = denoising_label_noise_ratio
@@ -372,6 +401,9 @@ def export_vit_detector(
 
     example_inputs = (torch.randn(1, 3, 224, 224),)
     onnx_program = torch.onnx.export(model, example_inputs, dynamo=True)
+    if onnx_program is None:
+        print("FAILED: Model could not be exported.")
+        return
 
     path = Path(model_info).parent if output_path == "" else Path(output_path)
     path.mkdir(parents=True, exist_ok=True)
@@ -381,3 +413,22 @@ def export_vit_detector(
     onnx_program.save(save_name)
     print("=" * 60)
     print(f"Success! Model has been exported to {save_name}")
+
+if __name__ == "__main__":
+    train_vit_detector(
+        model_info="rt-detr6",
+        dataset_paths=["data/Cvat"],
+        output_dir="./od_checkpoints",
+        finetune=False,
+        continue_training_from_checkpoint=False,
+        pretrained_backbone="",
+        enable_wandb=False,
+        enable_denoising=True,
+        denoising_num_queries=100,
+        denoising_label_noise_ratio=0.0,
+        denoising_box_noise_scale=0.4,
+        enable_line_detection=False,
+        enable_ellipse_detection=False,
+        override_params={"batch_size": 2},
+        device="cpu"
+    )

@@ -13,7 +13,7 @@ from .metrics import prepare_targets_for_detection_metrics, compute_iou
 from ..dataset import MaesyDataset
 from .metrics import compute_detection_metrics
 from maesy.evaluation.inferer import Inferer
-from ..model_tools import create_model_from_checkpoint
+from ..model_tools.model_factory import create_model_from_checkpoint
 from torchvision.transforms import v2 as transforms
 
 from ..training.utils import collate_detection_fn

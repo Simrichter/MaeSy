@@ -85,7 +85,7 @@ class DetectionTrainer(BaseTrainer):
             # Get model predictions
             raw_out , predictions, _ = self.model.infer(images, targets=targets)
         else:
-            raw_out = self.model(images)
+            raw_out = self.model(images, targets=targets)
 
         # Compute loss
         losses = self.loss(raw_out, targets)

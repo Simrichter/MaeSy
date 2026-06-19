@@ -8,14 +8,14 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import v2 as transforms
 
 from maesy.model_tools.model_factory import create_model_from_config
-from maesy.training import mae_trainer, TrainingConfig
+from maesy.training import mae_trainer, BaseTrainingConfig
 from maesy.dataset import UnlabeledDataset, MaesyDataset
 from maesy.model_tools.model_factory import create_model, known_architectures, read_yaml, create_model_from_checkpoint
 
 from maesy.training import MaeTrainer
 
 @dataclass
-class MAETrainingConfig(TrainingConfig):
+class MAETrainingConfig(BaseTrainingConfig):
     """Configuration for training."""
 
     # Training parameters
@@ -34,7 +34,6 @@ class MAETrainingConfig(TrainingConfig):
     # Learning rate schedule
     lr_scheduler: str = "cosine"  # cosine, step, multistep
     lr_step_size: int = 30  # For step scheduler
-    lr_gamma: float = 0.1  # For step scheduler
 
     # Checkpoint and logging
     save_dir: str = "./checkpoints"

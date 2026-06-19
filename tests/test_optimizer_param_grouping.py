@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from maesy.model.base_model import BaseModel
 from maesy.training.base_trainer import BaseTrainer
-from maesy.training.config import TrainingConfig
+from maesy.training import BaseTrainingConfig
 
 
 class TinyBackbone(nn.Module):
@@ -47,7 +47,7 @@ def test_adamw_applies_weight_decay_only_to_standard_weights():
     dataset = TensorDataset(torch.zeros(2, 8), torch.zeros(2, dtype=torch.long))
     train_loader = DataLoader(dataset, batch_size=1)
 
-    config = TrainingConfig(
+    config = BaseTrainingConfig(
         optimizer="adamw",
         lr_scheduler="step",
         criterion="ClassificationLoss",

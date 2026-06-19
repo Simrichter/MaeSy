@@ -5,7 +5,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from maesy.training.base_trainer import BaseTrainer
-from maesy.training.config import TrainingConfig
+from maesy.training import BaseTrainingConfig
 from maesy.training.losses import DetectionLoss
 
 
@@ -45,7 +45,7 @@ def test_detection_loss_uses_model_config_coefficients():
         model=model,
         train_loader=train_loader,
         project_name="test-project",
-        config=TrainingConfig(criterion="DetectionLoss", device=torch.device("cpu")),
+        config=BaseTrainingConfig(criterion="DetectionLoss", device=torch.device("cpu")),
         enable_wandb=False,
     )
 

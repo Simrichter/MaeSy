@@ -1,4 +1,5 @@
 """Example script for classification pretraining."""
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -9,8 +10,15 @@ from maesy.dataset import UnlabeledDataset
 from maesy.model import ClassificationCNN, ClassificationCNNConfig
 from maesy.model.classification_ViT_model import ClassificationViTConfig, ClassificationViT
 from maesy.training import ClassificationTrainer
-from maesy.training.config import ClassificationPretrainingConfig
+from maesy.training.base_trainer import BaseTrainingConfig
 
+@dataclass
+class ClassificationPretrainingConfig(BaseTrainingConfig):
+    """Configuration for Classification pretraining."""
+    criterion: str = "ClassificationLoss"
+
+    # Checkpoint and logging
+    save_dir: str = "./classification_pretrain_checkpoints"
 
 def train_classification(dataset_path, enable_wandb, batch_size=64, num_epochs=50, num_classes=3):
     """Main classification pretraining function."""

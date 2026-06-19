@@ -1,7 +1,5 @@
-from dataclasses import asdict
-from typing import Protocol
-from abc import ABC, abstractmethod
-import os
+from dataclasses import asdict, dataclass
+from abc import ABC
 import torch
 import torch.nn as nn
 import wandb
@@ -13,27 +11,65 @@ from typing import Optional, Dict, Any
 
 from wandb import Image
 
-from .config import TrainingConfig
 from .losses import DetectionLoss, MaskedMSE, BaseLoss
-from ..model import ModelConfig, BaseModel
+from ..model import BaseModel
 from .utils import handle_raw_batch
 from ..model_tools.checkpoint_handler import CheckpointHandler
 
 
-class BaseTrainer(ABC):
+@dataclass
+class BaseTrainingConfig:
+    """Configuration for training."""
 
-    _NORM_MODULE_TYPES = (
-        nn.BatchNorm1d,
-        nn.BatchNorm2d,
-        nn.BatchNorm3d,
-        nn.SyncBatchNorm,
-        nn.GroupNorm,
-        nn.LayerNorm,
-        nn.InstanceNorm1d,
-        nn.InstanceNorm2d,
-        nn.InstanceNorm3d,
-        nn.LocalResponseNorm,
-    )
+    # Training parameters
+    num_epochs: int = 100
+    # batch_size: int = 16
+    weight_decay: float = 1e-4
+    label_smoothing: float = 0.0
+    warmup_epochs: int = 5
+    criterion: str = "None"  # e.g., DetectionLoss, MaskedMSE, etc.
+
+    # Optimizer
+    optimizer: str = "adamw"  # adamw, adam, sgd
+    momentum: float = 0.9  # For SGD
+
+    # Learning rate schedule
+    learning_rate: float = 1e-4
+    min_lr: float = 1e-7
+    early_stop_on_min_lr: bool = True
+    patience: int = 10  # For ReduceLROnPlateau scheduler
+    min_num_epochs_per_plateau: int = 100  # For ReduceLROnPlateau scheduler
+    backbone_learning_rate: float = learning_rate / 10
+    lr_scheduler: str = "cosine"  # cosine, step, plateau
+    plateau_metric: str = "val_losses/total_loss"  # Metric to monitor for ReduceLROnPlateau scheduler (like val_losses/total_loss, metrics/total_mAP, etc.)
+    lr_step_size: int = 30  # For step scheduler
+    lr_step_factor: float = 0.3  # For step scheduler
+
+    # Checkpoint and logging
+    save_checkpoints: bool = True
+    save_dir: str = "./checkpoints"
+    save_frequency: int = 10  # Save every n epochs
+    log_frequency: int = 10  # Log every n global steps
+
+    # Device
+    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
+    # num_workers: int = 4
+
+    # Gradient clipping
+    max_grad_norm: float = 10.0
+
+    # Early stopping
+    early_stopping_patience: Optional[int] = None
+
+    # Mixed precision training
+    use_amp: bool = True
+
+
+class BaseTrainer(ABC):
+    """
+    Base implementation of a training loop.
+    Specific implementations should inherit from this class and only override where model/task-specific changes are necessary
+    """
 
     def __init__(
             self,
@@ -41,7 +77,7 @@ class BaseTrainer(ABC):
             project_name: str,
             train_loader: DataLoader,
             val_loader: Optional[DataLoader] = None,
-            config: Optional[TrainingConfig] = None,
+            config: Optional[BaseTrainingConfig] = None,
             enable_wandb: bool = True
     ):
         """
@@ -56,7 +92,7 @@ class BaseTrainer(ABC):
 
         self.train_loader = train_loader
         self.val_loader = val_loader
-        self.config = config or TrainingConfig()
+        self.config = config or BaseTrainingConfig()
 
         self.enable_wandb = enable_wandb
         if self.enable_wandb:
@@ -133,7 +169,21 @@ class BaseTrainer(ABC):
     def _build_adamw_param_groups(self) -> list[dict[str, Any]]:
         """Create AdamW groups with no weight decay on bias, norms, and embeddings."""
 
-        def split_params(module: nn.Module) -> tuple[list[nn.Parameter], list[nn.Parameter]]:
+        def _split_params(module: nn.Module) -> tuple[list[nn.Parameter], list[nn.Parameter]]:
+
+            _NORM_MODULE_TYPES = (
+                nn.BatchNorm1d,
+                nn.BatchNorm2d,
+                nn.BatchNorm3d,
+                nn.SyncBatchNorm,
+                nn.GroupNorm,
+                nn.LayerNorm,
+                nn.InstanceNorm1d,
+                nn.InstanceNorm2d,
+                nn.InstanceNorm3d,
+                nn.LocalResponseNorm,
+            )
+
             module_lookup = dict(module.named_modules())
             decay_params: list[nn.Parameter] = []
             no_decay_params: list[nn.Parameter] = []
@@ -147,7 +197,7 @@ class BaseTrainer(ABC):
 
                 has_decay = (
                     param_name == "weight"
-                    and not isinstance(owner_module, self._NORM_MODULE_TYPES)
+                    and not isinstance(owner_module, _NORM_MODULE_TYPES)
                     and not isinstance(owner_module, (nn.Embedding, nn.EmbeddingBag))
                 )
 
@@ -163,7 +213,7 @@ class BaseTrainer(ABC):
             (self.model.backbone, self.config.backbone_learning_rate),
             (self.model.head, self.config.learning_rate),
         ):
-            decay_params, no_decay_params = split_params(module)
+            decay_params, no_decay_params = _split_params(module)
             if decay_params:
                 param_groups.append({"params": decay_params, "lr": lr, "weight_decay": self.config.weight_decay})
             if no_decay_params:
@@ -184,8 +234,7 @@ class BaseTrainer(ABC):
             constant = torch.optim.lr_scheduler.ConstantLR(self.optimizer, factor=1.0, total_iters=1000000)
             return torch.optim.lr_scheduler.SequentialLR(self.optimizer, schedulers=[warmup, cosine, constant],  milestones=[self.config.warmup_epochs, self.config.num_epochs])
         elif self.config.lr_scheduler.lower() == "step":
-            warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: min(
-                (step + 1) / self.config.warmup_epochs, 1.0))
+            warmup = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: min((step + 1) / self.config.warmup_epochs, 1.0))
             step = torch.optim.lr_scheduler.StepLR(
                 self.optimizer,
                 step_size=self.config.lr_step_size,
@@ -387,7 +436,8 @@ class BaseTrainer(ABC):
                     if val_out is None:
                         raise ValueError("Validation pass is required for plateau scheduler, but no validation loader was provided.")
                     # self.scheduler.step(val_out['val_losses/total_loss'])
-                    self.scheduler.step(val_out['metrics/total_mAP'])
+                    # self.scheduler.step(val_out['metrics/total_mAP'])
+                    self.scheduler.step(val_out[self.config.plateau_metric])
                 else:
                     self.scheduler.step()
 

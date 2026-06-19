@@ -26,3 +26,9 @@ def check_finite(name: str, x: Any, enabled: bool=True) -> None:
             check_finite(f"{name}.{idx}", v)
     elif isinstance(x, torch.Tensor):
         _check_finite(name, x)
+
+def log_print(msg: Any):
+    """
+    Small helper function, so logger does not need to be created everywhere
+    """
+    logger.debug(f"{msg}")

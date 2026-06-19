@@ -14,6 +14,8 @@ from tqdm import tqdm
 from maesy.dataset import MaesyDataset
 from maesy.dataset.bounding_box import BoundingBox
 from maesy.dataset.od_augmentations import ODTrainTransforms
+from maesy.model_tools.debug_helpers import log_print
+
 
 def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = ""):
     """
@@ -64,21 +66,19 @@ def visualize_data(input_dir: str, output_dir: str, splits: list[str]= ["train",
             datasets.append(MaesyDataset(input_dir, split, "detection", enable_lines=enable_lines, enable_ellipses=enable_ellipses, transforms=ODTrainTransforms(image_size=224) if apply_transforms else None))
         except AssertionError as e:
             ...
-            print(e)
+            log_print(e)
         except ValueError as e:
             ...
-            print(e)
+            log_print(e)
         except FileNotFoundError as e:
             ...
-            print(e)
+            log_print(e)
     if len(datasets) > 0:
         for d in datasets:
             visualize_dataset(d, output_dir)
         return
     else:
-        print("No MaesyDataset detected, assuming standard image folder with annotations (txt files with same name as images).")
-
-    # TODO: Line visualization not working!! Probably because line class id not known
+        log_print("No MaesyDataset detected, assuming standard image folder with annotations (txt files with same name as images).")
 
     if label_file!="":
         with open(label_file, "r") as f:
@@ -92,7 +92,7 @@ def visualize_data(input_dir: str, output_dir: str, splits: list[str]= ["train",
 
     lbl_dir = input_dir if label_path=="" else Path(label_path)
 
-    for file in os.listdir(input_dir):
+    for file in tqdm(os.listdir(input_dir)):
         suffix = "."+file.split(".")[-1]
         if suffix in (".png", ".jpg", ".jpeg"):
             img_path = os.path.join(input_dir, file)
@@ -119,7 +119,7 @@ def visualize_data(input_dir: str, output_dir: str, splits: list[str]= ["train",
                     ellipses.append([float(x) for x in parts[1:]])
 
                 if len(boxes) == 0:
-                    print(f"Empty annotations for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
+                    log_print(f"Empty annotations for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
                     continue
                 # img = draw_boxes_in_image(img_path, boxes, name_coding=name_coding).float() / 255.0
             img = read_image(img_path)[:3]  # Convert RGBA to RGB by dropping alpha channel if necessary

@@ -17,7 +17,7 @@ from maesy.model_tools.checkpoint_handler import  CheckpointHandler
 from maesy.model_tools.model_factory import create_model_from_config, known_architectures, create_model_from_checkpoint, read_yaml
 
 # Import training components
-from maesy.training import DetectionTrainer, TrainingConfig
+from maesy.training import DetectionTrainer, BaseTrainingConfig
 from maesy.training.utils import collate_detection_fn
 
 # Import dataset
@@ -25,28 +25,8 @@ from maesy.dataset import MaesyDataset, MultiDataset
 from maesy.dataset.od_augmentations import ODTrainTransforms, ODValTransforms
 
 @dataclass
-class ODTrainingConfig(TrainingConfig):
+class ODTrainingConfig(BaseTrainingConfig):
     """Configuration for training."""
-
-    # Training parameters
-    num_epochs: int = 100
-    batch_size: int = 16
-    learning_rate: float = 1e-4
-    backbone_learning_rate: float = learning_rate
-    weight_decay: float = 1e-4
-    warmup_epochs: int = 5
-    criterion: str = "None"  # e.g., DetectionLoss, MaskedMSE, etc.
-
-    # Optimizer
-    optimizer: str = "adamw"  # adamw, adam, sgd
-    momentum: float = 0.9  # For SGD
-
-    # Learning rate schedule
-    lr_scheduler: str = "cosine"  # cosine, step, multistep
-    lr_step_size: int = 30  # For step scheduler
-    lr_gamma: float = 0.1  # For step scheduler
-
-    # Loss Function
     use_focal_loss: bool = False,
     bbox_loss_coef: float = 5.0,
     class_loss_coef: float = 1.0,
@@ -61,20 +41,6 @@ class ODTrainingConfig(TrainingConfig):
     ellipse_shape_coef: float = 1.0
     dn_loss_coef: float = 1.0
 
-    # Checkpoint and logging
-    save_dir: str = "./checkpoints"
-    save_frequency: int = 10  # Save every n epochs
-    log_frequency: int = 10  # Log every n global steps
-
-    # Device
-    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
-    num_workers: int = 4
-
-    # Gradient clipping
-    max_grad_norm: float = 10.0
-
-    # Mixed precision training
-    use_amp: bool = True
 
 def train_vit_detector(
     model_info: str,
@@ -158,6 +124,7 @@ def train_vit_detector(
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler= "plateau", # "cosine",
+        plateau_metric= "val_losses/total_loss", # metrics/total_mAP
         patience=40 if finetune else 80,
         lr_step_factor=0.3,
         min_num_epochs_per_plateau=50 if finetune else 100,

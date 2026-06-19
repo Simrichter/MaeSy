@@ -1,55 +1,19 @@
 import os
 import warnings
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import cv2
 import numpy as np
 import torch
 from PIL.ImageColor import getrgb
-from torch.utils.data import DataLoader
 from torchvision.io import read_image
 from torchvision.utils import draw_bounding_boxes, save_image
 from tqdm import tqdm
 
-from maesy import ObjectDetectionDataset
 from maesy.dataset import MaesyDataset
 from maesy.dataset.bounding_box import BoundingBox
 from maesy.dataset.od_augmentations import ODTrainTransforms
-from maesy.training.utils import collate_detection_fn, handle_raw_batch
-
-
-# def visualize_from_dataset(dataset: str, output_dir, device=torch.device("cpu")):
-#     """
-#         Draws bounding boxes from a Dataset that provides images and annotations in the format used for training (i.e., with 'boxes' and 'labels' in the target dictionaries).
-#
-#         Args:
-#             :param dataset: Path to an object detection dataset
-#             :param output_dir: Folder in which the visualized images are saved
-#             :param device: Device to run visualization on (default: auto-detect CUDA if available, otherwise CPU)
-#     """
-#     if output_dir!="" and os.path.exists(output_dir):
-#         raise ValueError(f"Failed: Output directory {output_dir} does not exist. Leave unspecified to create a 'visualized' subfolder in the input directory.")
-#     if output_dir=="":
-#         output_dir = os.path.join(dataset, "visualized")
-#     os.makedirs(output_dir, exist_ok=True)
-#     dataset = ObjectDetectionDataset(dataset, transforms=None)
-#     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, collate_fn=collate_detection_fn)
-#
-#     for i, batch in enumerate(tqdm(dataloader)):
-#         images, targets = handle_raw_batch(batch, device)
-#         # print(targets)
-#         # images = batch["image"]  # [B, C, H, W]
-#         # targets = batch["target"]  # List of target dictionaries
-#         img = images[0]
-#         targ = targets[0]["boxes"]
-#         targ[:, (0, 2)] *= img.shape[2]  # Scale x coordinates to image width
-#         targ[:, (1, 3)] *= img.shape[1]  # Scale y coordinates to image height
-#         boxes = box_convert(targ, "cxcywh", "xyxy")
-#         img_with_boxes = draw_bounding_boxes(img, boxes)
-#         save_image(img_with_boxes, Path(output_dir)/f"{i}.png")
-#
-#     print(f"Fertig! Annotierte Bilder liegen in: {output_dir}")
 
 def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = ""):
     """

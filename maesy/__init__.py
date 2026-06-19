@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 __all__ = [
     "DatasetManager",
-    "ObjectDetectionDataset",
     "ModelConfig",
     "Evaluator",
 ]
@@ -35,6 +34,6 @@ def __dir__():
 
 
 if TYPE_CHECKING:
-    from .dataset import DatasetManager, ObjectDetectionDataset
+    from .dataset import DatasetManager
     from .model import ModelConfig
     from .evaluation import Evaluator

@@ -1,7 +1,6 @@
 """Dataset module for downloading, managing and providing datasets."""
 
 from .dataset_manager import DatasetManager
-from .object_detection_dataset import ObjectDetectionDataset
 from .unlabeled_dataset import UnlabeledDataset
 from .multidataset import MultiDataset
 from .extract_from_log import extract_mcap
@@ -11,7 +10,6 @@ from .bounding_box import sanitize_cxcywh, sanitize_xyxy
 
 __all__ = [
     "DatasetManager",
-    "ObjectDetectionDataset",
     "UnlabeledDataset",
     "MultiDataset",
     "extract_mcap",

@@ -15,6 +15,53 @@ import math
 from maesy.dataset.bounding_box import BoundingBox
 
 
+def _load_yaml_data(dataset_dir: str, annotation_type: str) -> Tuple[dict, str]:
+    """
+    auto-search yaml, auto-infer annotation type if not specified (currently only 'image_folder')
+    """
+    if annotation_type == "image_folder":
+        return {}, "image_folder"
+    if dataset_dir.endswith((".yaml", ".yml")):
+        yaml_path = dataset_dir
+    else:
+        yaml_candidates = [c for c in os.listdir(dataset_dir) if c.endswith((".yaml", ".yml"))]
+        if len(yaml_candidates) < 1:
+            if annotation_type in ["auto", "image_folder"]:
+                print(f"Annotation type image_folder detected")
+                return {}, "image_folder" # Return minimal yaml data for image_folder structure
+            else:
+                raise ValueError(f"Error: No dataset.yaml file found in dataset directory {dataset_dir}, but annotation type {annotation_type} was specified")
+        elif len(yaml_candidates) > 1:
+            raise ValueError(
+                f"Multiple dataset.yaml files found in dataset directory {dataset_dir}\n"
+                f"Found yaml files: {yaml_candidates}\n"
+                f"Specify the correct yaml file directly as the dataset path")
+        else:
+            yaml_path = f"{dataset_dir}/{yaml_candidates[0]}"
+
+    # Try to read dataset configuration file
+    if yaml_path is not None and os.path.exists(yaml_path):
+        with open(yaml_path, "r") as f:
+            return yaml.load(f, Loader=yaml.SafeLoader), annotation_type
+    else:
+        raise FileNotFoundError(f"Failed to read file {yaml_path}!")
+
+def _infer_annotation_type(dataset_dir, yaml_data: dict) -> str:
+    """
+    Check for entry in yaml. If not present, interpret existing labels folder as 'detection', otherwise 'None'
+    """
+    if "annotation_type" in yaml_data:
+        annotation_type = yaml_data["annotation_type"]
+        print(f"Inferred annotation type '{annotation_type}' from dataset.yaml")
+        return annotation_type
+    else:
+        if (Path(dataset_dir) / "labels").exists():
+            print("Found 'labels' folder in dataset directory. Assuming annotation type 'detection'.")
+            return "detection"
+        else:
+            print("No 'labels' folder found in dataset directory. Assuming annotation type 'None'.")
+            return "None"
+
 class MaesyDataset(Dataset):
     """Dataset for object detection in COCO format."""
 
@@ -36,7 +83,7 @@ class MaesyDataset(Dataset):
         Args:
             :param dataset_dir: Path to the MaesyDataset root directory
             :param split: The split to be used (i.e. "train", "val", "test", etc.)
-            :param annotation_type: The type of dataset, choice of ["detection", "classification", "None", "image_folder"]
+            :param annotation_type: The type of dataset, choice of ["detection", "None", "image_folder", "auto"] ("image_folder" assumes no labels) # "classification" might come in future
             :param transforms: Optional transforms to apply
             :param start_index: The index from which to start
             :param step: The step size for sampling images (e.g., step=2 will take every other image)
@@ -51,50 +98,37 @@ class MaesyDataset(Dataset):
 
         self.transforms = transforms
 
+        yaml_data, annotation_type = _load_yaml_data(dataset_dir, annotation_type)
+        if annotation_type == "auto":
+            annotation_type = _infer_annotation_type(dataset_dir, yaml_data)
+
         if annotation_type == "image_folder":
             self.repeat_factor = 1 # image folders currently don't support repetition (because factor is set in dataset.yaml)
             self._load_image_folder(dataset_dir)
         else:
-            self._read_dataset_info(dataset_dir, split, annotation_type, enable_lines, enable_ellipses)
+            if split == "train":  # Only repeat if in train mode. Validation and testing should remain unrepeated
+                self.repeat_factor = yaml_data.get("repeat_factor", 1)  # Default value is 1, but could be increased for overfitting tests
+            else:
+                self.repeat_factor = 1
+            self._load_dataset(yaml_data, split, annotation_type, enable_lines, enable_ellipses)
 
         self.images = self.images[start_index::step] * self.repeat_factor
         if use_first_n is not None:
             self.images = self.images[:use_first_n]
             self.annotations = self.annotations[:use_first_n]
 
-    def _read_dataset_info(self, dataset_dir: str, split: str, annotation_type: str, enable_lines: bool, enable_ellipses: bool):
+    def _load_dataset(self, yaml_data: dict, split: str, annotation_type: str, enable_lines: bool, enable_ellipses: bool):
         assert split != "None", "Failed: Split must be specified for dataset types 'detection', 'classification' or 'None'!\nOnly type 'image_folder' does not require a split!"
-        if dataset_dir.endswith((".yaml", ".yml")):
-            yaml_path = dataset_dir
-        else:
-            yaml_candidates = [c for c in os.listdir(dataset_dir) if c.endswith((".yaml", ".yml"))]
-            if len(yaml_candidates) < 1:
-                raise ValueError(f"No dataset.yaml file found in dataset directory {dataset_dir}")
-            elif len(yaml_candidates) > 1:
-                raise ValueError(f"Multiple dataset.yaml files found in dataset directory {dataset_dir}\nFound yaml files: {yaml_candidates}\nSpecify the correct yaml directly as the dataset path")
-            else:
-                yaml_path = f"{dataset_dir}/{yaml_candidates[0]}"
 
-        # Try to read dataset configuration file
-        if yaml_path is not None and os.path.exists(yaml_path):
-            with open(yaml_path, "r") as f:
-                yaml_data = yaml.load(f, Loader=yaml.SafeLoader)
-        else:
-            yaml_data = {}
+        dataset_dir = yaml_data.get("path")
+        assert dataset_dir is not None, "Failed: Could not find information about data path in yaml file!"
 
-        if split == "train": # Only repeat if in train mode. Validation and testing should remain unrepeated
-            self.repeat_factor = yaml_data.get("repeat_factor", 1) # Default value is 1, but could be increased for overfitting tests
-        else:
-            self.repeat_factor = 1
-
-        dataset_dir = yaml_data.get("path", dataset_dir)
         self.box_format = str(yaml_data.get("box_format", "")).lower()
         if self.box_format not in {"xyxy", "cxcywh"} and annotation_type == "detection":
             raise ValueError(f"Unsupported box_format '{self.box_format}' in dataset.yaml. Expected 'xyxy' or 'cxcywh'.")
 
         split_path = Path(dataset_dir) / yaml_data.get(split, split)
         assert split_path.exists(), f"Requested split '{split}' does not exist in dataset at {dataset_dir}"
-
 
         self.return_labels = annotation_type not in ["None", "image_folder"]
 

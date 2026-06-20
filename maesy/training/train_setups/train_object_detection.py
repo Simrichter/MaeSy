@@ -394,7 +394,7 @@ if __name__ == "__main__":
         denoising_num_queries=100,
         denoising_label_noise_ratio=0.0,
         denoising_box_noise_scale=0.4,
-        enable_line_detection=False,
+        enable_line_detection=True,
         enable_ellipse_detection=False,
         override_params={"batch_size": 2},
         device="cpu"

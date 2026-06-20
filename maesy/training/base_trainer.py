@@ -23,7 +23,7 @@ class BaseTrainingConfig:
 
     # Training parameters
     num_epochs: int = 100
-    # batch_size: int = 16
+    batch_size: int = 32
     weight_decay: float = 1e-4
     label_smoothing: float = 0.0
     warmup_epochs: int = 5
@@ -53,7 +53,7 @@ class BaseTrainingConfig:
 
     # Device
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
-    # num_workers: int = 4
+    num_workers: int = 4
 
     # Gradient clipping
     max_grad_norm: float = 10.0

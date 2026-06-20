@@ -113,6 +113,9 @@ class MaesyDataset(Dataset):
             self._load_dataset(yaml_data, split, annotation_type, enable_lines, enable_ellipses)
 
         self.images = self.images[start_index::step] * self.repeat_factor
+        if self.annotations:
+            self.annotations = self.annotations[start_index::step] * self.repeat_factor
+
         if use_first_n is not None:
             self.images = self.images[:use_first_n]
             self.annotations = self.annotations[:use_first_n]
@@ -166,8 +169,7 @@ class MaesyDataset(Dataset):
                 if not (self.annotations_dir / annotation_path).exists():
                     raise FileNotFoundError(f"Annotation file {annotation_path} not found for image {img}")
                 self.annotations.append(annotation_path)
-
-        print(f"Loaded {split} data...")
+        print(f"Loaded {len(self.images)} {split} images")
         print("-" * 30)
 
     def _load_image_folder(self, dataset_dir):
@@ -202,7 +204,6 @@ class MaesyDataset(Dataset):
         # Load image
         with Image.open(image_path).convert('RGB') as image:
             if self.return_labels:
-                img_width, img_height = image.size
                 annotation_path = os.path.join(self.annotations_dir, self.annotations[idx])
                 if annotation_path.split("/")[-1].split(".")[0] != image_path.split("/")[-1].split(".")[0]:
                     print("\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(annotation_path, image_path))

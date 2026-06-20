@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from random import choice
 from typing import Tuple, List, Dict, Union, Optional
 
 import torch
@@ -26,8 +27,11 @@ class RTDETRHeadConfig:
     decoder_dropout: float = 0.1
     enable_denoising: bool = False
     denoising_num_queries: int = 0
-    denoising_label_noise_ratio: float = 0.0 # TODO: Maybe activate? Maybe not, might hurt
+    denoising_label_noise_ratio: float = 0.0 # TODO: Maybe activate? Maybe not, might hurt when switching between lines/boxes?
     denoising_box_noise_scale: float = 0.4
+    denoising_box_contrast_scale: float = 0.6
+    denoising_line_noise_scale: float = 0.4
+    denoising_line_contrast_scale: float = 0.6
     enable_line_detection: bool = False
     line_class_id: int = -1
     enable_ellipse_detection: bool = False
@@ -499,21 +503,20 @@ class RTDETRHead(nn.Module):
         nq_ellipses: int = max(len(t.get("ellipses",[])) for t in targets)
         total_nq = nq_boxes+nq_lines+nq_ellipses
 
-        dn_ref_box_logits = torch.zeros(batch_size, total_nq, 4, device=device, dtype=dtype)
-        dn_ref_boxes = torch.full((batch_size, total_nq, 4), 0.5, device=device, dtype=dtype) # Use 0.5 to now blow up inverse sigmoid. Should not matter anyways due to masking
+        dn_ref_box_logits = torch.zeros(batch_size, total_nq*2, 4, device=device, dtype=dtype)
+        dn_ref_boxes = torch.full((batch_size, total_nq*2, 4), 0.5, device=device, dtype=dtype) # Use 0.5 to now blow up inverse sigmoid. Should not matter anyways due to masking
         dn_tgt_boxes = torch.zeros(batch_size, total_nq, 4, device=device, dtype=dtype)
-        dn_box_mask = torch.full((batch_size, total_nq), False, device=device, dtype=torch.bool)
+        dn_box_mask = torch.full((batch_size, total_nq*2), False, device=device, dtype=torch.bool)
 
-        dn_ref_line_logits = torch.zeros(batch_size, total_nq, 4, device=device, dtype=dtype)
-        dn_ref_lines = torch.full((batch_size, total_nq, 4), 0.5, device=device, dtype=dtype)
+        dn_ref_line_logits = torch.zeros(batch_size, total_nq*2, 4, device=device, dtype=dtype)
+        dn_ref_lines = torch.full((batch_size, total_nq*2, 4), 0.5, device=device, dtype=dtype)
         dn_tgt_lines = torch.zeros(batch_size, total_nq, 4, device=device, dtype=dtype)
-        dn_line_mask = torch.full((batch_size, total_nq), False, device=device, dtype=torch.bool)
+        dn_line_mask = torch.full((batch_size, total_nq*2), False, device=device, dtype=torch.bool)
 
-        dn_masking = torch.full((batch_size, total_nq, total_nq), fill_value=True, device=device, dtype=torch.bool)
-
-        dn_labels = torch.full((batch_size, total_nq), fill_value=self.config.num_classes, device=device, dtype=torch.long,)
-        dn_class_logits = torch.full((batch_size, total_nq, self.config.num_classes + 1), float("-inf"), device=device, dtype=torch.float)
-        dn_valid = torch.zeros(batch_size, total_nq, device=device, dtype=torch.bool) # mask used to ignore padding entries in self-attention
+        dn_labels = torch.full((batch_size, total_nq*2), fill_value=self.config.num_classes, device=device, dtype=torch.long,) # *2 for contrastive samples
+        dn_target_labels = torch.full((batch_size, total_nq*2), fill_value=self.config.num_classes, device=device, dtype=torch.long,)
+        dn_class_logits = torch.full((batch_size, total_nq*2, self.config.num_classes + 1), float("-inf"), device=device, dtype=torch.float)
+        dn_valid = torch.zeros(batch_size, total_nq*2, device=device, dtype=torch.bool) # mask used to ignore padding entries in self-attention
 
         for batch_idx, target in enumerate(targets):
             boxes = target.get("boxes", torch.empty((0, 4), device=device, dtype=dtype))
@@ -521,41 +524,65 @@ class RTDETRHead(nn.Module):
             lines = target.get("line_points", torch.empty((0, 4), device=device, dtype=torch.float))
             # ellipses = target.get("ellipses", torch.empty((0, 6), device=device, dtype=dtype))
 
-            box_noise = (torch.rand_like(boxes) * 2.0 - 1.0) * self.config.denoising_box_noise_scale
-            sel_boxes = (boxes + box_noise).clamp(0.0, 1.0)
-            assert boxes.shape[0] <= nq_boxes
-            boxes_end = sel_boxes.shape[0]
-            dn_ref_boxes[batch_idx, :boxes_end, :] = sel_boxes
-            dn_ref_box_logits[batch_idx, :boxes_end, :] = self._inverse_sigmoid(sel_boxes)
-            dn_tgt_boxes[batch_idx, :boxes_end, :] = boxes
-            dn_box_mask[batch_idx, :boxes_end] = True
-            # dn_masking[batch_idx, :boxes_end, :boxes.shape[0]] = False # Set to False to allow attention
-            dn_valid[batch_idx, :boxes_end] = True
+            # Some index precalculation to properly fill the tensors
+            boxes_end = boxes.shape[0]
+            lines_end = boxes_end + lines.shape[0]
+            contrast_boxes_end = lines_end+boxes.shape[0]
+            contrast_lines_end = contrast_boxes_end+lines.shape[0]
 
-            line_noise = (torch.rand_like(lines) * 2.0 - 1.0) * self.config.denoising_box_noise_scale # TODO: Make parameter distinct for lines + ellipses
+            # create target labels
+            dn_target_labels[batch_idx, :lines_end] = target.get("labels", torch.empty((0,), device=device, dtype=torch.long)) # rest is no-obj class by initialization
+
+            # generate noised boxes
+            box_noise = (torch.rand_like(boxes) * 2.0 - 1.0) * self.config.denoising_box_noise_scale
+            contrast_box_noise =  ((torch.randint_like(boxes, low=0, high=2, dtype=torch.float32) * 2 - 1) # sample a random sign
+                                   * (self.config.denoising_box_noise_scale + (self.config.denoising_box_contrast_scale - self.config.denoising_box_noise_scale)
+                                      * torch.rand_like(boxes))) # rescale noise to [noise:contrast], add noise as offset and mult sign
+            sel_boxes = (boxes + box_noise).clamp(0.0, 1.0)
+            contrast_boxes = (boxes + contrast_box_noise).clamp(0.0, 1.0)
+            # fill correct positions in the tensors
+            dn_ref_boxes[batch_idx, :boxes_end, :] = sel_boxes
+            dn_ref_boxes[batch_idx, lines_end:contrast_boxes_end, :] = contrast_boxes
+            dn_ref_box_logits[batch_idx, :boxes_end, :] = self._inverse_sigmoid(sel_boxes)
+            dn_ref_box_logits[batch_idx, lines_end:contrast_boxes_end, :] = self._inverse_sigmoid(contrast_boxes)
+            dn_tgt_boxes[batch_idx, :boxes_end, :] = boxes # target box for contrast sample is irrelevant (as it is target no-obj)
+            dn_box_mask[batch_idx, :boxes_end] = True
+            dn_box_mask[batch_idx, lines_end:contrast_boxes_end] = True
+            dn_valid[batch_idx, :boxes_end] = True
+            dn_valid[batch_idx, lines_end:contrast_boxes_end] = True
+
+            # generate noised lines
+            line_noise = (torch.rand_like(lines) * 2.0 - 1.0) * self.config.denoising_line_noise_scale
+            contrast_line_noise = ((torch.randint_like(lines, low=0, high=2, dtype=torch.float32) * 2 - 1)  # sample a random sign
+                                  * (self.config.denoising_line_noise_scale + (self.config.denoising_line_contrast_scale - self.config.denoising_line_noise_scale)
+                                     * torch.rand_like(lines)))  # rescale noise to [noise:contrast], add noise as offset and mult sign
             sel_lines = (lines + line_noise).clamp(0.0, 1.0)
-            assert lines.shape[0] <= nq_lines
-            lines_end = boxes_end+sel_lines.shape[0]
+            contrast_lines = (lines + contrast_line_noise).clamp(0.0, 1.0)
+            # fill correct positions in the tensors
             dn_ref_lines[batch_idx, boxes_end:lines_end, :] = sel_lines
+            dn_ref_lines[batch_idx, contrast_boxes_end:contrast_lines_end, :] = contrast_lines
             dn_ref_line_logits[batch_idx, boxes_end:lines_end, :] = self._inverse_sigmoid(sel_lines)
+            dn_ref_line_logits[batch_idx, contrast_boxes_end:contrast_lines_end, :] = self._inverse_sigmoid(contrast_lines)
             dn_tgt_lines[batch_idx, boxes_end:lines_end, :] = lines
+            # dn_tgt_lines[batch_idx, contrast_boxes_end:contrast_lines_end, :] = lines  # target lines for contrast samples are irrelevant (as they are target no-obj), but make loss computation easier
             dn_line_mask[batch_idx, boxes_end:lines_end] = True
-            # dn_masking[batch_idx, boxes_end:lines_end, boxes_end:boxes_end+lines_end] = False # Set to False to allow attention
+            dn_line_mask[batch_idx, contrast_boxes_end:contrast_lines_end] = True
             dn_valid[batch_idx, boxes_end:lines_end] = True
+            dn_valid[batch_idx, contrast_boxes_end:contrast_lines_end] = True
 
             if self.config.denoising_label_noise_ratio > 0:
                 noise_mask = torch.rand_like(labels.float()) < self.config.denoising_label_noise_ratio
-                random_labels = torch.randint(0, self.config.num_classes, size=labels.shape, device=device)
+                # random_labels = torch.randint(0, self.config.num_classes, size=labels.shape, device=device)
+                random_labels = torch.tensor([choice([i for i in range(0, self.config.num_classes)
+                                                      if i not in [self.config.line_class_id, self.config.ellipse_class_id]])
+                                              for _ in range(labels.shape[0])], device=device)
                 labels = torch.where(noise_mask, random_labels, labels)
 
             assert len(labels)<=total_nq
             dn_labels[batch_idx, :lines_end] = labels
-            dn_class_logits[batch_idx, torch.arange(len(labels)), labels] = float("inf")
-        dn_masking = ~dn_valid[:, None, :].expand(
-            batch_size,
-            total_nq,
-            total_nq
-        )
+            dn_class_logits[batch_idx, torch.arange(len(labels)), labels] = float("inf") # used to make the head reliably select the correct geometry type
+            dn_class_logits[batch_idx, len(labels)+torch.arange(len(labels)), labels] = float("inf") # Also set the contrastive samples
+        dn_masking = ~dn_valid[:, None, :].expand(batch_size, total_nq*2, total_nq*2) # Mask for self-attention, True where padding (invalid) entries are, False where valid entries are
         dn_queries = self.dn_query_embedding(dn_labels)
         return {
             "dn_query": dn_queries,
@@ -567,7 +594,7 @@ class RTDETRHead(nn.Module):
             "reference_line_logits": dn_ref_line_logits,
             "target_lines": dn_tgt_lines,
             "line_mask": dn_line_mask,
-            "dn_labels": dn_labels,
+            "dn_labels": dn_target_labels,
             "pred_logits": dn_class_logits,
             "dn_valid": dn_valid,
             "dn_self_attention_mask": dn_masking

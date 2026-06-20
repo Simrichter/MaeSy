@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torchvision
 from scipy.optimize import linear_sum_assignment
@@ -140,6 +140,42 @@ class DetectionLoss(BaseLoss):
         self.total_loss_enc = 0.0
         self.batch_count = 0
 
+    def _compute_box_loss(self, pred: torch.Tensor, gt: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        num_box_matches = pred.shape[0]
+        loss_bbox = F.l1_loss(pred, gt, reduction='none')
+        loss_bbox = loss_bbox.sum() / num_box_matches
+
+        giou_matrix = self._generalized_box_iou(pred, gt)
+        loss_giou: torch.Tensor = 1 - torch.diag(giou_matrix)
+        loss_giou = loss_giou.sum() / num_box_matches
+
+        return loss_bbox, loss_giou
+
+    def _compute_line_loss(self, pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
+        # Accounting for order invariance of line keypoints
+        gt_swapped = torch.cat([gt[:, 2:], gt[:, :2]], dim=-1)
+
+        loss1 = torch.abs(pred - gt).sum(dim=-1)
+        loss2 = torch.abs(pred - gt_swapped).sum(dim=-1)
+
+        endpoint_loss = torch.min(loss1, loss2)
+
+        pred_vec = pred[:, 2:] - pred[:, :2]
+        gt_vec = gt[:, 2:] - gt[:, :2]
+        pred_len = torch.norm(pred_vec, dim=-1)
+        gt_len = torch.norm(gt_vec, dim=-1)
+        eps = 1e-6
+        pred_unit = pred_vec / (pred_len.unsqueeze(-1) + eps)
+        gt_unit = gt_vec / (gt_len.unsqueeze(-1) + eps)
+        angle_alignment = torch.sum(pred_unit * gt_unit, dim=-1).abs().clamp(max=1.0)
+        angle_loss = 1.0 - angle_alignment
+        log_length_loss = torch.abs(torch.log(pred_len + eps) - torch.log(gt_len + eps))
+
+        loss_line = endpoint_loss + self.line_angle_loss_coef * angle_loss + self.line_length_loss_coef * log_length_loss
+
+        loss_line = loss_line.sum() / pred.shape[0]
+        return loss_line
+
     def _compute_single_output_losses(
             self,
             pred_logits: torch.Tensor,
@@ -243,57 +279,18 @@ class DetectionLoss(BaseLoss):
             num_line_matches = int(line_mask.sum().item())
             num_ellipse_matches = int(ellipse_mask.sum().item())
 
-            if box_mask.any():
+            if box_mask.any() and num_box_matches > 0:
                 src_boxes_for_loss = src_boxes[box_mask]
                 target_boxes_for_loss = target_boxes
-                assert src_boxes_for_loss.shape[0] == target_boxes_for_loss.shape[0]
-                loss_bbox = F.l1_loss(src_boxes_for_loss, target_boxes_for_loss, reduction='none')
-                if num_box_matches > 0:
-                    loss_bbox = loss_bbox.sum() / num_box_matches
-
-                giou_matrix = self._generalized_box_iou(src_boxes_for_loss, target_boxes_for_loss)
-                loss_giou = 1 - torch.diag(giou_matrix)
-                if num_box_matches > 0:
-                    loss_giou = loss_giou.sum() / num_box_matches
+                loss_bbox, loss_giou = self._compute_box_loss(src_boxes_for_loss, target_boxes_for_loss)
             else:
                 loss_bbox = torch.tensor(0.0, device=pred_logits.device)
                 loss_giou = torch.tensor(0.0, device=pred_logits.device)
 
-            if line_mask.any() and src_lines is not None:
+            if line_mask.any() and src_lines is not None and num_line_matches > 0:
                 src_lines_for_loss = src_lines[line_mask]
                 tgt_lines_for_loss = target_lines
-                assert src_lines_for_loss.shape[0] == tgt_lines_for_loss.shape[0]
-                # loss_line = F.l1_loss(src_lines_for_loss, tgt_lines_for_loss, reduction='none')
-                # loss_line = loss_line.sum() / max(num_line_matches, 1)
-
-                # Accounting for order invariance of line keypoints
-                pred = src_lines_for_loss
-                gt = tgt_lines_for_loss
-
-                gt_swapped = torch.cat([gt[:, 2:], gt[:, :2]], dim=-1)
-
-                loss1 = torch.abs(pred - gt).sum(dim=-1)
-                loss2 = torch.abs(pred - gt_swapped).sum(dim=-1)
-
-                endpoint_loss = torch.min(loss1, loss2)
-
-                pred_vec = pred[:, 2:] - pred[:, :2]
-                gt_vec = gt[:, 2:] - gt[:, :2]
-                pred_len = torch.norm(pred_vec, dim=-1)
-                gt_len = torch.norm(gt_vec, dim=-1)
-                eps = 1e-6
-                pred_unit = pred_vec / (pred_len.unsqueeze(-1) + eps)
-                gt_unit = gt_vec / (gt_len.unsqueeze(-1) + eps)
-                angle_alignment = torch.sum(pred_unit * gt_unit, dim=-1).abs().clamp(max=1.0)
-                angle_loss = 1.0 - angle_alignment
-                log_length_loss = torch.abs(torch.log(pred_len + eps) - torch.log(gt_len + eps))
-
-                loss_line = endpoint_loss + self.line_angle_loss_coef * angle_loss + self.line_length_loss_coef * log_length_loss
-
-                if num_line_matches > 0:
-                    loss_line = loss_line.sum() / num_line_matches
-                else:
-                    loss_line = torch.tensor(0.0, device=pred_logits.device)
+                loss_line = self._compute_line_loss(src_lines_for_loss, tgt_lines_for_loss)
             else:
                 loss_line = torch.tensor(0.0, device=pred_logits.device)
 
@@ -336,22 +333,24 @@ class DetectionLoss(BaseLoss):
             zero = torch.tensor(0.0, device=predictions['pred_logits'].device)
             return {"loss_dn": zero}
 
-        pred_logits = dn_outputs["pred_logits"]
-        pred_boxes = dn_outputs["pred_boxes"]
-        pred_lines = dn_outputs.get("pred_lines")
-        target_lines = dn_outputs.get("target_lines")
-        target_labels = dn_outputs["target_labels"]
-        target_boxes = dn_outputs["target_boxes"]
-        valid_mask = dn_outputs["target_valid_mask"]
+        pred_logits = dn_outputs["pred_logits"] # [B, num_tgts*2,]
+        pred_boxes = dn_outputs["pred_boxes"] # [B, num_tgts*2, 4]
+        target_labels = dn_outputs["target_labels"] # [B, num_tgts*2,]
+        target_boxes = dn_outputs["target_boxes"] # [B, num_tgts, 4]
+        valid_mask = dn_outputs["target_valid_mask"] # [B, num_tgts*2, ]
 
         # Denoising targets are provided in aligned query order, so no Hungarian matching is required here.
         if not valid_mask.any():
             return {"loss_dn": torch.tensor(0.0, device=pred_logits.device)}
 
+        valid_mask = valid_mask & (target_labels != self.num_classes) # drop all no-obj predictions from valid mask
+
         logits_valid = pred_logits[valid_mask]
         labels_valid = target_labels[valid_mask]
         boxes_valid = pred_boxes[valid_mask]
-        target_boxes_valid = target_boxes[valid_mask]
+        target_boxes_valid = target_boxes[valid_mask[:, :target_boxes.shape[1]]] # trick necessary since there are no targets for contrasting queries
+
+        labels_valid = labels_valid
 
         loss_ce = F.cross_entropy(logits_valid, labels_valid, weight=self.empty_weight)
 
@@ -369,17 +368,16 @@ class DetectionLoss(BaseLoss):
         box_mask = ~(line_mask | ellipse_class_mask)
 
         if box_mask.any():
-            loss_bbox = F.l1_loss(boxes_valid[box_mask], target_boxes_valid[box_mask])
-            giou_matrix = self._generalized_box_iou(boxes_valid[box_mask], target_boxes_valid[box_mask])
-            loss_giou = (1 - torch.diag(giou_matrix)).mean()
+            loss_bbox, loss_giou = self._compute_box_loss(boxes_valid[box_mask], target_boxes_valid[box_mask])
         else:
             loss_bbox = torch.tensor(0.0, device=pred_logits.device)
             loss_giou = torch.tensor(0.0, device=pred_logits.device)
 
         if line_mask.any() and "pred_lines" in dn_outputs and "target_lines" in dn_outputs:
             pred_lines = dn_outputs["pred_lines"][valid_mask]
-            target_lines = dn_outputs["target_lines"][valid_mask]
-            loss_line = F.l1_loss(pred_lines[line_mask], target_lines[line_mask])
+            target_lines = dn_outputs["target_lines"]
+            target_lines = target_lines[valid_mask[:, :target_lines.shape[1]]]
+            loss_line = self._compute_line_loss(pred_lines[line_mask], target_lines[line_mask])
         else:
             loss_line = torch.tensor(0.0, device=pred_logits.device)
 

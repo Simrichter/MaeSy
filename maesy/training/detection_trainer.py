@@ -38,7 +38,7 @@ class DetectionTrainer(BaseTrainer):
     def _validation_finalize(self) -> Dict[str, float]:
         if len(self._val_predictions) == 0 or len(self._val_targets) == 0:
             return {}
-        line_class_id = getattr(self.model.config, "line_class_id", None)
+        line_class_id: int | None = getattr(self.model.config, "line_class_id", None)
         if line_class_id is not None and line_class_id < 0:
             line_class_id = None
         return compute_detection_metrics(

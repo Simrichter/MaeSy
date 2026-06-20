@@ -577,8 +577,9 @@ def compute_detection_metrics(
         "recall50": recall50,
         "f1_50": f1_50,
         f"f{fb_beta}_50": fb_50,
-        "num_gt_boxes": float(sum(target["boxes"].shape[0] for target in targets)),
-        "num_pred_boxes": float(sum(pred["boxes"].shape[0] for pred in predictions)),
+        "pred_gt_ratio": float(sum(pred["boxes"].shape[0] for pred in predictions)) / float(sum(target["boxes"].shape[0] for target in targets)),
+        # "num_gt_boxes": float(sum(target["boxes"].shape[0] for target in targets)),
+        # "num_pred_boxes": float(sum(pred["boxes"].shape[0] for pred in predictions)),
     }
     for class_id, ap in zip(eval_class_ids, ap50_per_class):
         metrics[f"AP50_class_{class_id}"] = float(ap)
@@ -691,8 +692,10 @@ def compute_detection_metrics(
             }
 
         metrics["line_mAP"] = float(np.mean(line_ap_values)) if line_ap_values else 0.0
-        metrics["num_gt_lines"] = float(sum(target.get("line_points", torch.empty((0, 4))).shape[0] for target in targets))
-        metrics["num_pred_lines"] = float(sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions))
+        metrics["num_gt_lines"] = (float(sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions))
+                                   / float(sum(target.get("line_points", torch.empty((0, 4))).shape[0] for target in targets)))
+        # metrics["num_gt_lines"] = float(sum(target.get("line_points", torch.empty((0, 4))).shape[0] for target in targets))
+        # metrics["num_pred_lines"] = float(sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions))
 
         metrics["total_mAP"] += metrics["line_mAP"]
 

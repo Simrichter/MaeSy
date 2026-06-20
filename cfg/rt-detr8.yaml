@@ -4,9 +4,6 @@ decoder_mlp_ratio: 4.0
 decoder_num_heads: 8
 lightweight_fusion: bool = False
 num_rep_blocks_in_fusion: int = 3
-denoising_box_noise_scale: 0.4
-denoising_label_noise_ratio: 0.2
-denoising_num_queries: 0
 embed_dim: 128
 enable_auxiliary_losses: true
 enable_denoising: false

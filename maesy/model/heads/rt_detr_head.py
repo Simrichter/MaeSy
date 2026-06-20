@@ -18,14 +18,15 @@ class RTDETRHeadConfig:
     num_decoder_layers: int = 6
     decoder_num_heads: int = 8
     decoder_mlp_ratio: float = 4.0
-    decoder_dropout: float = 0.1
     hidden_dim_out_layers: int = 256
     hidden_dim_dense_heads: int = 256
     num_feature_levels: int = 3
     num_deformable_points: int = 4
+    # trainin-specific
+    decoder_dropout: float = 0.1
     enable_denoising: bool = False
     denoising_num_queries: int = 0
-    denoising_label_noise_ratio: float = 0.0 # TODO: Maybe activate? Maybe not
+    denoising_label_noise_ratio: float = 0.0 # TODO: Maybe activate? Maybe not, might hurt
     denoising_box_noise_scale: float = 0.4
     enable_line_detection: bool = False
     line_class_id: int = -1
@@ -490,7 +491,7 @@ class RTDETRHead(nn.Module):
         self,
         targets: List[Dict[str, torch.Tensor]],
         device: torch.device,
-        dtype: torch.dtype, # TODO: Why use dtype inconsistently? i.e. dtype=torch.long / dtype=dtype
+        dtype: torch.dtype,
     ) -> Dict[str, torch.Tensor] | None:
         batch_size = len(targets)
         nq_boxes: int = max(len(t.get("boxes", []))for t in targets) # use of generator expression avoids costly creation of intermediate list
@@ -518,7 +519,7 @@ class RTDETRHead(nn.Module):
             boxes = target.get("boxes", torch.empty((0, 4), device=device, dtype=dtype))
             labels = target.get("labels", torch.empty((0,), device=device, dtype=torch.long))
             lines = target.get("line_points", torch.empty((0, 4), device=device, dtype=torch.float))
-            ellipses = target.get("ellipses", torch.empty((0, 6), device=device, dtype=dtype))
+            # ellipses = target.get("ellipses", torch.empty((0, 6), device=device, dtype=dtype))
 
             box_noise = (torch.rand_like(boxes) * 2.0 - 1.0) * self.config.denoising_box_noise_scale
             sel_boxes = (boxes + box_noise).clamp(0.0, 1.0)

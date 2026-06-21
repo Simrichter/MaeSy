@@ -113,7 +113,7 @@ class MaesyDataset(Dataset):
             self._load_dataset(yaml_data, split, annotation_type, enable_lines, enable_ellipses)
 
         self.images = self.images[start_index::step] * self.repeat_factor
-        if self.annotations:
+        if self.return_labels and self.annotations:
             self.annotations = self.annotations[start_index::step] * self.repeat_factor
 
         if use_first_n is not None:

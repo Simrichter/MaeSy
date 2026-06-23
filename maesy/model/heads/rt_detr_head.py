@@ -45,6 +45,11 @@ class RTDETRHeadConfig:
 
 class MLP(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3, custom_init = False, last_activation: str = "None"):
+        """
+        A custom MLP module with choosable dims and num_layers.
+        Between layers, a ReLU is applied
+        After the last layer, a selectable activation is applied (choice of 'None', 'ReLU', 'Sigmoid' or 'Tanh'
+        """
         super().__init__()
         str_to_act = {"None": nn.Identity(), "ReLU": nn.ReLU(), "Sigmoid": nn.Sigmoid(), "Tanh": nn.Tanh()}
         layers: List[nn.Module] = []
@@ -453,11 +458,7 @@ class RTDETRHead(nn.Module):
 
         gather_idx = topk_idx.expand(-1, -1, memory.shape[-1])
         selected_memory = torch.gather(memory, dim=1, index=gather_idx)
-        enc_outputs["pred_logits"] = torch.gather(
-            enc_logits,
-            dim=1,
-            index=topk_idx.expand(-1, -1, enc_logits.shape[-1]),
-        )
+        enc_outputs["pred_logits"] = torch.gather(enc_logits, dim=1, index=topk_idx.expand(-1, -1, enc_logits.shape[-1]))
 
         references["pred_logits"] = enc_outputs["pred_logits"]
 
@@ -466,6 +467,8 @@ class RTDETRHead(nn.Module):
         enc_box_normed = enc_box_logits.sigmoid()
         # weigh based on the remaining space to ensure [0, 1], interpret the result as width and height from top left corner
         enc_boxes = torch.cat((enc_box_normed[..., 0:2], enc_box_normed[..., 0:2] + enc_box_normed[..., 2:4] * (1.0- enc_box_normed[..., 0:2])), dim=-1)
+        # enc_boxes = enc_box_normed
+# TODO I changed this quite late, now inference should not work anymore with older trainings (only after 222)!!
 
         assert torch.isfinite(enc_boxes).all()
         references["reference_box_logits"] = torch.gather(enc_box_logits, dim=1, index=selected_refs)
@@ -616,9 +619,9 @@ class RTDETRHead(nn.Module):
         reference_ellipses = references.get("reference_ellipses", torch.zeros(*class_logits.shape[:2], 6, device=class_logits.device))
         # reference_ellipse_mask = references.get("ellipse_mask", torch.full(reference_ellipses.shape[:2], True, device=class_logits.device, dtype=torch.bool))
 
-        reference_box_logits = references.get("reference_box_logits") # self._inverse_sigmoid(reference_boxes) #TODO: Cleanup if this works
-        line_reference_logits = references.get("reference_line_logits") # self._inverse_sigmoid(references.get("reference_lines")) # self._inverse_sigmoid(reference_boxes)
-        ellipse_reference_logits = references.get("reference_ellipse_logits") # self._inverse_sigmoid(references.get("reference_ellipses"))
+        reference_box_logits = references.get("reference_box_logits")
+        line_reference_logits = references.get("reference_line_logits")
+        ellipse_reference_logits = references.get("reference_ellipse_logits")
 
         logits_per_layer: List[torch.Tensor] = []
         boxes_per_layer: List[torch.Tensor] = []

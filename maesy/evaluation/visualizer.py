@@ -33,7 +33,7 @@ def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = 
         save_image(drawn/255, out_path)
         # save_image(img, out_path)
 
-def visualize_data(input_dir: str, output_dir: str, splits: list[str]= ["train", "val", "test"], label_path:str= "", label_file:str= "", enable_lines: bool = True, enable_ellipses: bool = True, special_classes: Optional[dict[str, int]]=None, apply_transforms: bool = False):
+def visualize_data(input_dir: str, output_dir: str, splits: Optional[list[str]]=None , label_path:str= "", label_file:str= "", enable_lines: bool = True, enable_ellipses: bool = True, special_classes: Optional[dict[str, int]]=None, apply_transforms: bool = False):
     """
         Visualizes bounding boxes and lines. Autodetects MaesyDataset or standard image folder
 
@@ -59,6 +59,9 @@ def visualize_data(input_dir: str, output_dir: str, splits: list[str]= ["train",
     print("=" * 60)
     print(f"Starting visualization...")
     print("=" * 60)
+
+    if splits is None:
+        splits = ["train", "val", "test"]
 
     datasets = []
     for split in splits:

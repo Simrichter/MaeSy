@@ -4,7 +4,7 @@ from .dataset_manager import DatasetManager
 from .unlabeled_dataset import UnlabeledDataset
 from .multidataset import MultiDataset
 from .extract_from_log import extract_mcap
-from .converter import datumaro_to_devils_yolo, robert_to_devils_yolo
+from .converter import datumaro_to_devils_yolo, robert_to_devils_yolo, datumaro_to_ultralyticsOBB
 from .maesy_dataset import MaesyDataset
 from .bounding_box import sanitize_cxcywh, sanitize_xyxy
 
@@ -15,6 +15,7 @@ __all__ = [
     "extract_mcap",
     "datumaro_to_devils_yolo",
     "robert_to_devils_yolo",
+    "datumaro_to_ultralyticsOBB",
     "MaesyDataset",
     "sanitize_cxcywh",
     "sanitize_xyxy",

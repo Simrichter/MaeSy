@@ -26,5 +26,8 @@ def main(args):
                 case "robert":
                     from .converter import robert_to_devils_yolo
                     robert_to_devils_yolo(args.path, args.convert_id_blacklist, {k: v for k, v in zip(args.convert_merge_ids[::2], args.convert_merge_ids[1::2])}, args.convert_permute_ids)
+                case "obb":
+                    from .converter import datumaro_to_ultralyticsOBB
+                    datumaro_to_ultralyticsOBB(args.path, args.convert_id_blacklist, {k: v for k, v in zip(args.convert_merge_ids[::2], args.convert_merge_ids[1::2])}, args.convert_permute_ids)
         case _:
             print(f"Command '{args.command}' not recognized.")

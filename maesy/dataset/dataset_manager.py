@@ -260,11 +260,6 @@ class DatasetManager:
             raise ValueError(f"Dataset directory {dataset_dir} already exists. Please choose a different name or delete the existing folder.")
         splits = [s for i, s in enumerate(["train", "val", "test"])]
         split_paths = [dataset_dir / split for split in splits]
-        os.makedirs(dataset_dir, exist_ok=True)
-        for split_path in split_paths:
-            os.makedirs(split_path / "images", exist_ok=True)
-            if with_labels:
-                os.makedirs(split_path / "labels", exist_ok=True)
 
         def _get_paths():  # folder_names, cluster_method, start_index=0, step=1
             img_paths = []
@@ -298,6 +293,9 @@ class DatasetManager:
                 case "robert":
                     from maesy.dataset import robert_to_devils_yolo
                     conversion_function = robert_to_devils_yolo
+                case "obb":
+                    from maesy.dataset import datumaro_to_ultralyticsOBB
+                    conversion_function = datumaro_to_ultralyticsOBB
                 case _:
                     raise ValueError(f"Unknown dataset type {convert}. Conversion failed...")
             out_folders = []
@@ -322,6 +320,13 @@ class DatasetManager:
         else:
             target_paths_lbls = None
 
+        # Delay directory creation to only create if all other steps were successful
+        os.makedirs(dataset_dir, exist_ok=True)
+        for split_path in split_paths:
+            os.makedirs(split_path / "images", exist_ok=True)
+            if with_labels:
+                os.makedirs(split_path / "labels", exist_ok=True)
+
         self._copy_resize(image_files, target_paths, resize, target_paths_lbls)
 
         if left_right:
@@ -335,7 +340,7 @@ class DatasetManager:
         if nc is None or class_names is None or special_classes is None:
             print(f"!!!\nWarning: Not all parameters for dataset.yaml specified. Manual corrections required in {dataset_dir/'dataset.yaml'}\n!!!")
         self._create_yaml(dataset_dir, num_classes=nc, splits=splits, class_names=class_names, special_classes=special_classes)
-
+        print("Creation successful!")
         return dataset_dir
 
     def list_datasets(self) -> list:

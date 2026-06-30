@@ -465,10 +465,10 @@ class RTDETRHead(nn.Module):
         selected_refs = topk_idx.expand(-1, -1, 4)
         enc_box_logits = self.encoder_box_head(memory)
         enc_box_normed = enc_box_logits.sigmoid()
-        # weigh based on the remaining space to ensure [0, 1], interpret the result as width and height from top left corner
-        enc_boxes = torch.cat((enc_box_normed[..., 0:2], enc_box_normed[..., 0:2] + enc_box_normed[..., 2:4] * (1.0- enc_box_normed[..., 0:2])), dim=-1)
-        # enc_boxes = enc_box_normed
-# TODO I changed this quite late, now inference should not work anymore with older trainings (only after 222)!!
+        ## weigh based on the remaining space to ensure [0, 1], interpret the result as width and height from top left corner
+        # enc_boxes = torch.cat((enc_box_normed[..., 0:2], enc_box_normed[..., 0:2] + enc_box_normed[..., 2:4] * (1.0- enc_box_normed[..., 0:2])), dim=-1)
+        enc_boxes = torch.cat((enc_box_normed[..., 0:2], enc_box_normed[..., 0:2] + enc_box_normed[..., 2:4]), dim=-1)
+        # TODO I changed this quite late, now inference should not work anymore with older trainings (only after 222)!!
 
         assert torch.isfinite(enc_boxes).all()
         references["reference_box_logits"] = torch.gather(enc_box_logits, dim=1, index=selected_refs)
@@ -476,7 +476,9 @@ class RTDETRHead(nn.Module):
         enc_outputs["pred_boxes"] = references["reference_boxes"]
         if self.config.enable_line_detection:
             enc_line_logits = self.encoder_line_head(memory)
-            enc_lines = enc_line_logits.sigmoid()
+            enc_line_normed = enc_line_logits.sigmoid()
+            # enc_lines = torch.cat((enc_line_normed[..., 0:2], enc_line_normed[..., 2:4]), dim=-1)
+            enc_lines = torch.cat((enc_line_normed[..., 0:2], enc_line_normed[..., 0:2] + enc_line_normed[..., 2:4]), dim=-1)  # TODO: Also changed late
             references["reference_line_logits"] = torch.gather(enc_line_logits, dim=1, index=selected_refs)
             references["reference_lines"] = torch.gather(enc_lines, dim=1, index=selected_refs)
             enc_outputs["pred_lines"] = references["reference_lines"]
@@ -526,6 +528,8 @@ class RTDETRHead(nn.Module):
             labels = target.get("labels", torch.empty((0,), device=device, dtype=torch.long))
             lines = target.get("line_points", torch.empty((0, 4), device=device, dtype=torch.float))
             # ellipses = target.get("ellipses", torch.empty((0, 6), device=device, dtype=dtype))
+            if len(lines)<1:
+                continue
 
             # Some index precalculation to properly fill the tensors
             boxes_end = boxes.shape[0]
@@ -581,9 +585,9 @@ class RTDETRHead(nn.Module):
                                               for _ in range(labels.shape[0])], device=device)
                 labels = torch.where(noise_mask, random_labels, labels)
 
-            assert len(labels)<=total_nq
+            assert labels.shape[0] <=total_nq
             dn_labels[batch_idx, :lines_end] = labels
-            dn_class_logits[batch_idx, torch.arange(len(labels)), labels] = float("inf") # used to make the head reliably select the correct geometry type
+            dn_class_logits[batch_idx, torch.arange(labels.shape[0]), labels] = float("inf") # used to make the head reliably select the correct geometry type
             dn_class_logits[batch_idx, len(labels)+torch.arange(len(labels)), labels] = float("inf") # Also set the contrastive samples
         dn_masking = ~dn_valid[:, None, :].expand(batch_size, total_nq*2, total_nq*2) # Mask for self-attention, True where padding (invalid) entries are, False where valid entries are
         dn_queries = self.dn_query_embedding(dn_labels)
@@ -666,13 +670,16 @@ class RTDETRHead(nn.Module):
             if reference_box_logits is None:
                 raise ValueError("reference_box_logits is None")
             pred_box_normed = (box_delta + reference_box_logits).sigmoid()
-            pred_boxes = torch.cat((pred_box_normed[..., 0:2], pred_box_normed[..., 0:2] + pred_box_normed[..., 2:4] * (1.0- pred_box_normed[..., 0:2])), dim=-1)
+            # pred_boxes = torch.cat((pred_box_normed[..., 0:2], pred_box_normed[..., 0:2] + pred_box_normed[..., 2:4] * (1.0- pred_box_normed[..., 0:2])), dim=-1)
+            pred_boxes = torch.cat((pred_box_normed[..., 0:2], pred_box_normed[..., 0:2]+pred_box_normed[..., 2:4]), dim=-1) # TODO: Also changed late! (See line 471)
             logits_per_layer.append(pred_logits)
             boxes_per_layer.append(pred_boxes)
 
             if self.decoder_line_heads is not None and line_reference_logits is not None:
                 line_delta = self.decoder_line_heads[layer_idx](query)
-                pred_lines = (line_delta + line_reference_logits).sigmoid()
+                pred_line_normed = (line_delta + line_reference_logits).sigmoid()
+                # pred_lines = torch.cat((pred_line_normed[..., 0:2], pred_line_normed[..., 2:4]), dim=-1)
+                pred_lines = torch.cat((pred_line_normed[..., 0:2], pred_line_normed[..., 0:2]+pred_line_normed[..., 2:4]), dim=-1) # TODO: Also changed late
                 lines_per_layer.append(pred_lines)
                 line_reference_logits = line_delta.detach() + line_reference_logits.detach()
 

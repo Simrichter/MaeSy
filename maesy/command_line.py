@@ -155,6 +155,7 @@ def main():
     dataset_creator_parser.add_argument("--similarity-threshold", type=float, help="Threshold when using FAISS clustering (lower is more restrictive). Default: 0.85", default=0.85)
     dataset_creator_parser.add_argument("--cluster-batch-size", type=int, help="Batchsize for feature extraction during clustering. Default: 256", default=256)
     dataset_creator_parser.add_argument("--convert", type=str, choices=["datumaro", "robert", "obb"], default=None, help="Convert dataset type before clustering/dataset creation currently only works with single folder datapaths")
+    dataset_creator_parser.add_argument("--format", type=str, choices=["xyxy", "cxcywh"], default="xyxy", help="Bounding box format to use.")
     dataset_creator_parser.add_argument("--convert-id-blacklist", type=int, nargs='+', default=[], help="Space-separated list of ids to blacklist when converting. Only works when --convert flag is used as well")
     dataset_creator_parser.add_argument("--convert-merge-ids", type=int, nargs='+', default=[], help="Space-separated list of pairs of ids to merge together when converting/creating the dataset. Only works when --convert flag is used as well. Example usage: --merge-ids 1 2 3 4 (will merge class 1 into 2, and class 3 into 4. Only class IDs 2 and 4 are kept afterward)")
     dataset_creator_parser.add_argument("--convert-permute-ids", type=int, nargs='+', default=[], help="Space-separated list of indices to permute the class IDs when converting/creating the dataset. Only works when --convert flag is used as well.")
@@ -168,6 +169,7 @@ def main():
     dataset_convert_parser.add_argument("-i", "--input-format", help="Conversion setup dataset", choices=["datumaro", "robert", "obb"], default="datumaro")
     # dataset_convert_parser.add_argument("--output_format", help="Desired format of the dataset", choices=["devilsyolo"], default="devilsyolo")
     dataset_convert_parser.add_argument("-o", "--output-path", help="Output path for the created .txt label files", default="")
+    dataset_convert_parser.add_argument("--format", type=str, choices=["xyxy", "cxcywh"], default="xyxy", help="Bounding box format to use.")
     dataset_convert_parser.add_argument("--convert-id-blacklist", type=int, nargs='+', default=[], help="Space-separated list of ids to blacklist when converting.")
     dataset_convert_parser.add_argument("--convert-merge-ids", type=int, nargs='+', default=[], help="Space-separated list of pairs of ids to merge into a single class when converting/creating the dataset. Only works when --convert flag is used as well. Example usage: --merge-ids 1 2 3 4 (will merge classes 1 into 2, and class 3 into 4. Only class IDs 2 and 4 are kept afterward)")
     dataset_convert_parser.add_argument("--convert-permute-ids", type=int, nargs='+', default=[],

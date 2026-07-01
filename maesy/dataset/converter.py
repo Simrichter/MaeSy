@@ -44,13 +44,14 @@ def ellipse_to_cholesky(cx: float, cy: float, a: float, b: float, theta: float):
 
     return np.stack([cx, cy, l11, l21, l22], axis=-1)
 
-def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None, permute_ids: Optional[list[int]]=None):
+def robert_to_devils_yolo(dataset_dir: str | Path, box_format: str= "xyxy", class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None, permute_ids: Optional[list[int]]=None):
     """
         Convert Image annotations from Robert's Unity simulator outputs to devils_yolo format.
         Returns output path, number of classes, class_names and special_classes dict (for create dataset)
 
         Args:
             :param dataset_dir: Path to the root data folder
+            :param box_format: Format specifier for bounding box parameterizations (i.e. "xyxy", "cxcywh", etc.)
             :param class_id_blacklist: List of class ids to ignore during conversion
             :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y
             :param permute_ids: A list of indices used to permute the class IDs. The index of the list represents the old class ID, the value at that index represents the new class ID. This is applied after merging and blacklisting operations.
@@ -81,20 +82,10 @@ def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[
     if class_id_blacklist is None:
         class_id_blacklist = {}
 
-    if permute_ids is None or len(permute_ids) != len(set(name_to_id.values())):
-        permute_ids = range(len(name_to_id.values()))
-
-    # apply merging and blacklisting operations
     id_to_name = {v: k for k, v in name_to_id.items()}
     for x, y in merge_ids.items():
         name_to_id[id_to_name[x]] = y
-    for class_id in class_id_blacklist:
-        del name_to_id[id_to_name[class_id]]
-    # rebuild indices
-    unique_ids = list(name_to_id.fromkeys(name_to_id.values()))
-    unique_ids[:] = [unique_ids[i] for i in permute_ids]
-    translate_ids = {v: k for k, v in enumerate(unique_ids)}
-    name_to_id = {k: translate_ids[v] for k, v in name_to_id.items()}
+
     # build special classes dict
     special_classes = {}
     if "Line" in name_to_id.keys():
@@ -138,11 +129,14 @@ def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[
                             continue
                         cx, cy, w, h = parts
                         cx, cy, w, h = float(cx), float(cy), float(w), float(h)  # Explicit cast to ensure datatype compatibility
-                        x1 = cx - 0.5 * w
-                        y1 = cy - 0.5 * h
-                        x2 = cx + 0.5 * w
-                        y2 = cy + 0.5 * h
-                        new_lines.append(f"{class_id} {x1} {y1} {x2} {y2}\n")
+                        if box_format == "xyxy":
+                            x1 = cx - 0.5 * w
+                            y1 = cy - 0.5 * h
+                            x2 = cx + 0.5 * w
+                            y2 = cy + 0.5 * h
+                            new_lines.append(f"{class_id} {x1} {y1} {x2} {y2}\n")
+                        elif box_format == "cxcywh":
+                            new_lines.append(f"{class_id} {cx} {cy} {w} {h}\n")
                     case "Lines":
                         class_id = name_to_id['Line']
                         class_id = merge_ids.get(class_id, class_id)
@@ -171,7 +165,10 @@ def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[
                         y1 = cy - 0.5 * h
                         x2 = cx + 0.5 * w
                         y2 = cy + 0.5 * h
-                        new_lines.append(f"{class_id} {x1} {y1} {x2} {y2}\n")
+                        if box_format == "xyxy":
+                            new_lines.append(f"{class_id} {x1} {y1} {x2} {y2}\n")
+                        elif box_format == "cxcywh":
+                            new_lines.append(f"{class_id} {cx} {cy} {w} {h}\n")
                     case "CenterCircle":
                         class_id = name_to_id['CenterCircle']
                         class_id = merge_ids.get(class_id, class_id)
@@ -192,10 +189,24 @@ def robert_to_devils_yolo(dataset_dir: str | Path, class_id_blacklist: Optional[
             with open(os.path.join(out_path, label_file), 'w') as f:
                 f.writelines(new_lines)
 
+    # apply merging and blacklisting operations
+    for class_id in class_id_blacklist:
+        del name_to_id[id_to_name[class_id]]
+
+    # rebuild indices
+    unique_ids = list(name_to_id.fromkeys(name_to_id.values()))
+    if permute_ids is None or len(permute_ids) != len(set(name_to_id.values())):
+        permute_ids = range(len(name_to_id.values()))
+    print(unique_ids)
+    print(permute_ids)
+    unique_ids[:] = [unique_ids[i] for i in permute_ids]
+    translate_ids = {v: k for k, v in enumerate(unique_ids)}
+    name_to_id = {k: translate_ids[v] for k, v in name_to_id.items()}
+
     return out_path, len(name_to_id.values()), list(name_to_id.keys()), special_classes
 
 
-def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None, permute_ids: Optional[list[int]]= None) -> Tuple[str, int, list, dict]:
+def datumaro_to_devils_yolo(datumaro_dir: str, box_format: str= "xyxy", class_id_blacklist: Optional[list[int]]=None, merge_ids: Optional[dict[int, int]]=None, permute_ids: Optional[list[int]]= None) -> Tuple[str, int, list, dict]:
         """
         Convert Image annotations exported from cvat in datumaro JSON format into DevilsYolo format.
         Lines are represented by their two endpoint coordinates in xyxy format.
@@ -204,6 +215,7 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
 
         Args:
             :param datumaro_dir: Path to the datumaro dataset root folder (the one that contains the annotations folder and the images folder)
+            :param box_format: Format specifier for bounding box parameterizations (i.e. "xyxy", "cxcywh", etc.)
             :param class_id_blacklist: List of class ids to ignore during conversion
             :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y (only class ID y is kept afterward)
             :param permute_ids: A list of indices used to permute the class IDs. The index of the list represents the old class ID, the value at that index represents the new class ID. This is applied after merging and blacklisting operations.
@@ -298,7 +310,14 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
                         y1 = max(ann['bbox'][1] / normalize[1], 0.0)
                         x2 = min((ann['bbox'][0] + ann['bbox'][2]) / normalize[0], 1.0)
                         y2 = min((ann['bbox'][1] + ann['bbox'][3]) / normalize[1], 1.0)
-                        f.write(f"{translate_ids[class_id]} {x1} {y1} {x2} {y2}\n")
+                        if box_format == "xyxy":
+                            f.write(f"{translate_ids[class_id]} {x1} {y1} {x2} {y2}\n")
+                        elif box_format == "cxcywh":
+                            w = x2-x1
+                            h = y2-y1
+                            cx = x1 + w/2
+                            cy = y1 + h/2
+                            f.write(f"{translate_ids[class_id]} {cx} {cy} {w} {h}\n")
                     elif ann['type'] == "polyline": # FieldLines
                         p = ann['points']
                         if len(p) != 4:
@@ -325,16 +344,17 @@ def datumaro_to_devils_yolo(datumaro_dir: str, class_id_blacklist: Optional[list
         return folder_path, len(id_to_name), list(id_to_name.values()), special_classes
 
 
-def datumaro_to_ultralyticsOBB(datumaro_dir: str, class_id_blacklist: Optional[list[int]] = None, merge_ids: Optional[dict[int, int]] = None,
+def datumaro_to_ultralyticsOBB(datumaro_dir: str, box_format: str= "xyxy", class_id_blacklist: Optional[list[int]] = None, merge_ids: Optional[dict[int, int]] = None,
                             permute_ids: Optional[list[int]] = None) -> Tuple[str, int, list, dict]:
     """
-    Convert Image annotations exported from cvat in datumaro JSON format into DevilsYolo format.
-    Lines are represented by their two endpoint coordinates in xyxy format.
+    Convert Image annotations exported from cvat in datumaro JSON format into Ultralytics format for Oriented Bounding Boxes (four coordinate pairs).
+    Lines and ellipses are not possible.
     All coordinates are normalized
     Returns output path, number of classes, class_names and special_classes dict (for create dataset)
 
     Args:
         :param datumaro_dir: Path to the datumaro dataset root folder (the one that contains the annotations folder and the images folder)
+        :param box_format: Format specifier for bounding box parameterizations (i.e. "xyxy", "cxcywh", etc.)
         :param class_id_blacklist: List of class ids to ignore during conversion
         :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y (only class ID y is kept afterward)
         :param permute_ids: A list of indices used to permute the class IDs. The index of the list represents the old class ID, the value at that index represents the new class ID. This is applied after merging and blacklisting operations.
@@ -350,6 +370,9 @@ def datumaro_to_ultralyticsOBB(datumaro_dir: str, class_id_blacklist: Optional[l
     print(f"Converting datumaro to DevilsYolo format")
     print(f"Dataset root path: {datumaro_dir}")
     print("=" * 60)
+
+    if box_format != "xyxy":
+        print(f"Warning: Box format {box_format} specified, but UltralyticsOBB ALWAYS uses four-corner 'xyxy'! Ignoring.")
 
     with open(f"{datumaro_dir}/annotations/default.json", 'r') as f:
         data = json.load(f)

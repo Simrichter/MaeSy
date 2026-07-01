@@ -11,7 +11,7 @@ def main(args):
         case "create":
             dm.create_dataset(folder_names=args.data_paths, chosen_paths=args.already_used, dataset_name=args.dataset_name, split_percentages=args.split,
                               resize=args.resize, with_labels=not args.no_labels, step=args.step, start_index=args.start_index, del_folders=args.delete,
-                              cluster_method=args.cluster_method, num_clusters=args.num_clusters, similarity_threshold=args.similarity_threshold,
+                              cluster_method=args.cluster_method, num_clusters=args.num_clusters, box_format=args.format, similarity_threshold=args.similarity_threshold,
                               cluster_batch_size=args.cluster_batch_size, left_right=args.left_right, convert=args.convert,
                               convert_id_blacklist=args.convert_id_blacklist,
                               merge_ids={k: v for k, v in zip(args.convert_merge_ids[::2], args.convert_merge_ids[1::2])}, permute_ids=args.convert_permute_ids)

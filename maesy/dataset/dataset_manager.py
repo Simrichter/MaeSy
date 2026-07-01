@@ -165,7 +165,7 @@ class DatasetManager:
                     shutil.copy(label_file, target_path) #/ label_file.name
 
     @staticmethod
-    def _create_yaml(dataset_dir: Path, splits: List[str], num_classes: Optional[int] = None, class_names: Optional[List[str]] = None, special_classes: Optional[Dict[str, str]] = None):
+    def _create_yaml(dataset_dir: Path, splits: List[str], num_classes: Optional[int] = None, class_names: Optional[List[str]] = None, special_classes: Optional[Dict[str, str]] = None, box_format: str = "xyxy"):
         """
             Create a dataset.yaml file in MaesyDataset format.
 
@@ -175,6 +175,7 @@ class DatasetManager:
                 :param num_classes: Number of classes in the dataset
                 :param class_names: List of strings specifying the class names (ordered by class-id)
                 :param special_classes: Dict of strings, where keys are from ["lines", "ellipses"] and values are from class_names
+                :param box_format: Box format specifier string (xyxy, cxcywh, etc.)
         """
         if num_classes is None:
             if class_names is None:
@@ -186,7 +187,7 @@ class DatasetManager:
             'path' : str(dataset_dir),
             'nc': num_classes,
             'names': class_names if class_names is not None else [f'class_{i}' for i in range(num_classes)],
-            'box_format': 'xyxy'
+            'box_format': box_format
         }
         for split in splits:
             yaml_content[split] = str(split)
@@ -213,6 +214,7 @@ class DatasetManager:
                        merge_ids: Optional[dict[int, int]] = None,
                        permute_ids: Optional[list[int]] = None,
                        nc: Optional[int] = None,
+                       box_format: str = "xyxy",
                        similarity_threshold: Optional[float] = None,
                        num_clusters: Optional[int] = None,
                        cluster_batch_size: int = 256,
@@ -239,6 +241,7 @@ class DatasetManager:
             :param merge_ids: A dict of {x: int, y: int} pairs, where x is the class ID to be merged into class ID y
             :param permute_ids: A list of indices used to permute the class IDs. The index of the list represents the old class ID, the value at that index represents the new class ID. This is applied after merging and blacklisting operations.
             :param nc: Optional number of classes (for dataset.yaml)
+            :param box_format: Specifier string for a box format ('xyxy', 'cxcywh', etc.)
             :param class_names: Optional List of strings that specify class names in class_id order (for dataset.yaml)
             :param special_classes: Optional Dict of strings with keys in ['lines', 'ellipses'] and values in class_names (for dataset.yaml)
 
@@ -300,7 +303,7 @@ class DatasetManager:
                     raise ValueError(f"Unknown dataset type {convert}. Conversion failed...")
             out_folders = []
             for folder in folder_names:
-                img_dir, nc, class_names, special_classes = conversion_function(folder, convert_id_blacklist, merge_ids, permute_ids)
+                img_dir, nc, class_names, special_classes = conversion_function(folder, box_format, convert_id_blacklist, merge_ids, permute_ids)
                 out_folders.append(img_dir)
             folder_names = out_folders
 
@@ -339,7 +342,7 @@ class DatasetManager:
         print("Creating dataset.yaml")
         if nc is None or class_names is None or special_classes is None:
             print(f"!!!\nWarning: Not all parameters for dataset.yaml specified. Manual corrections required in {dataset_dir/'dataset.yaml'}\n!!!")
-        self._create_yaml(dataset_dir, num_classes=nc, splits=splits, class_names=class_names, special_classes=special_classes)
+        self._create_yaml(dataset_dir, num_classes=nc, splits=splits, class_names=class_names, special_classes=special_classes, box_format=box_format)
         print("Creation successful!")
         return dataset_dir
 

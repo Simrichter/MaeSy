@@ -8,6 +8,7 @@ from .converter import datumaro_to_devils_yolo, robert_to_devils_yolo, datumaro_
 from .maesy_dataset import MaesyDataset
 from .bounding_box import sanitize_cxcywh, sanitize_xyxy
 from .extract_patches_from_dataset import extract_patches
+from .augmentations import TrainPatchTransforms, ValPatchTransforms
 
 __all__ = [
     "DatasetManager",
@@ -21,4 +22,6 @@ __all__ = [
     "sanitize_cxcywh",
     "sanitize_xyxy",
     "extract_patches",
+    "TrainPatchTransforms",
+    "ValPatchTransforms"
 ]

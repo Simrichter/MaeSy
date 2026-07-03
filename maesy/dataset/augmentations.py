@@ -332,6 +332,39 @@ def apply_hflip(
     target = _hflip_targets(target, 1.0)
     return image, target
 
+# Transforms that were formerly part of ODTransforms
+def _random_resized_crop(
+    image: torch.Tensor,
+    target: Dict[str, torch.Tensor],
+    crop_scale: Tuple[float, float] = (0.85, 1.0)
+) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    height, width = _get_hw(image)
+    top, left, crop_h, crop_w = RandomResizedCrop.get_params(image, scale=list(crop_scale), ratio=[1., 1.])
+    image = F.resized_crop(
+        image,
+        top,
+        left,
+        crop_h,
+        crop_w,
+        size=[image.shape[-2], image.shape[-1]],
+        interpolation=InterpolationMode.BILINEAR,
+        antialias=True,
+    )
+    target = _crop_targets(target, top, left, crop_h, crop_w, height, width)
+    return image, target
+
+def _resize_to_output(
+    image: torch.Tensor,
+    target: Dict[str, torch.Tensor],
+    image_size: Tuple[int, int] = (224, 224)
+) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    image = F.resize(
+        image,
+        size=[image.shape[-2], image.shape[-1]],
+        interpolation=InterpolationMode.BILINEAR,
+        antialias=True,
+    )
+    return image, _resize_targets(target, _get_hw(image), image_size)
 
 class ODTrainTransforms:
     def __init__(
@@ -360,41 +393,6 @@ class ODTrainTransforms:
         self.random_autocontrast = transforms.RandomAutocontrast(p=0.1)
         self.random_erasing = transforms.RandomErasing(p=0.1, scale=(0.02, 0.12), ratio=(0.3, 3.3), value=0.0)
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-
-    def _random_resized_crop(
-        self,
-        image: torch.Tensor,
-        target: Dict[str, torch.Tensor],
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        height, width = _get_hw(image)
-        top, left, crop_h, crop_w = RandomResizedCrop.get_params(
-            image, scale=list(self.crop_scale), ratio=[1., 1.]#ratio=[0.8235, 0.8235]
-        )
-        image = F.resized_crop(
-            image,
-            top,
-            left,
-            crop_h,
-            crop_w,
-            size=[self.image_size, self.image_size],
-            interpolation=InterpolationMode.BILINEAR,
-            antialias=True,
-        )
-        target = _crop_targets(target, top, left, crop_h, crop_w, height, width)
-        return image, target
-
-    def _resize_to_output(
-        self,
-        image: torch.Tensor,
-        target: Dict[str, torch.Tensor],
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        image = F.resize(
-            image,
-            size=[self.image_size, self.image_size],
-            interpolation=InterpolationMode.BILINEAR,
-            antialias=True,
-        )
-        return image, _resize_targets(target, _get_hw(image), (self.image_size, self.image_size))
 
     def __call__(self, image: torch.Tensor, target: Optional[Dict[str, torch.Tensor]] = None):
         image = _ensure_float_image(image)
@@ -457,6 +455,94 @@ class ODValTransforms:
         if target is None:
             return self.normalize(image)
         target = _resize_targets(target, (height, width), (self.image_size, self.image_size))
+        return self.normalize(image), target
+
+class TrainPatchTransforms:
+    def __init__(
+            self,
+            image_size: Tuple[int, int] = (24, 48),
+            p_affine: float = 1,  # 0.7,
+            p_hflip: float = 0.5,
+            p_crop: float = 0.2,
+            affine_degrees: Tuple[float, float] = (-5.0, 5.0),
+            affine_translate: Tuple[float, float] = (0.15, 0.15),
+            affine_scale: Tuple[float, float] = (0.95, 1.05),
+            crop_scale: Tuple[float, float] = (0.85, 1.0),
+    ) -> None:
+        self.image_size = image_size
+        self.p_affine = p_affine
+        self.p_hflip = p_hflip
+        self.p_crop = p_crop
+        self.affine_degrees = affine_degrees
+        self.affine_translate = affine_translate
+        self.affine_scale = affine_scale
+        self.crop_scale = crop_scale
+        self.color_jitter = transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02)
+        self.random_grayscale = transforms.RandomGrayscale(p=0.05)
+        self.random_blur = transforms.RandomApply([transforms.GaussianBlur(3, sigma=(0.1, 2.0))], p=0.1)
+        self.random_sharpness = transforms.RandomAdjustSharpness(sharpness_factor=1.3, p=0.1)
+        self.random_autocontrast = transforms.RandomAutocontrast(p=0.1)
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    def __call__(self, image: torch.Tensor, target: Optional[Dict[str, torch.Tensor]] = None):
+        image = _ensure_float_image(image)
+
+        target_dict: Dict[str, torch.Tensor] = {}
+
+        if random.random() < self.p_crop:
+            image, target_dict = _random_resized_crop(image, target_dict, self.crop_scale)
+        else:
+            image, target_dict = _resize_to_output(image, target_dict, self.image_size)
+
+        if random.random() < self.p_affine:
+            height, width = _get_hw(image)
+            angle, translate, scale, shear = RandomAffine.get_params(
+                degrees=[*self.affine_degrees],
+                translate=[*self.affine_translate],
+                scale_ranges=[*self.affine_scale],
+                shears=None,
+                img_size=[width, height],
+            )
+            image, target_dict = apply_affine_to_target(
+                image,
+                target_dict,
+                angle=angle,
+                translate=translate,
+                scale=scale,
+                shear=(0.0, 0.0),
+            )
+
+        if random.random() < self.p_hflip:
+            image, target_dict = apply_hflip(image, target_dict)
+
+        image = self.color_jitter(image)
+        image = self.random_autocontrast(image)
+        image = self.random_grayscale(image)
+        image = self.random_blur(image)
+        image = self.random_sharpness(image)
+        image = self.normalize(image)
+
+        if target is not None:
+            return image, target_dict
+        return image
+
+class ValPatchTransforms:
+    def __init__(self, image_size: Tuple[int, int] = (24, 48)) -> None:
+        self.image_size = image_size
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    def __call__(self, image: torch.Tensor, target: Optional[Dict[str, torch.Tensor]] = None):
+        image = _ensure_float_image(image)
+        height, width = _get_hw(image)
+        image = F.resize(
+            image,
+            size=list(self.image_size),
+            interpolation=InterpolationMode.BILINEAR,
+            antialias=True,
+        )
+        if target is None:
+            return self.normalize(image)
+        target = _resize_targets(target, (height, width), self.image_size)
         return self.normalize(image), target
 
 class ClusterTransforms:

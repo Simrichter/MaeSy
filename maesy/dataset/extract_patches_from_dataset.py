@@ -129,11 +129,6 @@ def extract_patches(dataset_path: str, split: List[str], patch_path: str, desire
         if op == "":
             op = f"{dataset_path}/extracted_patches/{s}/images"
             Path(op).mkdir(parents=True, exist_ok=True)
-            if output_fp:
-                tp = f"{op}/tp"
-                fp = f"{op}/fp"
-                Path(tp).mkdir(parents=True, exist_ok=True)
-                Path(fp).mkdir(parents=True, exist_ok=True)
         robot_patches, fp_patches = _generate_patches_from_dataset(dataset, desired_class_id, output_fp=output_fp)
         _save_patches(robot_patches, op, 1)
         if output_fp:

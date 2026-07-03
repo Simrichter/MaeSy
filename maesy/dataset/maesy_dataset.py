@@ -7,7 +7,7 @@ import torch
 import torchvision.tv_tensors
 from torch.utils.data import Dataset
 from PIL import Image
-from typing import Optional, Callable, Dict, List, Tuple
+from typing import Optional, Callable, Dict, List, Tuple, Any
 import numpy as np
 import yaml
 import math
@@ -97,6 +97,7 @@ class MaesyDataset(Dataset):
             raise ValueError(f"Path '{dataset_dir}' does not exist.")
 
         self.transforms = transforms
+        self.annotation_type = annotation_type
 
         yaml_data, annotation_type = _load_yaml_data(dataset_dir, annotation_type)
         if annotation_type == "auto":
@@ -186,16 +187,15 @@ class MaesyDataset(Dataset):
         """Return number of images in dataset."""
         return len(self.images)
 
-    def __getitem__(self, idx: int) -> Tuple[torchvision.tv_tensors.Image, List[Dict[str, torchvision.tv_tensors.BoundingBoxes]]]:
+    def _getitem_detection(self, idx: int) -> Tuple[torchvision.tv_tensors.Image, List[Dict[str, torchvision.tv_tensors.BoundingBoxes]]]:
         """
-        Get image and annotations at index.
+        Get image and annotations at index for detection datasets.
         If transforms are provided, they are applied to the image before returning it.
         Otherwise, the image is returned as a tensor.
         Labels are returned as a list of BoundingBox instances.
 
         Args:
             :param idx: Index
-
         Returns:
             Dictionary containing the image and target annotations as a List[Object]
         """
@@ -206,7 +206,9 @@ class MaesyDataset(Dataset):
             if self.return_labels:
                 annotation_path = os.path.join(self.annotations_dir, self.annotations[idx])
                 if annotation_path.split("/")[-1].split(".")[0] != image_path.split("/")[-1].split(".")[0]:
-                    print("\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(annotation_path, image_path))
+                    print(
+                        "\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(
+                            annotation_path, image_path))
                 with open(annotation_path, "r") as f:
                     boxes_list: List[BoundingBox] = []
                     line_points_list: List[List[float]] = []
@@ -214,13 +216,17 @@ class MaesyDataset(Dataset):
                     for raw_line in f.readlines():
                         splits = raw_line.split()
                         cls_id = int(splits[0])
-                        if self.special_classes['line_class_id'] is not None and cls_id == self.special_classes['line_class_id']:
+                        if self.special_classes['line_class_id'] is not None and cls_id == self.special_classes[
+                            'line_class_id']:
                             if self.enable_lines:
-                                assert len(splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'line': 'class x1 y1 x2 y2'."
+                                assert len(
+                                    splits) == 5, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 5 columns for annotation type 'line': 'class x1 y1 x2 y2'."
                                 line_points_list.append([*map(float, splits[1:])])
-                        elif self.special_classes['ellipse_class_id'] is not None and cls_id == self.special_classes['ellipse_class_id']:
+                        elif self.special_classes['ellipse_class_id'] is not None and cls_id == self.special_classes[
+                            'ellipse_class_id']:
                             if self.enable_ellipses:
-                                assert len(splits) == 7, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 7 columns for annotation type 'ellipse': 'class center_x center_y log_a log_b cos(2*theta) sin(2*theta)'."
+                                assert len(
+                                    splits) == 7, f"Invalid annotation format in {annotation_path}: '{raw_line.strip()}'. Expected 7 columns for annotation type 'ellipse': 'class center_x center_y log_a log_b cos(2*theta) sin(2*theta)'."
                                 ellipse_points_list.append([*map(float, splits[1:])])
                         else:
                             expected = "class x1 y1 x2 y2" if self.box_format == "xyxy" else "class cx cy w h"
@@ -247,11 +253,13 @@ class MaesyDataset(Dataset):
 
                 # Create label tensors for lines and ellipses (labels are class ids)
                 if len(line_points_list) > 0:
-                    line_labels = torch.full((len(line_points_list),), self.special_classes['line_class_id'], dtype=torch.long)
+                    line_labels = torch.full((len(line_points_list),), self.special_classes['line_class_id'],
+                                             dtype=torch.long)
                 else:
                     line_labels = torch.empty((0,), dtype=torch.long)
                 if len(ellipse_points_list) > 0:
-                    ellipse_labels = torch.full((len(ellipse_points_list),), self.special_classes['ellipse_class_id'], dtype=torch.long)
+                    ellipse_labels = torch.full((len(ellipse_points_list),), self.special_classes['ellipse_class_id'],
+                                                dtype=torch.long)
                 else:
                     ellipse_labels = torch.empty((0,), dtype=torch.long)
 
@@ -293,8 +301,10 @@ class MaesyDataset(Dataset):
                     box_labels = target.get("box_labels", target["labels"][: len(boxes)])
                     line_points = target.get("line_points", torch.empty((0, 4), dtype=torch.float32))
                     ellipses = target.get("ellipses", torch.empty((0, 6), dtype=torch.float32))
-                    line_labels = torch.full((len(line_points),), self.special_classes['line_class_id'], dtype=torch.long, device=line_points.device)
-                    ellipse_labels = torch.full((len(ellipses),), self.special_classes['ellipse_class_id'], dtype=torch.long, device=ellipses.device)
+                    line_labels = torch.full((len(line_points),), self.special_classes['line_class_id'],
+                                             dtype=torch.long, device=line_points.device)
+                    ellipse_labels = torch.full((len(ellipses),), self.special_classes['ellipse_class_id'],
+                                                dtype=torch.long, device=ellipses.device)
 
                     # sanitize boxes (assume normalized XYXY)
                     if boxes.numel() > 0:
@@ -380,7 +390,8 @@ class MaesyDataset(Dataset):
                         cx = torch.where(torch.abs(cx) < eps, torch.zeros_like(cx), cx)
                         cy = torch.where(torch.abs(cy) < eps, torch.zeros_like(cy), cy)
                         centers_in = (cx >= 0.0) & (cx <= 1.0) & (cy >= 0.0) & (cy <= 1.0)
-                        finite_mask = torch.isfinite(log_a) & torch.isfinite(log_b) & torch.isfinite(cos2) & torch.isfinite(sin2)
+                        finite_mask = torch.isfinite(log_a) & torch.isfinite(log_b) & torch.isfinite(
+                            cos2) & torch.isfinite(sin2)
                         a = torch.exp(log_a)
                         b = torch.exp(log_b)
                         size_mask = (a > 1e-6) & (b > 1e-6)
@@ -426,6 +437,70 @@ class MaesyDataset(Dataset):
             return image, target
         else:
             return image
+
+    def _getitem_image_folder(self, idx: int) -> torchvision.tv_tensors.Image:
+        """
+        Get image at index for image_folder datasets.
+        If transforms are provided, they are applied to the image before returning it.
+        Otherwise, the image is returned as a tensor.
+
+        Args:
+            :param idx: Index
+        Returns:
+            Image tensor
+        """
+        image_path = os.path.join(self.images_dir, self.images[idx])
+        with Image.open(image_path).convert('RGB') as image:
+            image = torchvision.tv_tensors.Image(image) / 255.0
+            # Apply transforms (if any). We intentionally keep all geometric
+            # annotations normalized in [0,1] so transforms should accept that.
+            if self.transforms is not None:
+                image = self.transforms(image)
+            return image
+
+    def _getitem_classification(self, idx: int) -> Tuple[torchvision.tv_tensors.Image, List[Dict[str, Any]]]:
+        """
+        Get image and label at index for classification datasets.
+        If transforms are provided, they are applied to the image before returning it.
+        Otherwise, the image is returned as a tensor.
+
+        Args:
+            :param idx: Index
+        Returns:
+            List of dictionaries containing "label" and the cls id
+        """
+        image_path = os.path.join(self.images_dir, self.images[idx])
+        with Image.open(image_path).convert('RGB') as image:
+            image = torchvision.tv_tensors.Image(image) / 255.0
+            # Apply transforms (if any). We intentionally keep all geometric
+            # annotations normalized in [0,1] so transforms should accept that.
+            if self.transforms is not None:
+                image = self.transforms(image)
+            label = self.images[idx].name.split("_")[-1]  # Assuming label is encoded in the filename after the last underscore
+            return image, [{"label": label}]
+
+    def __getitem__(self, idx: int) -> Tuple[torchvision.tv_tensors.Image, List[Dict[str, Any]]]:
+        """
+        Get image and annotations at index.
+        If transforms are provided, they are applied to the image before returning it.
+        Otherwise, the image is returned as a tensor.
+        Labels are returned as a list of BoundingBox instances.
+
+        Args:
+            :param idx: Index
+
+        Returns:
+            Dictionary containing the image and target annotations as a List[Object]
+        """
+        match self.annotation_type:
+            case "detection":
+                return self._getitem_detection(idx)
+            case "image_folder":
+                return self._getitem_image_folder(idx)
+            case "classification":
+                return self._getitem_classification(idx)
+            case _:
+                raise ValueError(f"Unsupported annotation type '{self.annotation_type}'")
 
     def get_image_path(self, idx: int) -> Path:
         """

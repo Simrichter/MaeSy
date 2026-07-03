@@ -5,7 +5,7 @@ from typing import Tuple
 import torch
 from torch.utils.data import DataLoader
 
-from maesy.dataset import MaesyDataset, TrainPatchTransforms, ValPatchTransforms
+from maesy.dataset import MaesyDataset, TrainPatchTransforms, ValPatchTransforms, MultiDataset
 from maesy.model import PatchClassificatorConfig, PatchClassificator
 from maesy.training import ClassificationTrainer
 from maesy.training.base_trainer import BaseTrainingConfig
@@ -21,7 +21,7 @@ class PatchClassificationTrainingConfig(BaseTrainingConfig):
     save_dir: str = "./patch_classification_checkpoints"
 
 
-def train_patches(dataset_path, enable_wandb, batch_size=64, num_epochs=50, num_classes=2, patch_shape: Tuple[int, int] = (24, 48)):
+def train_patches(dataset_paths, enable_wandb, batch_size=64, num_epochs=50, num_classes=2, patch_shape: Tuple[int, int] = (24, 48)):
     """Main setup function."""
 
     # Create model config
@@ -37,9 +37,11 @@ def train_patches(dataset_path, enable_wandb, batch_size=64, num_epochs=50, num_
     train_transforms = TrainPatchTransforms()
     val_transforms = ValPatchTransforms()
 
-    train_dataset = MaesyDataset(dataset_path, split="train", annotation_type="classification", transforms=train_transforms)
+    train_dataset = MultiDataset([MaesyDataset(dataset_path, split="train", annotation_type="classification", transforms=train_transforms) for dataset_path in dataset_paths])
+    val_dataset = MultiDataset([MaesyDataset(dataset_path, split="val", annotation_type="classification", transforms=val_transforms) for dataset_path in dataset_paths])
 
-    val_dataset = MaesyDataset(dataset_path, split="val", annotation_type="classification", transforms=val_transforms)
+    # train_dataset = MaesyDataset(dataset_path, split="train", annotation_type="classification", transforms=train_transforms)
+    # val_dataset = MaesyDataset(dataset_path, split="val", annotation_type="classification", transforms=val_transforms)
 
     # Create data loaders
     train_loader = DataLoader(

@@ -37,7 +37,7 @@ def main(args):
         train_classification(dataset_path=args.dataset, enable_wandb=args.wandb)
     elif args.mode == "pc":
         from maesy.training.train_setups import train_patches
-        train_patches(dataset_path=args.dataset, enable_wandb=args.wandb)
+        train_patches(dataset_paths=args.dataset, enable_wandb=args.wandb)
     else:
         raise ValueError(f"Invalid training mode: {args.mode}. Supported modes are 'od', 'mae' and 'cl'.")
 

@@ -135,7 +135,7 @@ class MaesyDataset(Dataset):
         assert split_path.exists(), (f"Requested split at '{split_path}' does not exist in dataset at {dataset_dir}."
                                      f"If it does exist, try an absolute path in dataset.yaml")
 
-        self.return_labels = annotation_type not in ["None", "image_folder"]
+        self.return_labels = annotation_type not in ["None", "image_folder", "classification"]
 
         self.images_dir = split_path / "images"
         assert self.images_dir.exists()
@@ -144,7 +144,7 @@ class MaesyDataset(Dataset):
 
         if self.return_labels:
             self.annotations_dir = split_path / "labels"
-            assert self.annotations_dir.exists()
+            assert self.annotations_dir.exists(), f"Annotations directory {self.annotations_dir} does not exist for split {split} in dataset at {dataset_dir}"
 
             self.id_to_name = {i: v for i, v in enumerate(yaml_data.get("names", []))}
             self.name_to_id = {v: k for k, v in self.id_to_name.items()}
@@ -476,7 +476,7 @@ class MaesyDataset(Dataset):
             # annotations normalized in [0,1] so transforms should accept that.
             if self.transforms is not None:
                 image = self.transforms(image)
-            label = self.images[idx].name.split("_")[-1]  # Assuming label is encoded in the filename after the last underscore
+            label = int(self.images[idx].name.split("_")[-1].split(".")[0])  # Assuming label is encoded in the filename after the last underscore
             return image, [{"label": label}]
 
     def __getitem__(self, idx: int) -> Tuple[torchvision.tv_tensors.Image, List[Dict[str, Any]]]:

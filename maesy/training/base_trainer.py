@@ -24,6 +24,7 @@ class BaseTrainingConfig:
     # Training parameters
     num_epochs: int = 100
     batch_size: int = 32
+    accumulation_steps: int = 1 # Set >1 to activate gradient accumulation. @param batch_size stays effective batch_size, physical batch size is batch_size/accumulation_steps
     weight_decay: float = 1e-4
     label_smoothing: float = 0.0
     warmup_epochs: int = 5
@@ -310,33 +311,40 @@ class BaseTrainer(ABC):
         self.loss.reset_metrics()
 
         for batch_idx, batch in enumerate(pbar := tqdm(self.train_loader, desc=f"Epoch {self.current_epoch + 1}")):
-            images, targets = handle_raw_batch(batch, self.device)
+            loss = torch.tensor(0.0)
+            for acc_step in range(self.config.accumulation_steps): # TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                # TODO: This is wrong!!!
+                images, targets = handle_raw_batch(batch, self.device)
 
-            # Forward pass
-            with torch.amp.autocast("cuda", enabled=self.config.use_amp):
-                losses = self._forward_model(images, targets, val=False)
-                loss = losses['loss']
+                # Forward pass
+                with torch.amp.autocast("cuda", enabled=self.config.use_amp):
+                    losses = self._forward_model(images, targets, val=False)
+                    loss += losses['loss']
 
-            # Backward pass
-            self.optimizer.zero_grad()
+                # Backward pass
+                if self.config.use_amp:
+                    self.scaler.scale(loss).backward()
+                else:
+                    loss.backward()
 
             if self.config.use_amp:
-                self.scaler.scale(loss).backward()
                 self.scaler.unscale_(self.optimizer)
                 total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
-                loss.backward()
                 total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
                 self.optimizer.step()
+            self.optimizer.zero_grad()
 
             # Update progress bar
-            pbar.set_postfix({
+            update_dict = {
                 'loss': loss.item(),
                 'lr_bbone': self.optimizer.param_groups[0]['lr'],
                 'lr_head': self.optimizer.param_groups[-1]['lr']
-            })
+            }
+            update_dict.update({'bad_epochs': self.scheduler.num_bad_epochs})
+            pbar.set_postfix(update_dict)
 
             # Log to wandb
             if self.global_step % self.config.log_frequency == 0:

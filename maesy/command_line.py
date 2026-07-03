@@ -140,6 +140,7 @@ def main():
     patch_extracter.add_argument("--output-dir", "-o", type=str, default="", help="Directory to save the extracted patches to. Default: Subfolder in the splits")
     patch_extracter.add_argument("--class-id", "-c", type=int, default=None, help="Id of the class to extract")
     patch_extracter.add_argument("--fp", action="store_true", help="Also generate the same amount of false positives. Default: False")
+    patch_extracter.add_argument("--margin", type=float, default=0.0, help="A margin that is symmetrically applied around the patch. Interpreted as a percentage of the objects width and height.")
 
     # Command: maesy dataset download_data
     data_download_parser = data_subs.add_parser('download_data', help="Required arguments for downloading data")

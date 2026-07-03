@@ -37,7 +37,7 @@ class Patch:
 
 def _save_patches(patches: List[Patch], save_path: str, cls: int):
     for i, p in enumerate(patches):
-        p.save_patch_to(Path(save_path) / f"patch_{Path(p.original_image_path).name}_{cls}.png")
+        p.save_patch_to(Path(save_path) / f"patch_{Path(p.original_image_path).name.split('.')[0]}_{cls}.png")
 
 def _overlap_with_existing(box, boxes_in_image, threshold=0.0):
     """
@@ -71,9 +71,15 @@ def _overlap_with_existing(box, boxes_in_image, threshold=0.0):
             return True
     return False
 
-def _generate_patches_from_dataset(dataset: MaesyDataset, desired_class_id, output_fp: bool) -> Tuple[List[Patch], List[Patch]]:
+def _generate_patches_from_dataset(dataset: MaesyDataset, desired_class_id, output_fp: bool, margin: float) -> Tuple[List[Patch], List[Patch]]:
     """
         Collect all patches of the desired class that are present in the Dataset
+
+        Args:
+            :param dataset: The source MaesyDataset
+            :param desired_class_id: The id of the objects to extract
+            :param output_fp: Whether to generate random patches that do not overlap correct patches
+            :param margin: A percent-value to be added as symmetric margin around the borders. Relative to width and height of object
     """
     batch_size = 1
     loader = DataLoader(dataset, batch_size, shuffle=False, collate_fn=collate_detection_fn)
@@ -89,6 +95,8 @@ def _generate_patches_from_dataset(dataset: MaesyDataset, desired_class_id, outp
             for label, box in zip(objects["labels"], objects["boxes"]):
                 if label.item() == desired_class_id:
                     x1, y1, x2, y2 = box[0].item(), box[1].item(), box[2].item(), box[3].item()
+                    w, h = x2-x1, y2-y1
+                    x1, y1, x2, y2 = x1 - margin*w, y1 - margin*h, x2 + margin*w, y2 + margin*h
                     borders = (x1, y1, x2, y2)
                     patch_list.append(Patch(borders, path))
                     patches_per_image += 1
@@ -111,7 +119,7 @@ def _generate_patches_from_dataset(dataset: MaesyDataset, desired_class_id, outp
 
     return patch_list, fp_list
 
-def extract_patches(dataset_path: str, split: List[str], patch_path: str, desired_class_id: int, output_fp: bool):
+def extract_patches(dataset_path: str, split: List[str], patch_path: str, desired_class_id: int, output_fp: bool, margin: float):
     """
     Extract patches of selected class from MaesyDataset
     """
@@ -129,7 +137,7 @@ def extract_patches(dataset_path: str, split: List[str], patch_path: str, desire
         if op == "":
             op = f"{dataset_path}/extracted_patches/{s}/images"
             Path(op).mkdir(parents=True, exist_ok=True)
-        robot_patches, fp_patches = _generate_patches_from_dataset(dataset, desired_class_id, output_fp=output_fp)
+        robot_patches, fp_patches = _generate_patches_from_dataset(dataset, desired_class_id, output_fp=output_fp, margin=margin)
         _save_patches(robot_patches, op, 1)
         if output_fp:
             _save_patches(fp_patches, op, 0)

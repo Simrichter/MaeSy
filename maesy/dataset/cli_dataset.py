@@ -20,7 +20,7 @@ def main(args):
             extract_mcap(args.bag_path, args.topic_name, args.output_dir, args.exact)
         case "extract_patches":
             from .extract_patches_from_dataset import extract_patches
-            extract_patches(args.dataset_path, args.splits, args.output_dir, args.class_id, args.fp)
+            extract_patches(args.dataset_path, args.splits, args.output_dir, args.class_id, args.fp, args.margin)
         case "convert":
             match args.input_format:
                 case "datumaro":

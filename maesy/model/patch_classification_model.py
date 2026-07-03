@@ -16,9 +16,10 @@ class PatchClassificatorConfig(ModelConfig):
     """
     # Resnet backbone parameters
     resnet_version: str = "resnet50"
+    feature_scale: str = "c3"
 
     # Classification head parameters
-    embed_dim: int = 512
+    head_in_dim: int = 2304
     num_classes: int = 3
 
 
@@ -36,10 +37,10 @@ class PatchClassificator(BaseModel):
         super().__init__()
         self.config = config
         head_config = LinearHeadConfig(
-            embed_dim=config.embed_dim,
+            input_dim=config.head_in_dim,
             num_classes=config.num_classes
         )
-        self.backbone = ResNetBackbone(ResNetBackboneConfig(version=self.config.resnet_version, feature_scales=("c3",)))
+        self.backbone = ResNetBackbone(ResNetBackboneConfig(version=self.config.resnet_version, feature_scales=(self.config.feature_scale,)))
         self.backbonetype = "ResnetBackbone"
 
         self.head = LinearHead(head_config)
@@ -48,7 +49,7 @@ class PatchClassificator(BaseModel):
     def forward(self, x):
         """Forward pass through the model."""
         features = self.backbone(x)
-        print("Features shape:", features.shape)  # Debug print to check feature shape
-        out = self.head(torch.flatten(features, 1))
+        # print("Features shape:", features[self.config.feature_scale].shape)  # Debug print to check feature shape
+        out = self.head(torch.flatten(features[self.config.feature_scale], 1))
         return out
 

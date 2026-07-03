@@ -22,7 +22,7 @@ from maesy.training.utils import collate_detection_fn
 
 # Import dataset
 from maesy.dataset import MaesyDataset, MultiDataset
-from maesy.dataset.od_augmentations import ODTrainTransforms, ODValTransforms
+from maesy.dataset.augmentations import ODTrainTransforms, ODValTransforms
 
 @dataclass
 class ODTrainingConfig(BaseTrainingConfig):
@@ -104,7 +104,7 @@ def train_vit_detector(
 
     torch.manual_seed(seed)
 
-    train_transforms = ODTrainTransforms(image_size=224)
+    train_transforms = ODValTransforms(image_size=224)
     val_transforms = ODValTransforms(image_size=224)
 
     # None activates auto-infer, -1 deactivates class in MaesyDataset

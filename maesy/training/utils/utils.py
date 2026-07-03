@@ -38,6 +38,17 @@ def handle_raw_batch(batch: Any, device: torch.device) -> tuple[torch.Tensor, Op
 
     return images, targets
 
+def collate_classification_fn(batch: List[tuple]) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Custom collate function for classification dataset.
+
+    Args:
+        batch: List of (image, label) tuples
+    """
+    images = torch.stack([image for image, label in batch], dim=0)
+    # print(batch[1][1][0]["label"])
+    labels = torch.tensor([label[0]["label"] for image, label in batch], dtype=torch.long)
+    return images, labels
 
 def collate_detection_fn(batch: List[tuple]) -> Tuple[torch.Tensor, List[Dict[str, torch.Tensor]]]:
     """

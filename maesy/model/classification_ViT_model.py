@@ -58,7 +58,7 @@ class ClassificationViT(BaseModel):
         )
 
         head_config = LinearHeadConfig(
-            embed_dim=config.embed_dim,
+            input_dim=config.embed_dim,
             num_classes=config.num_classes
         )
 

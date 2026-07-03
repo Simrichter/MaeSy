@@ -343,8 +343,9 @@ class BaseTrainer(ABC):
                 'lr_bbone': self.optimizer.param_groups[0]['lr'],
                 'lr_head': self.optimizer.param_groups[-1]['lr']
             }
-            update_dict.update({'bad_epochs': self.scheduler.num_bad_epochs})
-            pbar.set_postfix(update_dict)
+            if self.scheduler is not None and self.config.lr_scheduler.lower() == "plateau":
+                update_dict.update({'bad_epochs': self.scheduler.num_bad_epochs})
+                pbar.set_postfix(update_dict)
 
             # Log to wandb
             if self.global_step % self.config.log_frequency == 0:

@@ -28,7 +28,6 @@ class ClassificationTrainer(BaseTrainer):
         """
         # Get model predictions
         predictions = self.model.forward(images)
-        targets = torch.ones(predictions.shape[0], dtype=torch.long, device=self.device) # TODO: Remove quick fix for dummy targets, add actual targets to dataloader and pass them here instead
         # Compute loss
         losses = self.loss(predictions, targets)
 

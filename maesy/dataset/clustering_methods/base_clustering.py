@@ -8,7 +8,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from maesy.dataset import UnlabeledDataset, MultiDataset, MaesyDataset
-from maesy.dataset.od_augmentations import ClusterTransforms
+from maesy.dataset.augmentations import ClusterTransforms
 from maesy.evaluation.inferer import Inferer
 from maesy.model import ResnetFeatureExtractor, BaseModel
 

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 @dataclass
 class LinearHeadConfig:
-    embed_dim: int = 256
+    input_dim: int = 256
     num_classes: int = 6
 
 class LinearHead(nn.Module):
@@ -12,7 +12,7 @@ class LinearHead(nn.Module):
         super().__init__()
         self.type = "LinearHead"
         self.config = config
-        self.linear = nn.Linear(config.embed_dim, config.num_classes)
+        self.linear = nn.Linear(config.input_dim, config.num_classes)
 
 
     def forward(self, x, **kwargs) -> torch.Tensor:

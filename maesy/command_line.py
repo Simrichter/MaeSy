@@ -66,6 +66,10 @@ def main():
     # cl_parser.add_argument("--checkpoint", type=str, default="", help="Path to checkpoint to continue training from (default: none)")
     cl_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
 
+    pc_parser = train_parser.add_parser("pc", help="Train a Patch Classificator")
+    pc_parser.add_argument("--dataset", type=str, help="Path to dataset directory")
+    pc_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
+
     # Comand: maesy debug
     # TODO
 

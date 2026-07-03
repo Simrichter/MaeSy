@@ -39,7 +39,7 @@ class ClassificationCNN(BaseModel):
         super().__init__()
         self.config = config
         head_config = LinearHeadConfig(
-            embed_dim=config.embed_dim,
+            input_dim=config.embed_dim,
             num_classes=config.num_classes
         )
         self.backbone = ResNetBackbone(version="resnet18")

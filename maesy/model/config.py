@@ -14,7 +14,7 @@ class ModelConfig:
     in_channels: int = 3
     
     # Transformer parameters
-    embed_dim: int = 768
+    head_in_dim: int = 768
     num_layers: int = 12
     num_heads: int = 12
     mlp_ratio: float = 4.0

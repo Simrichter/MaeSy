@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from maesy.dataset import MaesyDataset
 from maesy.dataset.bounding_box import BoundingBox
-from maesy.dataset.od_augmentations import ODTrainTransforms
+from maesy.dataset.augmentations import ODTrainTransforms
 from maesy.model_tools.debug_helpers import log_print
 
 
@@ -28,12 +28,15 @@ def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = 
     """
 
     for idx, (img, targets) in tqdm(enumerate(dataset)):
-        drawn = draw_objects_in_tensor((img*255).to(torch.uint8), targets["boxes"], targets["labels"][:len(targets["boxes"])], targets["line_points"], targets["ellipses"])
+        drawn = draw_objects_in_tensor((img * 255).to(torch.uint8), targets["boxes"],targets["labels"][:len(targets["boxes"])], targets["line_points"], targets["ellipses"])
         out_path = os.path.join(output_dir, dataset.get_image_path(idx).name)
-        save_image(drawn/255, out_path)
+        save_image(drawn / 255, out_path)
         # save_image(img, out_path)
 
-def visualize_data(input_dir: str, output_dir: str, splits: Optional[list[str]]=None , label_path:str= "", label_file:str= "", enable_lines: bool = True, enable_ellipses: bool = True, special_classes: Optional[dict[str, int]]=None, apply_transforms: bool = False):
+
+def visualize_data(input_dir: str, output_dir: str, splits: Optional[list[str]] = None, label_path: str = "",
+                   label_file: str = "", enable_lines: bool = True, enable_ellipses: bool = True,
+                   special_classes: Optional[dict[str, int]] = None, apply_transforms: bool = False):
     """
         Visualizes bounding boxes and lines. Autodetects MaesyDataset or standard image folder
 
@@ -50,9 +53,9 @@ def visualize_data(input_dir: str, output_dir: str, splits: Optional[list[str]]=
     """
     # TODO: Use MaesyDataset yaml for class names
 
-    if output_dir!="" and os.path.exists(output_dir):
+    if output_dir != "" and os.path.exists(output_dir):
         raise ValueError(f"Failed: Output directory {output_dir} already exists. Leave unspecified to create a 'visualized' subfolder in the input directory.")
-    if output_dir=="":
+    if output_dir == "":
         output_dir = os.path.join(input_dir, "visualized")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -83,7 +86,7 @@ def visualize_data(input_dir: str, output_dir: str, splits: Optional[list[str]]=
     else:
         log_print("No MaesyDataset detected, assuming standard image folder with annotations (txt files with same name as images).")
 
-    if label_file!="":
+    if label_file != "":
         with open(label_file, "r") as f:
             name_coding = {i: line.strip() for i, line in enumerate(f.readlines())}
         print(name_coding)
@@ -93,10 +96,10 @@ def visualize_data(input_dir: str, output_dir: str, splits: Optional[list[str]]=
     if special_classes is None:
         special_classes = {}
 
-    lbl_dir = input_dir if label_path=="" else Path(label_path)
+    lbl_dir = input_dir if label_path == "" else Path(label_path)
 
     for file in tqdm(os.listdir(input_dir)):
-        suffix = "."+file.split(".")[-1]
+        suffix = "." + file.split(".")[-1]
         if suffix in (".png", ".jpg", ".jpeg"):
             img_path = os.path.join(input_dir, file)
             txt_path = os.path.join(lbl_dir, file.replace(suffix, ".txt"))
@@ -126,7 +129,7 @@ def visualize_data(input_dir: str, output_dir: str, splits: Optional[list[str]]=
                     continue
                 # img = draw_boxes_in_image(img_path, boxes, name_coding=name_coding).float() / 255.0
             img = read_image(img_path)[:3]  # Convert RGBA to RGB by dropping alpha channel if necessary
-            if len(boxes)>0:
+            if len(boxes) > 0:
                 b = torch.stack(boxes)
                 img = _draw_boxes_in_tensor(img, b, labels=torch.tensor(labels), name_coding=name_coding, xyxy=True)
             img = _draw_lines_in_tensor(img, torch.tensor(lines))
@@ -144,57 +147,7 @@ def visualize_data(input_dir: str, output_dir: str, splits: Optional[list[str]]=
 
     print(f"Fertig! Annotierte Bilder liegen in: {output_dir}")
 
-# def draw_boxes_in_image(img: str | torch.Tensor, boxes: List[BoundingBox] | torch.Tensor, labels: List[str] = None, name_coding: dict[int, str]=None) -> torch.Tensor:
-#     """
-#         Draws bounding boxes from YOLO annotation file on the image.
-#     """
-#     colors = ["red", "blue", "green", "yellow", "cyan", "magenta", "orange", "purple", "pink", "brown", "gray", "black"]
-#     color_coding = {i: c for i, c in enumerate(colors)}
-#
-#     if name_coding is None:
-#         # name_coding = {'CenterCircle': 9, 'CenterMark': 6, 'CornerArc': 10, 'FIFA 26 Ball': 0, 'GoalPost': 4, 'K1': 3, 'Lines': 8, 'Nao': 2, 'PenaltyMark': 5, 'Referee': 7, 'SPL Ball': 1}
-#         name_coding = {'PenaltyCross': 2, 'Robot': 1, 'Ball': 0}
-#
-#         name_coding = {k: v for v, k in name_coding.items()}
-#
-#         # name_coding = {
-#         #     0: "Ball",  # TODO: Get this stuff from model config?
-#         #     1: "Robot",
-#         #     2: "PenaltyCross",  # (Keine 27 Beschriftungen erwünscht), alternativ: LineCrossing
-#         #     3: "No-Object"
-#         # }
-#
-#     if type(img) is str:
-#         img = read_image(img)
-#         if img.shape[0] > 2:
-#             img = img[:3]  # Convert RGBA to RGB by dropping alpha channel
-#
-#     if labels is None:
-#         labels = [name_coding.get(box.cls(), "?") for box in boxes]
-#         colors = [color_coding[box.cls()] for box in boxes]
-#     else:
-#         colors = ["red" if label == "Ball" else "blue" if label == "Robot" else "green" if label == "PenaltyCross" else "yellow" for label in labels]
-#
-#
-#     # Convert BoundingBox objects to tensor format if needed
-#     if type(boxes) is list:
-#         if len(boxes) == 0:
-#             return img
-#         boxes = torch.stack([box.coordinates_as_tensor() for box in boxes])
-#
-#     # Assuming normalized boxes:
-#     boxes[:, (0, 2)] *= img.shape[2]  # Scale x coordinates to image width
-#     boxes[:, (1, 3)] *= img.shape[1]  # Scale y coordinates to image height
-#
-#     try:
-#         out = draw_bounding_boxes(img, boxes, labels=labels, colors=colors)
-#     except ValueError as e:
-#         out = img
-#         print(f"Failed to draw boxes for image of shape {img.shape} with boxes {boxes} and labels {labels}\n\nError: {e}")
-#
-#     return out
-
-def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None, xyxy: bool = False) -> torch.Tensor:
+def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, name_coding: dict[int, str] = None, color_coding: dict[int, str] = None, xyxy: bool = False) -> torch.Tensor:
     """
         Draws bounding boxes on the image. If specified, uses labels and colors. If boxes is empty, img is returned
 
@@ -209,7 +162,7 @@ def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.
         returns:
             img: The tensor with drawn bounding boxes, in format [C, H, W] (pixel range: [0,255])
     """
-    if boxes is None or boxes.shape[0]==0:
+    if boxes is None or boxes.shape[0] == 0:
         return img
     if not img.dtype == torch.uint8:
         warnings.warn("img does not have dtype uint8")
@@ -228,7 +181,6 @@ def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.
     else:
         rendered_labels = [name_coding[cls_id.item()] for cls_id in labels]
 
-
     h, w = img.shape[-2:]
     boxes_xyxy = boxes.detach().cpu()
     boxes_xyxy[:, (0, 2)] *= w
@@ -239,7 +191,7 @@ def _draw_boxes_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.
     drawn = draw_bounding_boxes(img, boxes_xyxy, labels=rendered_labels, colors=colors, width=1)
     return drawn
 
-def _draw_lines_in_tensor(img: torch.Tensor, lines: torch.Tensor, line_color: str= "pink") -> torch.Tensor:
+def _draw_lines_in_tensor(img: torch.Tensor, lines: torch.Tensor, line_color: str = "pink") -> torch.Tensor:
     """
     Draws lines in image tensor using cv2
 
@@ -263,7 +215,7 @@ def _draw_lines_in_tensor(img: torch.Tensor, lines: torch.Tensor, line_color: st
     drawn = torch.from_numpy(drawn).permute(2, 0, 1).contiguous().float()
     return drawn
 
-def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: str="red") -> torch.Tensor:
+def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: str = "red") -> torch.Tensor:
     """
         Draws ellipses in image tensor using cv2
 
@@ -294,7 +246,7 @@ def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: s
 
         # unit circle
         t = torch.linspace(0, 2 * torch.pi, num, device=params.device, dtype=params.dtype)
-        circle = torch.stack([torch.cos(t),torch.sin(t)], dim=0)  # [2, num]
+        circle = torch.stack([torch.cos(t), torch.sin(t)], dim=0)  # [2, num]
 
         # expand for batch
         circle = circle.unsqueeze(0).expand(params.shape[0], -1, -1)  # [N, 2, num]
@@ -350,7 +302,10 @@ def _draw_ellipses_in_tensor(img: torch.Tensor, ellipses: torch.Tensor, color: s
     drawn = torch.from_numpy(drawn).permute(2, 0, 1).contiguous().float()
     return drawn
 
-def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, lines: torch.Tensor, ellipses: torch.Tensor, name_coding: dict[int, str]=None, color_coding: dict[int, str]=None, xyxy: bool = False) -> torch.Tensor:
+
+def draw_objects_in_tensor(img: torch.Tensor, boxes: torch.Tensor, labels: torch.Tensor, lines: torch.Tensor,
+                           ellipses: torch.Tensor, name_coding: dict[int, str] = None,
+                           color_coding: dict[int, str] = None, xyxy: bool = False) -> torch.Tensor:
     """
         Draws bounding boxes and lines on the image.
 

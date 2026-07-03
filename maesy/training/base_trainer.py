@@ -347,7 +347,7 @@ class BaseTrainer(ABC):
 
                 # Log to wandb
                 if self.global_step % self.config.log_frequency == 0:
-                    data = {f"train/{k}": v.item() for k, v in losses.items() if not k.startswith('img_')}
+                    data = {f"train/{k}": v.item() for k, v in losses.items() if not (k.startswith('img_') or k.startswith('__'))}
                     data['train/lr'] = self.optimizer.param_groups[-1]['lr']
                     data['train/lr_bbone'] = self.optimizer.param_groups[0]['lr']
                     data['train/gradient_norm'] = total_norm.item()

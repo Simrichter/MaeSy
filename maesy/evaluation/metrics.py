@@ -761,6 +761,36 @@ def compute_detection_metrics(
 
     return metrics
 
+def compute_classification_metrics(predictions: List[torch.Tensor], targets: List[torch.Tensors]):
+    TP = 0
+    FP = 0
+    FN = 0
+    TN = 0
+    for p, t in zip(predictions, targets):
+        if p == 1 and t == 1:
+            TP += 1
+        elif p == 1 and t == 0:
+            FP += 1
+        elif p == 0 and t == 1:
+            FN += 1
+        elif p == 0 and t == 0:
+            TN += 1
+        else:
+            ... # impossible
+    acc = (TP + TN)/len(predictions)
+    prec = TP/(TP+FP)
+    rec = TP/(TP+FN)
+    f1 = 2*prec*rec/(prec+rec)
+    beta = 0.25
+    fb = (1+beta**2)*prec*rec/(beta**2*prec + rec)
+    metrics = {
+        "Accuracy": acc,
+        "Precision": prec,
+        "Recall": rec,
+        "F1": f1,
+        f"F{beta}": fb
+    }
+    return metrics
 
 def compute_map(
     predictions: List[Dict[str, torch.Tensor]],

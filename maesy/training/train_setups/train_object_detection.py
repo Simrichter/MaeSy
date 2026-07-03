@@ -124,7 +124,7 @@ def train_vit_detector(
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler= "plateau", # "cosine",
-        plateau_metric= "val_losses/total_loss", # metrics/total_mAP
+        plateau_metric= "metrics/total_mAP", # "val_losses/total_loss", #
         patience=40 if finetune else 80,
         lr_step_factor=0.3,
         min_num_epochs_per_plateau=50 if finetune else 100,

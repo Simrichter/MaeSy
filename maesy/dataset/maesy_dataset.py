@@ -131,7 +131,8 @@ class MaesyDataset(Dataset):
             raise ValueError(f"Unsupported box_format '{self.box_format}' in dataset.yaml. Expected 'xyxy' or 'cxcywh'.")
 
         split_path = Path(dataset_dir) / yaml_data.get(split, split)
-        assert split_path.exists(), f"Requested split '{split}' does not exist in dataset at {dataset_dir}"
+        assert split_path.exists(), (f"Requested split at '{split_path}' does not exist in dataset at {dataset_dir}."
+                                     f"If it does exist, try an absolute path in dataset.yaml")
 
         self.return_labels = annotation_type not in ["None", "image_folder"]
 
@@ -185,8 +186,7 @@ class MaesyDataset(Dataset):
         """Return number of images in dataset."""
         return len(self.images)
 
-    def __getitem__(self, idx: int) -> Tuple[
-        torchvision.tv_tensors.Image, List[Dict[str, torchvision.tv_tensors.BoundingBoxes]]]:
+    def __getitem__(self, idx: int) -> Tuple[torchvision.tv_tensors.Image, List[Dict[str, torchvision.tv_tensors.BoundingBoxes]]]:
         """
         Get image and annotations at index.
         If transforms are provided, they are applied to the image before returning it.
@@ -417,12 +417,15 @@ class MaesyDataset(Dataset):
                     if target.get("ellipses", torch.empty((0, 6))).numel() > 0:
                         target["ellipses"][:, :2] = target["ellipses"][:, :2].clamp(0.0, 1.0).to(dtype=torch.float32)
                 # image remains as-is
-
-        if self.return_labels and len(target["line_points"]) > 0:
-            target["line_points"] = target["line_points"].clamp(0.0, 1.0).to(dtype=torch.float32)
-        if self.return_labels and len(target["ellipses"]) > 0:
-            target["ellipses"][:, :2] = target["ellipses"][:, :2].clamp(0.0, 1.0).to(dtype=torch.float32)
-        return image, target if self.return_labels else image
+        if self.return_labels:
+            target["boxes"] = torch.clip(target["boxes"], 0.0, 1.0)
+            if len(target["line_points"]) > 0:
+                target["line_points"] = target["line_points"].clamp(0.0, 1.0).to(dtype=torch.float32)
+            if len(target["ellipses"]) > 0:
+                target["ellipses"][:, :2] = target["ellipses"][:, :2].clamp(0.0, 1.0).to(dtype=torch.float32)
+            return image, target
+        else:
+            return image
 
     def get_image_path(self, idx: int) -> Path:
         """

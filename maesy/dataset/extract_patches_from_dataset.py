@@ -35,9 +35,9 @@ class Patch:
             img = img.resize(size)
             img.save(save_path)
 
-def _save_patches(patches: List[Patch], save_path: str):
+def _save_patches(patches: List[Patch], save_path: str, cls: int):
     for i, p in enumerate(patches):
-        p.save_patch_to(Path(save_path) / f"patch_{i}.png")
+        p.save_patch_to(Path(save_path) / f"patch_{Path(p.original_image_path).name}_{cls}.png")
 
 def _overlap_with_existing(box, boxes_in_image, threshold=0.0):
     """
@@ -127,7 +127,7 @@ def extract_patches(dataset_path: str, split: List[str], patch_path: str, desire
         print("Extracting...")
         op = patch_path
         if op == "":
-            op = f"{dataset_path}/extracted_patches/{s}"
+            op = f"{dataset_path}/extracted_patches/{s}/images"
             Path(op).mkdir(parents=True, exist_ok=True)
             if output_fp:
                 tp = f"{op}/tp"
@@ -135,6 +135,6 @@ def extract_patches(dataset_path: str, split: List[str], patch_path: str, desire
                 Path(tp).mkdir(parents=True, exist_ok=True)
                 Path(fp).mkdir(parents=True, exist_ok=True)
         robot_patches, fp_patches = _generate_patches_from_dataset(dataset, desired_class_id, output_fp=output_fp)
-        _save_patches(robot_patches, tp if output_fp else op)
+        _save_patches(robot_patches, op, 1)
         if output_fp:
-            _save_patches(fp_patches, fp)
+            _save_patches(fp_patches, op, 0)

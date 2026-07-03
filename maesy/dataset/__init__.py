@@ -7,6 +7,7 @@ from .extract_from_log import extract_mcap
 from .converter import datumaro_to_devils_yolo, robert_to_devils_yolo, datumaro_to_ultralyticsOBB
 from .maesy_dataset import MaesyDataset
 from .bounding_box import sanitize_cxcywh, sanitize_xyxy
+from .extract_patches_from_dataset import extract_patches
 
 __all__ = [
     "DatasetManager",
@@ -19,4 +20,5 @@ __all__ = [
     "MaesyDataset",
     "sanitize_cxcywh",
     "sanitize_xyxy",
+    "extract_patches",
 ]

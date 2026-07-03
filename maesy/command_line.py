@@ -119,8 +119,7 @@ def main():
     data_subs = data.add_subparsers(dest='command')
 
     # Command: maesy dataset extract_log
-    log_extract_parser = data_subs.add_parser('extract_log',
-                                              help="Extract images from log files (e.g. ROS bag or MCAP)")
+    log_extract_parser = data_subs.add_parser('extract_log', help="Extract images from log files (e.g. ROS bag or MCAP)")
     log_extract_parser.add_argument("bag_path", help="Path to the log file (e.g. ROS bag or MCAP)")
     log_extract_parser.add_argument("--topic-name",
                                     help="Space-separated list of topics to extract images from (default [/image_left_raw])",
@@ -129,6 +128,14 @@ def main():
                                     default="./extracted_images")
     log_extract_parser.add_argument("--exact", action="store_true",
                                     help="Match topic names exactly (e.g. '/camera/image_left_raw' wont match '/image_left_raw'. If not set, will match by last part of topic name")
+
+    # Command: maesy dataset extract_patches
+    patch_extracter = data_subs.add_parser('extract_patches', help="Extract object patches from a labeled Maesydataset")
+    patch_extracter.add_argument("dataset_path", help="Path to the MaesyDataset root directory")
+    patch_extracter.add_argument("--splits", "-s", type=str, choices=["train", "val", "test"], nargs="+", default=["train", "val", "test"], help="Space-separated list of splits to use. Default: 'train val test'")
+    patch_extracter.add_argument("--output-dir", "-o", type=str, default="", help="Directory to save the extracted patches to. Default: Subfolder in the splits")
+    patch_extracter.add_argument("--class-id", "-c", type=int, default=None, help="Id of the class to extract")
+    patch_extracter.add_argument("--fp", action="store_true", help="Also generate the same amount of false positives. Default: False")
 
     # Command: maesy dataset download_data
     data_download_parser = data_subs.add_parser('download_data', help="Required arguments for downloading data")

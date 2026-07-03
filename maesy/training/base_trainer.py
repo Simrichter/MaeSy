@@ -309,53 +309,51 @@ class BaseTrainer(ABC):
         """Train for one epoch."""
         self.model.train()
         self.loss.reset_metrics()
+        self.optimizer.zero_grad()
 
         for batch_idx, batch in enumerate(pbar := tqdm(self.train_loader, desc=f"Epoch {self.current_epoch + 1}")):
-            loss = torch.tensor(0.0)
-            for acc_step in range(self.config.accumulation_steps): # TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                # TODO: This is wrong!!!
-                images, targets = handle_raw_batch(batch, self.device)
+            images, targets = handle_raw_batch(batch, self.device)
 
-                # Forward pass
-                with torch.amp.autocast("cuda", enabled=self.config.use_amp):
-                    losses = self._forward_model(images, targets, val=False)
-                    loss += losses['loss']
+            # Forward pass
+            with torch.amp.autocast("cuda", enabled=self.config.use_amp):
+                losses = self._forward_model(images, targets, val=False)
+                loss = losses['loss'] / self.config.accumulation_steps  # Scale loss for gradient accumulation
 
-                # Backward pass
-                if self.config.use_amp:
-                    self.scaler.scale(loss).backward()
-                else:
-                    loss.backward()
-
+            # Backward pass
             if self.config.use_amp:
-                self.scaler.unscale_(self.optimizer)
-                total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+                self.scaler.scale(loss).backward()
             else:
-                total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
-                self.optimizer.step()
-            self.optimizer.zero_grad()
+                loss.backward()
 
-            # Update progress bar
-            update_dict = {
-                'loss': loss.item(),
-                'lr_bbone': self.optimizer.param_groups[0]['lr'],
-                'lr_head': self.optimizer.param_groups[-1]['lr']
-            }
-            if self.scheduler is not None and self.config.lr_scheduler.lower() == "plateau":
-                update_dict.update({'bad_epochs': self.scheduler.num_bad_epochs})
-                pbar.set_postfix(update_dict)
+            if batch_idx % self.config.accumulation_steps == 0:
+                if self.config.use_amp:
+                    self.scaler.unscale_(self.optimizer)
+                    total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
+                    self.optimizer.step()
+                self.optimizer.zero_grad()
 
-            # Log to wandb
-            if self.global_step % self.config.log_frequency == 0:
-                data = {f"train/{k}": v.item() for k, v in losses.items() if not k.startswith('img_')}
-                data['train/lr'] = self.optimizer.param_groups[-1]['lr']
-                data['train/lr_bbone'] = self.optimizer.param_groups[0]['lr']
-                data['train/gradient_norm'] = total_norm.item()
-                if self.enable_wandb: self.wandb_run.log(data=data, step=self.global_step, commit=True)
+                # Update progress bar
+                update_dict = {
+                    'lr_bbone': self.optimizer.param_groups[0]['lr'],
+                    'lr_head': self.optimizer.param_groups[-1]['lr']
+                }
+                if self.scheduler is not None and self.config.lr_scheduler.lower() == "plateau":
+                    update_dict.update({'bad_epochs': self.scheduler.num_bad_epochs})
+                    pbar.set_postfix(update_dict)
 
-            self.global_step += 1
+                # Log to wandb
+                if self.global_step % self.config.log_frequency == 0:
+                    data = {f"train/{k}": v.item() for k, v in losses.items() if not k.startswith('img_')}
+                    data['train/lr'] = self.optimizer.param_groups[-1]['lr']
+                    data['train/lr_bbone'] = self.optimizer.param_groups[0]['lr']
+                    data['train/gradient_norm'] = total_norm.item()
+                    if self.enable_wandb: self.wandb_run.log(data=data, step=self.global_step, commit=True)
+    # TODO: Last accumulated batch might not receive a step anymore. Is that even a problem??
+                self.global_step += 1
 
         return self.loss.get_metrics()
 

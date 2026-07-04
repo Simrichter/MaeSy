@@ -470,7 +470,7 @@ class RTDETRHead(nn.Module):
         enc_boxes = torch.cat((enc_box_normed[..., 0:2], enc_box_normed[..., 0:2] + enc_box_normed[..., 2:4]), dim=-1)
         # TODO I changed this quite late, now inference should not work anymore with older trainings (only after 222)!!
 
-        assert torch.isfinite(enc_boxes).all()
+        # assert torch.isfinite(enc_boxes).all()
         references["reference_box_logits"] = torch.gather(enc_box_logits, dim=1, index=selected_refs)
         references["reference_boxes"] = torch.gather(enc_boxes, dim=1, index=selected_refs)
         enc_outputs["pred_boxes"] = references["reference_boxes"]

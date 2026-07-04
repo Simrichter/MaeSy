@@ -118,7 +118,7 @@ def train_vit_detector(
     # Create training configuration
     training_config = ODTrainingConfig(
         batch_size= override_params.get("batch_size", 32), # 64 l# TODO: Everything apart from largest model config (rt-detr6) was with 64
-        accumulation_steps=1,
+        # accumulation_steps=1,
         num_epochs=3000,
         learning_rate= override_params.get("learning_rate", 5e-6 if finetune else 5e-5),
         backbone_learning_rate=5e-7 if finetune else 5e-6,
@@ -153,12 +153,12 @@ def train_vit_detector(
         device=torch.device("cuda" if torch.cuda.is_available() else 'cpu') if device=="auto" else torch.device(device)
     )
 
-    assert training_config.batch_size % training_config.accumulation_steps == 0, (f"Error: Effective Batchsize {training_config.batch_size} is not divisible"
-                                                                                  f"by accumulation steps {training_config.accumulation_steps}.")
+    # assert training_config.batch_size % training_config.accumulation_steps == 0, (f"Error: Effective Batchsize {training_config.batch_size} is not divisible"
+    #                                                                               f"by accumulation steps {training_config.accumulation_steps}.")
     # Create dataloaders with custom collate function
     train_loader = DataLoader(
         train_dataset,
-        batch_size=training_config.batch_size//training_config.accumulation_steps,
+        batch_size=training_config.batch_size,#//training_config.accumulation_steps,
         shuffle=True,
         num_workers=training_config.num_workers,
         persistent_workers=True,
@@ -168,7 +168,7 @@ def train_vit_detector(
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=training_config.batch_size//training_config.accumulation_steps,
+        batch_size=training_config.batch_size,#//training_config.accumulation_steps,
         num_workers=training_config.num_workers,
         persistent_workers=True,
         collate_fn=collate_detection_fn,
@@ -370,7 +370,8 @@ def export_vit_detector(
     model.eval()
 
     example_inputs = (torch.randn(1, 3, 224, 224),)
-    onnx_program = torch.onnx.export(model, example_inputs, dynamo=True)
+    wrapper = model.get_export_wrapper()
+    onnx_program = torch.onnx.export(wrapper, example_inputs, input_names=["image"], output_names=wrapper.get_output_names(), dynamo=True)
     if onnx_program is None:
         print("FAILED: Model could not be exported.")
         return

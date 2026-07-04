@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Tuple, Dict, List, Optional
 
 import torch
+from torch import nn
 
 from .backbones import ResNetBackbone, ResNetBackboneConfig, MobileNetBackbone, MobileNetBackboneConfig, SWINBackbone, SWINBackboneConfig
 from .base_model import BaseModel
@@ -261,3 +262,20 @@ class RTDETR(BaseModel):
         )
 
         return raw_out, predictions, targets
+
+    def get_export_wrapper(self):
+        return _ExportRTDETRWrapper(self)
+    # TODO: Make nice such that the BaseModel version of this automatically gives the model-specific exportWrapper if existent
+
+class _ExportRTDETRWrapper(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x):
+        _, outputs, _ = self.model.infer(x, None, score_threshold=0.0)
+
+        return outputs
+
+    def get_output_names(self):
+        return  ["boxes", "labels", "scores", "line_points", "line_labels", "line_scores"] # TODO: Check/make dynamic

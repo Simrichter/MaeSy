@@ -14,7 +14,7 @@ from maesy.model import (
     RTDETRConfig,
     MaeMultiscaleConfig,
     MaskedAutoencoderMultiscale,
-    MaskedAutoencoderViT,
+    MaskedAutoencoderViT, PatchClassificator, PatchClassificatorConfig,
 )
 from maesy.model_tools.checkpoint_handler import CheckpointHandler
 
@@ -55,6 +55,8 @@ def create_model_from_config(config: Dict) -> "BaseModel":
             return DETR(_from_dict(DETRConfig, config))
         case "rt-detr":
             return RTDETR(_from_dict(RTDETRConfig, config))
+        case "PatchClassificator":
+            return PatchClassificator(_from_dict(PatchClassificatorConfig, config))
         case _:
             raise ValueError(f"Model type '{config.get('type', '')}' not recognized. Supported types: ['mae', 'mae-multiscale', 'detr', 'rt_detr']")
 

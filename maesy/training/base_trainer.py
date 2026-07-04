@@ -24,7 +24,7 @@ class BaseTrainingConfig:
     # Training parameters
     num_epochs: int = 100
     batch_size: int = 32
-    accumulation_steps: int = 1 # Set >1 to activate gradient accumulation. @param batch_size stays effective batch_size, physical batch size is batch_size/accumulation_steps
+    # accumulation_steps: int = 1 # Set >1 to activate gradient accumulation. @param batch_size stays effective batch_size, physical batch size is batch_size/accumulation_steps
     weight_decay: float = 1e-4
     label_smoothing: float = 0.0
     warmup_epochs: int = 5
@@ -94,7 +94,7 @@ class BaseTrainer(ABC):
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = config or BaseTrainingConfig()
-
+        self.accumulation_steps = 1
         self.enable_wandb = enable_wandb
         if self.enable_wandb:
             # Setup wandb
@@ -317,7 +317,7 @@ class BaseTrainer(ABC):
             # Forward pass
             with torch.amp.autocast("cuda", enabled=self.config.use_amp):
                 losses = self._forward_model(images, targets, val=False)
-                loss = losses['loss'] / self.config.accumulation_steps  # Scale loss for gradient accumulation
+                loss = losses['loss'] / self.accumulation_steps  # Scale loss for gradient accumulation
 
             # Backward pass
             if self.config.use_amp:
@@ -325,7 +325,7 @@ class BaseTrainer(ABC):
             else:
                 loss.backward()
 
-            if batch_idx % self.config.accumulation_steps == 0:
+            if batch_idx % self.accumulation_steps == 0:
                 if self.config.use_amp:
                     self.scaler.unscale_(self.optimizer)
                     total_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)

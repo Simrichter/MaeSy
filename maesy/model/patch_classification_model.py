@@ -17,6 +17,7 @@ class PatchClassificatorConfig(ModelConfig):
     # Resnet backbone parameters
     resnet_version: str = "resnet50"
     feature_scale: str = "c3"
+    type: str = "PatchClassificator"
 
     # Classification head parameters
     head_in_dim: int = 2304

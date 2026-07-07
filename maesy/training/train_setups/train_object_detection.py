@@ -330,6 +330,8 @@ def export_vit_detector(
     line_class_id: int = -1,
     ellipse_class_id: int = -1,
 ) -> None:
+    # import warnings
+    # warnings.filterwarnings("error", message="*Missing annotation for parameter*")
     """
     Export a trained object detection model to ONNX format for deployment.
 

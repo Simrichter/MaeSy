@@ -17,7 +17,7 @@ class BaseModel(ABC, nn.Module):
         out = self.head.forward(out, **kwargs)
         return out
 
-    def infer(self, images, targets, **kwargs) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def infer(self, images: torch.Tensor, targets: torch.Tensor, **kwargs) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """
         Inference method for the model. By default, it just runs a forward pass and returns the raw outputs and targets.
         This can be overridden in specific model implementations to include post-processing steps (e.g., applying softmax, non-max suppression, etc.) before returning the results.

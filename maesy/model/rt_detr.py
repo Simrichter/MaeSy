@@ -245,7 +245,7 @@ class RTDETR(BaseModel):
         if changed:
             self.head.create_class_heads()
 
-    def infer(self, images, targets, **kwargs):
+    def infer(self, images: torch.Tensor, targets: Dict[str, torch.Tensor], **kwargs):
         score_threshold = kwargs.pop("score_threshold", 0.3)
         raw_out = self.forward(images, **kwargs)
 
@@ -264,18 +264,22 @@ class RTDETR(BaseModel):
         return raw_out, predictions, targets
 
     def get_export_wrapper(self):
+        # return self
         return _ExportRTDETRWrapper(self)
     # TODO: Make nice such that the BaseModel version of this automatically gives the model-specific exportWrapper if existent
+    def get_output_names(self):
+        return ["boxes", "labels", "scores", "line_points", "line_labels", "line_scores"]  # TODO: Check/make dynamic
 
 class _ExportRTDETRWrapper(nn.Module):
     def __init__(self, model):
         super().__init__()
         self.model = model
 
-    def forward(self, x):
-        _, outputs, _ = self.model.infer(x, None, score_threshold=0.0)
-
-        return outputs
+    def forward(self, x: torch.Tensor):
+        # _, outputs, _ = self.model.infer(x, None, score_threshold=0.0)
+        outputs = self.model.forward(x)
+        return outputs["pred_logits"], outputs["pred_boxes"], outputs["pred_lines"]
 
     def get_output_names(self):
-        return  ["boxes", "labels", "scores", "line_points", "line_labels", "line_scores"] # TODO: Check/make dynamic
+        # return  ["boxes", "labels", "scores", "line_points", "line_labels", "line_scores"] # TODO: Check/make dynamic
+        return ["logits", "boxes", "lines"]

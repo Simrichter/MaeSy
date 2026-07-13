@@ -126,6 +126,7 @@ def train_vit_detector(
         optimizer="adamw",
         lr_scheduler= "plateau", # "cosine",
         plateau_metric= "metrics/total_mAP", # "val_losses/total_loss", #
+        plateau_mode= "max",
         patience=40 if finetune else 80,
         lr_step_factor=0.3,
         min_num_epochs_per_plateau=50 if finetune else 100,
@@ -373,6 +374,7 @@ def export_vit_detector(
 
     example_inputs = (torch.randn(1, 3, 224, 224),)
     wrapper = model.get_export_wrapper()
+    wrapper.eval()
     onnx_program = torch.onnx.export(wrapper, example_inputs, input_names=["image"], output_names=wrapper.get_output_names(), dynamo=True)
     if onnx_program is None:
         print("FAILED: Model could not be exported.")

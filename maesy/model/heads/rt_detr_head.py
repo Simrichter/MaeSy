@@ -296,7 +296,7 @@ class RTDETRHead(nn.Module):
         if len(config.feature_channels) != config.num_feature_levels:
             raise ValueError("feature_channels length must match num_feature_levels")
 
-        self.input_proj = nn.ModuleList([nn.Conv2d(c, config.embed_dim, kernel_size=1) for c in config.feature_channels])
+        self.input_proj = nn.Sequential(*[nn.Conv2d(c, config.embed_dim, kernel_size=1) for c in config.feature_channels])
         self.level_embeddings = nn.Parameter(torch.zeros(config.num_feature_levels, config.embed_dim))
 
         # Cross-scale fusion (top-down + bottom-up)
@@ -308,30 +308,30 @@ class RTDETRHead(nn.Module):
             self.pan_out_4 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
             self.pan_out_5 = nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, padding=1)
         else:
-            self.before_upsample1 = nn.ModuleList([
+            self.before_upsample1 = nn.Sequential(
                 nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=1, stride=1, padding=0),
                 nn.BatchNorm2d(config.embed_dim),
                 nn.SiLU()
-            ])
-            self.before_upsample2 = nn.ModuleList([
+            )
+            self.before_upsample2 = nn.Sequential(
                 nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=1, stride=1, padding=0),
                 nn.BatchNorm2d(config.embed_dim),
                 nn.SiLU()
-            ])
+            )
             self.fusion1 = FusionBlock(self.config.num_rep_blocks_in_fusion, self.config.embed_dim)
             self.fusion2 = FusionBlock(self.config.num_rep_blocks_in_fusion, self.config.embed_dim)
             self.fusion3 = FusionBlock(self.config.num_rep_blocks_in_fusion, self.config.embed_dim)
             self.fusion4 = FusionBlock(self.config.num_rep_blocks_in_fusion, self.config.embed_dim)
-            self.downsample_conv1 = nn.ModuleList([
+            self.downsample_conv1 = nn.Sequential(
                 nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, stride=2, padding=1),
                 nn.BatchNorm2d(config.embed_dim),
                 nn.SiLU()
-            ])
-            self.downsample_conv2 = nn.ModuleList([
+            )
+            self.downsample_conv2 = nn.Sequential(
                 nn.Conv2d(config.embed_dim, config.embed_dim, kernel_size=3, stride=2, padding=1),
                 nn.BatchNorm2d(config.embed_dim),
                 nn.SiLU()
-            ])
+            )
 
         self.aifi = AIFIBlock(
             embed_dim=config.embed_dim,
@@ -426,11 +426,11 @@ class RTDETRHead(nn.Module):
             n4 = self.pan_out_4(p4 + self.pan_down_3(p3))
             n5 = self.pan_out_5(p5 + self.pan_down_4(n4))
         else:
-            p4 = self.fusion1(torch.cat((F.interpolate(self.before_upsample1(p5), size=p4.shape[-2:], mode="nearest"), p4)))
-            p3 = self.fusion2(torch.cat((F.interpolate(self.before_upsample2(p4), size=p3.shape[-2:], mode="nearest"), p3)))
+            p4 = self.fusion1(F.interpolate(self.before_upsample1(p5), size=p4.shape[-2:], mode="nearest"), p4)
+            p3 = self.fusion2(F.interpolate(self.before_upsample2(p4), size=p3.shape[-2:], mode="nearest"), p3)
 
-            n4 = self.fusion3(torch.cat((self.downsample_conv1(p3), p4)))
-            n5 = self.fusion4(torch.cat((self.downsample_conv2(n4), p5)))
+            n4 = self.fusion3(self.downsample_conv1(p3), p4)
+            n5 = self.fusion4(self.downsample_conv2(n4), p5)
         return [p3, n4, n5]
 
     def _flatten_memory(self, fused_features: List[torch.Tensor]) -> Tuple[torch.Tensor, List[Tuple[int, int]]]:

@@ -278,8 +278,21 @@ class _ExportRTDETRWrapper(nn.Module):
     def forward(self, x: torch.Tensor):
         # _, outputs, _ = self.model.infer(x, None, score_threshold=0.0)
         outputs = self.model.forward(x)
-        return outputs["pred_logits"], outputs["pred_boxes"], outputs["pred_lines"]
-
+        if self.model.config.enable_line_detection and not self.model.config.enable_ellipse_detection:
+            return outputs["pred_logits"], outputs["pred_boxes"], outputs["pred_lines"]
+        elif not self.model.config.enable_line_detection and self.model.config.enable_ellipse_detection:
+            return outputs["pred_logits"], outputs["pred_boxes"], outputs["pred_ellipses"]
+        elif self.model.config.enable_line_detection and self.model.config.enable_ellipse_detection:
+            return outputs["pred_logits"], outputs["pred_boxes"], outputs["pred_lines"], outputs["pred_ellipses"]
+        else:
+            return outputs["pred_logits"], outputs["pred_boxes"]
     def get_output_names(self):
         # return  ["boxes", "labels", "scores", "line_points", "line_labels", "line_scores"] # TODO: Check/make dynamic
-        return ["logits", "boxes", "lines"]
+        if self.model.config.enable_line_detection and not self.model.config.enable_ellipse_detection:
+            return ["logits", "boxes", "lines"]
+        elif not self.model.config.enable_line_detection and self.model.config.enable_ellipse_detection:
+            return["logits", "boxes", "ellipses"]
+        elif self.model.config.enable_line_detection and self.model.config.enable_ellipse_detection:
+            return ["logits", "boxes", "lines", "ellipses"]
+        else:
+            return ["logits", "boxes"]

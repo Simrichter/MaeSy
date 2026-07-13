@@ -75,12 +75,17 @@ def train_mae(
     # Create training configuration
     training_config = MAETrainingConfig(
         batch_size=batch_size,
-        num_epochs=750,
-        learning_rate=1e-4,  # Higher LR when only training head
-        backbone_learning_rate=1e-4,  # Lower LR for backbone if fine-tuning, otherwise 0
+        num_epochs=3000, # 750,
+        learning_rate=1e-4,
+        backbone_learning_rate=1e-4,
         weight_decay=1e-4,
         optimizer="adamw",
-        lr_scheduler="cosine",
+        lr_scheduler= "plateau", # "cosine",
+        plateau_metric="val_losses/total_loss",
+        plateau_mode="min",
+        patience=80,
+        lr_step_factor=0.3,
+        min_num_epochs_per_plateau=100,
         warmup_epochs=4,
         save_frequency=100,
         log_frequency=50,

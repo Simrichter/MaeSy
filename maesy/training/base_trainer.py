@@ -43,6 +43,7 @@ class BaseTrainingConfig:
     backbone_learning_rate: float = learning_rate / 10
     lr_scheduler: str = "cosine"  # cosine, step, plateau
     plateau_metric: str = "val_losses/total_loss"  # Metric to monitor for ReduceLROnPlateau scheduler (like val_losses/total_loss, metrics/total_mAP, etc.)
+    plateau_mode: str = "min"  # Mode for ReduceLROnPlateau scheduler ("min" or "max")
     lr_step_size: int = 30  # For step scheduler
     lr_step_factor: float = 0.3  # For step scheduler
 
@@ -247,7 +248,7 @@ class BaseTrainer(ABC):
             #     (step + 1) / self.config.warmup_epochs, 1.0))
             plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer,
-                mode='max',
+                mode=self.config.plateau_mode,
                 factor=self.config.lr_step_factor,
                 patience=self.config.patience,
                 cooldown=self.config.min_num_epochs_per_plateau,

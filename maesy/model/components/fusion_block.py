@@ -48,17 +48,17 @@ class FusionBlock(nn.Module):
     """
         Implementation of a Fusion Block as described in the RT-DETR paper.
         Fuses two equally sized feature maps.
-        Uses RepConv
+        Uses RepVGG blocks that fuse into a single convolution during inference
     """
     def __init__(self, N: int, C: int) -> None:
         super().__init__()
         self.num_repblocks = N
-        self.pointwise_conv_upper_path = nn.Conv1d(2 * C, C, 1)
-        self.pointwise_conv_lower_path = nn.Conv1d(2 * C, C, 1)
-        self.rep_blocks = nn.Sequential([RepConv(C) for _ in range(N)])
+        self.pointwise_conv_upper_path = nn.Sequential(nn.Conv2d(2 * C, C, 1), nn.ReLU())
+        self.pointwise_conv_lower_path = nn.Sequential(nn.Conv2d(2 * C, C, 1), nn.ReLU())
+        self.rep_blocks = nn.Sequential(*[RepConv(C) for _ in range(N)])
 
     def forward(self, features_1: torch.Tensor, features_2: torch.Tensor) -> torch.Tensor:
-        concat = torch.cat((features_1, features_2), dim=-1)
+        concat = torch.cat((features_1, features_2), dim=-3)
         upper_path = self.pointwise_conv_upper_path(concat)
         lower_path = self.pointwise_conv_lower_path(concat)
         lower_path = self.rep_blocks(lower_path)

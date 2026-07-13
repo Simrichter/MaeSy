@@ -8,7 +8,7 @@ feature_scales: !!python/tuple
 - c5
 
 backbone_version: "swin_tiny" # "resnet50"
-backbone_pretrained: True
+backbone_pretrained: False
 use_decoder_skip_connections: True
 decoder_embed_dim: 384
 decoder_num_layers: 4

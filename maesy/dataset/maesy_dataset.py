@@ -499,6 +499,8 @@ class MaesyDataset(Dataset):
                 return self._getitem_image_folder(idx)
             case "classification":
                 return self._getitem_classification(idx)
+            case "None":
+                return self._getitem_detection(idx) # supports image-only datasets if self.return_labels is False
             case _:
                 raise ValueError(f"Unsupported annotation type '{self.annotation_type}'")
 

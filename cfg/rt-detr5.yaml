@@ -2,8 +2,8 @@ backbone_pretrained: true
 decoder_dropout: 0.1
 decoder_mlp_ratio: 4.0
 decoder_num_heads: 8
-lightweight_fusion: bool = False
-num_rep_blocks_in_fusion: int = 3
+lightweight_fusion: False
+num_rep_blocks_in_fusion: 3
 embed_dim: 128
 enable_auxiliary_losses: true
 enable_denoising: false

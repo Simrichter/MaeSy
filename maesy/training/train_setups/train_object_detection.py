@@ -49,6 +49,7 @@ def train_vit_detector(
     finetune: bool,
     continue_training_from_checkpoint: bool,
     pretrained_backbone: str,
+    wandb_name: str|None,
     enable_wandb: bool,
     enable_denoising: bool = False,
     denoising_num_queries: int = 0,
@@ -72,6 +73,7 @@ def train_vit_detector(
         :param finetune: If set, finetuning parameters are used in config
         :param continue_training_from_checkpoint: Whether to continue training from an existing OD checkpoint (in that case, checkpoint_path should point to an OD checkpoint instead of a MAE checkpoint)
         :param pretrained_backbone: Path to a checkpoint that contains a backbone to be reused in od training
+        :param wandb_name: Optional name for the wandb run
         :param enable_wandb: Whether to enable Weights & Biases logging
         :param seed: Random seed for reproducibility (default: 42)
         :param enable_line_detection: Whether to enable line detection (if the dataset contains line annotations and the model supports it)
@@ -240,6 +242,7 @@ def train_vit_detector(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
+        wandb_name=wandb_name,
         config=training_config,
         project_name="maesy-object-detection",
         enable_wandb=enable_wandb

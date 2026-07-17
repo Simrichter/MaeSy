@@ -13,6 +13,7 @@ def main(args):
             output_dir=args.output,
             finetune=args.finetune,
             enable_wandb=args.wandb,
+            wandb_name=args.name,
             continue_training_from_checkpoint=args.resume,
             pretrained_backbone=args.backbone,
             # detector_arch=args.detector,

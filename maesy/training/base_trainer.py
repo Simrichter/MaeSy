@@ -78,6 +78,7 @@ class BaseTrainer(ABC):
             model: BaseModel,
             project_name: str,
             train_loader: DataLoader,
+            wandb_name: str|None = None,
             val_loader: Optional[DataLoader] = None,
             config: Optional[BaseTrainingConfig] = None,
             enable_wandb: bool = True
@@ -88,6 +89,7 @@ class BaseTrainer(ABC):
         Args:
             model: Model to train
             train_loader: Training data loader
+            wandb_name: Optional name of the wandb_run
             val_loader: Validation data loader
             config: Training configuration
         """
@@ -102,7 +104,8 @@ class BaseTrainer(ABC):
             self.wandb_run = wandb.init(
                 entity="simon-richter-tu-dortmund",
                 project=project_name,
-                config=asdict(self.config)
+                config=asdict(self.config),
+                name=wandb_name
             )
 
         # Setup device

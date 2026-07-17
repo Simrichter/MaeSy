@@ -37,6 +37,7 @@ def main():
     od_parser.add_argument("--resume", action="store_true", help="Whether to resume training from an existing OD checkpoint (instead of starting from a pretrained MAE checkpoint)")
     od_parser.add_argument("--backbone", help="Optional path to a checkpoint with a fitting backbone to be reused", default="")
     od_parser.add_argument("--wandb", action="store_true", help="Enable logging to Weights & Biases (default: True)")
+    od_parser.add_argument("--name", type=str, help="Optional WandB name for the training run. Default: WandB naming scheme", default=None)
     od_parser.add_argument("--enable-denoising", action="store_true", help="Enable RT-DETR denoising training branch (default: False)")
     od_parser.add_argument("--dn-queries", type=int, default=5, help="Number of denoising queries when denoising is enabled (default: 5)")
     od_parser.add_argument("--dn-label-noise", type=float, default=0.2, help="Label corruption ratio for denoising branch (default: 0.2)")

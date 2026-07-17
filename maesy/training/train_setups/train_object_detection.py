@@ -133,7 +133,7 @@ def train_vit_detector(
         lr_step_factor=0.3,
         min_num_epochs_per_plateau=50 if finetune else 100,
         warmup_epochs=4, # Not used with Plateau scheduling
-        label_smoothing=0.0 if finetune else 0.1,
+        label_smoothing=0.0, # if finetune else 0.1,
         save_frequency=100,
         log_frequency=50,
         save_checkpoints=not fast_mode,
@@ -144,7 +144,7 @@ def train_vit_detector(
         bbox_loss_coef = 5.0,
         class_loss_coef = 1.0,
         giou_loss_coef = 2.0,
-        eos_coef = 0.1, # Was 0.2 for most runs
+        eos_coef = override_params.get("eos_coef", 0.1), # Was 0.2 for most runs
         aux_loss_coef = 0.5,
         enc_loss_coef = 0.3,
         line_loss_coef = 2.0,

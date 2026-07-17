@@ -174,7 +174,7 @@ def main():
     dataset_creator_parser.add_argument("--convert-merge-ids", type=int, nargs='+', default=[], help="Space-separated list of pairs of ids to merge together when converting/creating the dataset. Only works when --convert flag is used as well. Example usage: --merge-ids 1 2 3 4 (will merge class 1 into 2, and class 3 into 4. Only class IDs 2 and 4 are kept afterward)")
     dataset_creator_parser.add_argument("--convert-permute-ids", type=int, nargs='+', default=[], help="Space-separated list of indices to permute the class IDs when converting/creating the dataset. Only works when --convert flag is used as well.")
     dataset_creator_parser.add_argument("-o", "--output-path", type=str, default="./data", help="Directory, in which the dataset will be saved (default: ./data)")
-    dataset_creator_parser.add_argument("--left-right", "-lr", action="store_true", default=False, help="If set, expects matching images from stereo cameras. Assumes data_paths to lead to right images and expects 'left' folder next to 'right' folder")
+    dataset_creator_parser.add_argument("--left-right", action="store_true", default=False, help="If set, expects matching images from stereo cameras. Assumes data_paths to lead to right images and expects 'left' folder next to 'right' folder")
 
 
     # Command: maesy dataset convert

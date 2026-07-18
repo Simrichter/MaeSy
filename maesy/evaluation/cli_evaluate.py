@@ -19,11 +19,11 @@ def main(args):
                 # detector_arch=None if args.detector == "auto" else args.detector,
             )
         case "visualize":
-            from maesy.evaluation import visualize_data
+            from maesy.evaluation.visualizer import visualize_data
             visualize_data(args.imgpath, args.out, args.splits, label_path=args.labels, label_file=args.label_file, special_classes={"lines": args.line_class_id, "ellipses": args.ellipse_class_id}, apply_transforms=args.transforms)
 
         case "test":
-            from maesy.evaluation import Evaluator
+            from maesy.evaluation.evaluator import Evaluator
             for checkpoint in args.checkpoints:
                 evaluator = Evaluator(checkpoint, args.dataset, args.device, args.split, args.output_name)
                 evaluator.evaluate()

@@ -6,6 +6,8 @@ def main(args):
             op["learning_rate"] = args.learning_rate
         if args.batch_size != -1:
             op["batch_size"] = args.batch_size
+        if args.eos_coef != -1:
+            op["eos_coef"] = args.eos_coef
 
         train_vit_detector(
             model_info=args.model,

@@ -4,7 +4,6 @@
 from pathlib import Path
 from typing import List, Tuple
 from PIL import Image
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from maesy.dataset import MaesyDataset

@@ -4,7 +4,6 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from ..model.components import Utils
 from ..training.utils import handle_raw_batch
 from maesy.model import BaseModel
 

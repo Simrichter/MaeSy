@@ -1,2 +1,0 @@
-maesy train od rt-detr6 --dataset data/Webots data/Unity --backbone mae_checkpoints/bright-shadow-11/best_model.pth --enable-denoising --enable-line-detection --wandb --name "rtdetr6 (i+mae+wb,u)"
-maesy train od rt-detr6 --dataset data/Cvat --backbone mae_checkpoints/bright-shadow-11/best_model.pth --enable-denoising --enable-line-detection --wandb --name "rtdetr6 (i+mae+cvat)"

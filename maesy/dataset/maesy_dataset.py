@@ -205,9 +205,9 @@ class MaesyDataset(Dataset):
         with Image.open(image_path).convert('RGB') as image:
             if self.return_labels:
                 annotation_path = os.path.join(self.annotations_dir, self.annotations[idx])
-                if annotation_path.split("/")[-1].split(".")[0] != image_path.split("/")[-1].split(".")[0]:
-                    print(
-                        "\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(
+                # if annotation_path.split("/")[-1].split(".")[0] != image_path.split("/")[-1].split(".")[0]:
+                if Path(annotation_path).stem != Path(image_path).stem:
+                    print("\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(
                             annotation_path, image_path))
                 with open(annotation_path, "r") as f:
                     boxes_list: List[BoundingBox] = []

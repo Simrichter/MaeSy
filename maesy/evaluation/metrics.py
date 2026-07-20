@@ -585,6 +585,7 @@ def compute_detection_metrics(
         metrics[f"AP50_class_{class_id}"] = float(ap)
 
     metrics["total_mAP"] = map50_95 # Line mAP and Ellipse mAP are added later
+    map_count = 1
 
     curves: Dict[str, Any] = {}
     if curve_conf_thresholds is None:
@@ -698,6 +699,7 @@ def compute_detection_metrics(
         # metrics["num_pred_lines"] = float(sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions))
 
         metrics["total_mAP"] += metrics["line_mAP"]
+        map_count += 1
 
         curves["line"] = line_curves
 
@@ -755,9 +757,11 @@ def compute_detection_metrics(
         metrics["num_pred_ellipses"] = float(sum(pred.get("ellipses", torch.empty((0, 6))).shape[0] for pred in predictions))
 
         metrics["total_mAP"] += metrics["ellipse_mAP"]
+        map_count += 1
         curves["ellipse"] = ellipse_curves
 
     metrics["curves"] = curves
+    metrics["total_mAP"] = metrics["total_mAP"] / map_count
 
     return metrics
 

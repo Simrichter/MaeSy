@@ -19,7 +19,14 @@ setup(
         "opencv-python>=4.5.0",
         "pycocotools>=2.0.4",
         "scipy>=1.7.0",
-        "tqdm>=4.62.0",
+        "scikit-learn",
+        "onnxscript",
+        "timm",
+        "wandb",
+        "faiss-cpu",
+        "cv-bridge",
+        "pyyaml",
+        "scikit-image"
     ],
     entry_points={
         "console_scripts": [

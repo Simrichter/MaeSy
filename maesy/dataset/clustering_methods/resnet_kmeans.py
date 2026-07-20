@@ -50,7 +50,7 @@ class ResnetKmeans(BaseClustering):
         # U, S, V = torch.pca_lowrank(output_cat, center=True, q=q)
         # out_pca = matmul(output_cat, V)
 
-        # TODO: Incorporate existing_dataloader
+        # TODO: Incorporate existing_dataloader?
 
         print("Clustering")
         start.record()

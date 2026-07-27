@@ -650,7 +650,7 @@ class RTDETRHead(nn.Module):
             weighting = torch.cat([box_logit, line_logit, ellipse_logit], dim=-1)
             weighting /= weighting.sum(dim=-1, keepdim=True) + 1e-8 # normalize to sum to 1, add small epsilon to avoid division by zero
 
-            reference_points = weighting[:, :, 0].unsqueeze(-1)*(reference_boxes[..., :2] + reference_boxes[..., 2:4]) / 2
+            reference_points = weighting[:, :, 0].unsqueeze(-1)*(reference_boxes[..., :2] + reference_boxes[..., 2:4])/2
             reference_points += weighting[:, :, 1].unsqueeze(-1)*(reference_lines[..., :2] + reference_lines[..., 2:4])/2
             reference_points += weighting[:, :, 2].unsqueeze(-1)*reference_ellipses[..., :2]
             query_pos_encoding = self.reference_point_proj(reference_points)

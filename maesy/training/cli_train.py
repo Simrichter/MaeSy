@@ -4,6 +4,8 @@ def main(args):
         op = {}
         if args.learning_rate != -1:
             op["learning_rate"] = args.learning_rate
+        if args.backbone_learning_rate != -1:
+            op["backbone_learning_rate"] = args.backbone_learning_rate
         if args.batch_size != -1:
             op["batch_size"] = args.batch_size
         if args.eos_coef != -1:

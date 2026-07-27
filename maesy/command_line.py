@@ -35,6 +35,7 @@ od_parser.add_argument("--dn-box-noise", type=float, default=0.4, help="Box/line
 od_parser.add_argument("--enable-line-detection", action="store_true", help="Enable optional line endpoint prediction branch")
 od_parser.add_argument("--enable-ellipse-detection", action="store_true", help="Enable optional Ellipse prediction branch")
 od_parser.add_argument("--learning-rate", type=float, default=-1.0, help="Override learning rate")
+od_parser.add_argument("--backbone-learning-rate", type=float, default=-1.0, help="Override backbone learning rate")
 od_parser.add_argument("--batch-size", type=int, default=-1, help="Override batch size")
 od_parser.add_argument("--eos-coef", type=float, default=-1.0, help="Override eos_coef")
 # od_parser.add_argument("--line-class-id", type=int, default=-1, help="Class id that should be treated as a line target (x1 y1 x2 y2)")

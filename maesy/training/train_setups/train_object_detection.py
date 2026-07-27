@@ -123,7 +123,7 @@ def train_vit_detector(
         # accumulation_steps=1,
         num_epochs=3000,
         learning_rate= override_params.get("learning_rate", 5e-6 if finetune else 5e-5),
-        backbone_learning_rate=5e-7 if finetune else 5e-6,
+        backbone_learning_rate=override_params.get("backbone_learning_rate", 5e-7 if finetune else 5e-6),
         weight_decay=1e-4,
         optimizer="adamw",
         lr_scheduler= "plateau", # "cosine",

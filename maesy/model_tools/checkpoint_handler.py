@@ -163,7 +163,6 @@ class CheckpointHandler:
         """
         checkpoint = torch.load(filepath, map_location=self.device)
         if optimizer is not None and 'optimizer_state_dict' in checkpoint:
-            print(checkpoint['optimizer_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             current_epoch = checkpoint['epoch']
             global_step = checkpoint['global_step']

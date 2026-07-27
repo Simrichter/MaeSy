@@ -210,19 +210,25 @@ def train_vit_detector(
         model = create_model_from_checkpoint(model_info)
         # Apply denoising parameters to the loaded model's config
         assert model.config.softmax_activated == (not training_config.use_focal_loss), f"Model config softmax_activated ({model.config.softmax_activated}) does not match expected value based on training config use_focal_loss ({training_config.use_focal_loss}). This might lead to unexpected behavior during training. Please make sure the model config and training config are compatible."
-        model.config.enable_denoising = enable_denoising
-        model.config.denoising_num_queries = denoising_num_queries
-        model.config.denoising_label_noise_ratio = denoising_label_noise_ratio
-        model.config.denoising_box_noise_scale = denoising_box_noise_scale
-        # Recreate denoising query content if needed
-        model.head.config.enable_denoising = enable_denoising
-        model.head.config.denoising_num_queries = denoising_num_queries
-        model.head.config.denoising_label_noise_ratio = denoising_label_noise_ratio
-        model.head.config.denoising_box_noise_scale = denoising_box_noise_scale
-        if enable_denoising and denoising_num_queries > 0:
-            model.head.dn_query_content = torch.nn.Embedding(denoising_num_queries, model.head.config.embed_dim)
-        else:
-            model.head.dn_query_content = None
+        
+        # When resuming training, use the denoising config FROM THE CHECKPOINT, not the command-line args
+        # This prevents adding/removing parameters which would break optimizer state dict loading
+        # The checkpoint already has dn_query_content set up correctly from the original training
+        if not continue_training_from_checkpoint:
+            # Only apply new denoising settings if NOT resuming from this checkpoint
+            model.config.enable_denoising = enable_denoising
+            model.config.denoising_num_queries = denoising_num_queries
+            model.config.denoising_label_noise_ratio = denoising_label_noise_ratio
+            model.config.denoising_box_noise_scale = denoising_box_noise_scale
+            # Recreate denoising query content if needed
+            model.head.config.enable_denoising = enable_denoising
+            model.head.config.denoising_num_queries = denoising_num_queries
+            model.head.config.denoising_label_noise_ratio = denoising_label_noise_ratio
+            model.head.config.denoising_box_noise_scale = denoising_box_noise_scale
+            if enable_denoising and denoising_num_queries > 0:
+                model.head.dn_query_content = torch.nn.Embedding(denoising_num_queries, model.head.config.embed_dim)
+            else:
+                model.head.dn_query_content = None
     else:
         raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
 

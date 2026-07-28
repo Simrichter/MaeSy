@@ -82,6 +82,9 @@ class CheckpointHandler:
         if model.head.type != checkpoint['headtype']:
             return False
         self._check_head_configs(checkpoint, model)
+        # Handle legacy key name for dn_query_content
+        if "dn_query_content.weight" in checkpoint['head'].keys():
+            checkpoint['head']['dn_query_embedding.weight'] = checkpoint['head'].pop('dn_query_content.weight')
         model.head.load_state_dict(checkpoint['head'])
         return True
 

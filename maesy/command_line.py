@@ -74,9 +74,20 @@ eval_parser = eval.add_subparsers(dest="command")
 test = eval_parser.add_parser("test", help="Perform model testing on a test split of a dataset")
 test.add_argument("dataset", help="Path to dataset root directory or yaml file")
 test.add_argument("checkpoints", help="Space-separated list of paths to model checkpoint files", nargs="+", type=str)
+test.add_argument("--model-type", type=str, default="rtdetr", help="Type of the model checkpoints (rtdetr, yolo26), Default: rtdetr")
 test.add_argument("--split", "-s", type=str, default="test", choices=["train", "val", "test"], help="The dataset's split to evaluate on. Default: 'test'")
 test.add_argument("--output-name", "-o", type=str, default="", help="The output folder name for the results. Created as a subfolder in the checkpoint folder. Defaults to auto-generated name: 'test_results/[dataset]/[checkpoint]'")
 test.add_argument("--device", type=str, default="", help="Device to run evaluation on. Default: auto-detect CUDA if available, otherwise CPU")
+test.add_argument(
+    "--grouped-plots",
+    nargs="+",
+    default=["bbox"],
+    help=(
+        "Additional overlay plots to generate across all checkpoints. "
+        "Accepted values: bbox, line, ellipse, all, or specific modes "
+        "like bbox-pr, bbox-confidence, line-pr, line-confidence, ellipse-pr, ellipse-confidence."
+    ),
+)
 
 compare = eval_parser.add_parser("compare", help="Used to compare test results of multiple models")
 compare.add_argument("result_folders", type=str, help="Space-separated list of test result parent folders to compare to.", nargs="+")

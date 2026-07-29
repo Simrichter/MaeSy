@@ -64,9 +64,9 @@ def test_denoising_parameters_applied_to_model_from_config():
         assert model.head.config.enable_denoising is True, "head enable_denoising should be True"
         assert model.head.config.denoising_num_queries == 6, "head denoising_num_queries should be 6"
 
-        # Verify dn_query_content is created
-        assert hasattr(model.head, 'dn_query_content'), "head should have dn_query_content"
-        assert model.head.dn_query_content is not None, "dn_query_content should not be None"
+        # Verify dn_query_embedding is created
+        assert hasattr(model.head, 'dn_query_embedding'), "head should have dn_query_embedding"
+        assert model.head.dn_query_embedding is not None, "dn_query_embedding should not be None"
 
 
 def test_denoising_parameters_applied_to_model_from_checkpoint():

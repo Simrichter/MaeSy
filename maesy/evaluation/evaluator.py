@@ -1,7 +1,7 @@
 """Evaluator for model evaluation."""
 
 import os
-from typing import Dict, Any
+from typing import Any, Dict, List, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,12 +19,239 @@ from torchvision.transforms import v2 as transforms
 from ..training.utils import collate_detection_fn
 
 
+GROUPED_PLOT_MODES = (
+    "bbox-pr",
+    "bbox-confidence",
+    "line-pr",
+    "line-confidence",
+    "ellipse-pr",
+    "ellipse-confidence",
+)
+
+GROUPED_PLOT_ALIASES = {
+    "bbox": ("bbox-pr", "bbox-confidence"),
+    "line": ("line-pr", "line-confidence"),
+    "ellipse": ("ellipse-pr", "ellipse-confidence"),
+    "all": GROUPED_PLOT_MODES,
+}
+
+
+def normalize_grouped_plot_modes(selected_modes: Sequence[str] | None) -> list[str]:
+    """Expand grouped plot aliases into concrete plot modes."""
+    if not selected_modes:
+        return ["bbox-pr", "bbox-confidence"]
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for mode in selected_modes:
+        for raw_mode in mode.split(","):
+            key = raw_mode.strip().lower().replace("_", "-")
+            if not key:
+                continue
+            expanded = GROUPED_PLOT_ALIASES.get(key, (key,))
+            for item in expanded:
+                if item not in GROUPED_PLOT_MODES:
+                    raise ValueError(
+                        f"Unknown grouped plot mode '{raw_mode}'. "
+                        f"Supported values: {', '.join((*GROUPED_PLOT_ALIASES.keys(), *GROUPED_PLOT_MODES))}"
+                    )
+                if item not in seen:
+                    normalized.append(item)
+                    seen.add(item)
+    return normalized
+
+
+def save_grouped_curve_plots(
+    grouped_runs: Sequence[Dict[str, Any]],
+    output_dir: str,
+    grouped_plot_modes: Sequence[str] | None = None,
+) -> Dict[str, str]:
+    """Save overlay plots for multiple evaluated models."""
+    os.makedirs(output_dir, exist_ok=True)
+    selected_modes = normalize_grouped_plot_modes(grouped_plot_modes)
+    plot_paths: Dict[str, str] = {}
+
+    if "bbox-pr" in selected_modes:
+        bbox_pr_path = _plot_grouped_bbox_pr(grouped_runs, output_dir)
+        if bbox_pr_path:
+            plot_paths["grouped_bbox_pr"] = bbox_pr_path
+    if "bbox-confidence" in selected_modes:
+        plot_paths.update(_plot_grouped_bbox_confidence(grouped_runs, output_dir))
+    if "line-pr" in selected_modes:
+        plot_paths.update(_plot_grouped_threshold_pr(grouped_runs, "line", output_dir))
+    if "line-confidence" in selected_modes:
+        plot_paths.update(_plot_grouped_threshold_confidence(grouped_runs, "line", output_dir))
+    if "ellipse-pr" in selected_modes:
+        plot_paths.update(_plot_grouped_threshold_pr(grouped_runs, "ellipse", output_dir))
+    if "ellipse-confidence" in selected_modes:
+        plot_paths.update(_plot_grouped_threshold_confidence(grouped_runs, "ellipse", output_dir))
+
+    return plot_paths
+
+
+def _plot_grouped_bbox_pr(grouped_runs: Sequence[Dict[str, Any]], output_dir: str) -> str:
+    plt.figure(figsize=(6, 5))
+    plotted = False
+    for run in grouped_runs:
+        combined = run.get("curves", {}).get("bbox", {}).get("combined", {})
+        pr = combined.get("pr", {})
+        recall = pr.get("recall")
+        precision = pr.get("precision")
+        if recall is None or precision is None or len(recall) == 0:
+            continue
+        plt.plot(recall, precision, linewidth=1.5, label=run["label"])
+        plotted = True
+
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title("BBox Precision-Recall (Grouped)")
+    if not plotted:
+        plt.close()
+        return ""
+    plt.legend(fontsize=8)
+    plt.grid(True, alpha=0.3)
+    path = os.path.join(output_dir, "grouped_bbox_pr.svg")
+    plt.tight_layout()
+    plt.savefig(path, format="svg")
+    plt.close()
+    return path
+
+
+def _plot_grouped_bbox_confidence(grouped_runs: Sequence[Dict[str, Any]], output_dir: str) -> Dict[str, str]:
+    plot_paths: Dict[str, str] = {}
+    confidence_keys = set()
+    for run in grouped_runs:
+        confidence = run.get("curves", {}).get("bbox", {}).get("combined", {}).get("confidence", {})
+        confidence_keys.update(key for key in confidence.keys() if key != "thresholds")
+
+    for metric_key in sorted(confidence_keys):
+        plt.figure(figsize=(6, 4))
+        plotted = False
+        for run in grouped_runs:
+            confidence = run.get("curves", {}).get("bbox", {}).get("combined", {}).get("confidence", {})
+            thresholds = confidence.get("thresholds")
+            metric = confidence.get(metric_key)
+            if thresholds is None or metric is None or len(thresholds) == 0:
+                continue
+            plt.plot(thresholds, metric, linewidth=1.5, label=run["label"])
+            plotted = True
+
+        plt.xlabel("Confidence Threshold")
+        plt.ylabel(metric_key)
+        plt.title(f"BBox {metric_key} vs Confidence (Grouped)")
+        if not plotted:
+            plt.close()
+            continue
+        plt.legend(fontsize=8)
+        plt.grid(True, alpha=0.3)
+        filename = f"grouped_bbox_{metric_key}.svg"
+        path = os.path.join(output_dir, filename)
+        plt.tight_layout()
+        plt.savefig(path, format="svg")
+        plt.close()
+        plot_paths[f"grouped_bbox_{metric_key}"] = path
+
+    return plot_paths
+
+
+def _plot_grouped_threshold_pr(
+    grouped_runs: Sequence[Dict[str, Any]],
+    curve_family: str,
+    output_dir: str,
+) -> Dict[str, str]:
+    plot_paths: Dict[str, str] = {}
+    threshold_keys = set()
+    for run in grouped_runs:
+        threshold_keys.update(run.get("curves", {}).get(curve_family, {}).keys())
+
+    for threshold in sorted(threshold_keys, key=lambda value: float(value)):
+        plt.figure(figsize=(6, 5))
+        plotted = False
+        for run in grouped_runs:
+            data = run.get("curves", {}).get(curve_family, {}).get(threshold, {})
+            pr = data.get("pr", {})
+            recall = pr.get("recall")
+            precision = pr.get("precision")
+            if recall is None or precision is None or len(recall) == 0:
+                continue
+            plt.plot(recall, precision, linewidth=1.5, label=run["label"])
+            plotted = True
+
+        if not plotted:
+            plt.close()
+            continue
+
+        title_name = curve_family.title()
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.title(f"{title_name} Precision-Recall @ {threshold} (Grouped)")
+        plt.legend(fontsize=8)
+        plt.grid(True, alpha=0.3)
+        filename = f"grouped_{curve_family}_pr_{threshold}.svg"
+        path = os.path.join(output_dir, filename)
+        plt.tight_layout()
+        plt.savefig(path, format="svg")
+        plt.close()
+        plot_paths[f"grouped_{curve_family}_pr_{threshold}"] = path
+
+    return plot_paths
+
+
+def _plot_grouped_threshold_confidence(
+    grouped_runs: Sequence[Dict[str, Any]],
+    curve_family: str,
+    output_dir: str,
+) -> Dict[str, str]:
+    plot_paths: Dict[str, str] = {}
+    threshold_keys = set()
+    confidence_keys = set()
+    for run in grouped_runs:
+        family = run.get("curves", {}).get(curve_family, {})
+        threshold_keys.update(family.keys())
+        for data in family.values():
+            confidence = data.get("confidence", {})
+            confidence_keys.update(key for key in confidence.keys() if key != "thresholds")
+
+    for threshold in sorted(threshold_keys, key=lambda value: float(value)):
+        for metric_key in sorted(confidence_keys):
+            plt.figure(figsize=(6, 4))
+            plotted = False
+            for run in grouped_runs:
+                confidence = run.get("curves", {}).get(curve_family, {}).get(threshold, {}).get("confidence", {})
+                thresholds = confidence.get("thresholds")
+                metric = confidence.get(metric_key)
+                if thresholds is None or metric is None or len(thresholds) == 0:
+                    continue
+                plt.plot(thresholds, metric, linewidth=1.5, label=run["label"])
+                plotted = True
+
+            if not plotted:
+                plt.close()
+                continue
+
+            title_name = curve_family.title()
+            plt.xlabel("Confidence Threshold")
+            plt.ylabel(metric_key)
+            plt.title(f"{title_name} {metric_key} @ {threshold} (Grouped)")
+            plt.legend(fontsize=8)
+            plt.grid(True, alpha=0.3)
+            filename = f"grouped_{curve_family}_{threshold}_{metric_key}.svg"
+            path = os.path.join(output_dir, filename)
+            plt.tight_layout()
+            plt.savefig(path, format="svg")
+            plt.close()
+            plot_paths[f"grouped_{curve_family}_{threshold}_{metric_key}"] = path
+
+    return plot_paths
+
+
 class Evaluator:
     """Evaluator for Vision Transformer object detection model."""
     
     def __init__(
         self,
         checkpoint_path: str,
+        model_type: str,
         dataset_path: str,
         device: str = "",
         split: str = "test",
@@ -35,6 +262,7 @@ class Evaluator:
         
         Args:
             :param checkpoint_path: Path to the checkpoint to evaluate
+            :param model_type: Type of the model to evaluate (rtdetr, yolo26, ...)
             :param dataset_path: Path to the MaeSyDataset with a test split to evaluate on
             :param device: Device to run evaluation on
             :param split: The dataset's split to evaluate on. Default: 'test'
@@ -67,7 +295,7 @@ class Evaluator:
         dataset = MaesyDataset(dataset_path, split, "detection", transforms=test_transforms, enable_lines=True, enable_ellipses=True)
         self.special_classes = dataset.get_special_classes()
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False, collate_fn=collate_detection_fn)
-        self.inferer = Inferer(model=self.model, data_loader=dataloader, device=device)
+        self.inferer = Inferer(model=self.model, model_type=model_type, data_loader=dataloader, device=device)
         self.class_labels = [
             dataset.id_to_name.get(i, str(i))
             for i in range(self.model.config.num_classes)
@@ -86,7 +314,6 @@ class Evaluator:
             Dictionary with evaluation metrics
         """
         all_predictions, all_targets = self.inferer.infer(score_threshold=0.0)
-
 
         line_class_id = self.special_classes.get("line_class_id")
         ellipse_class_id = self.special_classes.get("ellipse_class_id")
@@ -460,9 +687,11 @@ class Evaluator:
         for key in sorted(metrics.keys()):
             value = metrics[key]
             if isinstance(value, float):
-                lines.append(f"{key:32s}: {value:.4f}")
+                lines.append(f"{key:32s}: {value*100:.2f}")
             else:
                 lines.append(f"{key:32s}: {value}")
+        preamble_offset = 5
+        relevant_indices:List[int] = [*range(5), 7, *range(13, 15), 17, 20, *range(21, 28)] # []
         lines.append("")
         lines.append("Class Counts")
         lines.append("-" * 72)
@@ -476,6 +705,13 @@ class Evaluator:
         report_path = os.path.join(self.output_dir, "evaluation_metrics.txt")
         with open(report_path, "w", encoding="utf-8") as handle:
             handle.write(report + "\n")
+
+        if len(relevant_indices) > 0:
+            lines_relevant = lines[:preamble_offset]+[lines[i+preamble_offset] for i in relevant_indices]
+            report = "\n".join(lines_relevant)
+            report_path = os.path.join(self.output_dir, "evaluation_metrics_short.txt")
+            with open(report_path, "w", encoding="utf-8") as handle:
+                handle.write(report + "\n")
 
     def _count_dataset_classes(self, targets: list[Dict[str, torch.Tensor]]) -> Dict[str, int]:
         counts = {label: 0 for label in self.class_labels}

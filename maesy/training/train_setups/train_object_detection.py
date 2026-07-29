@@ -213,7 +213,7 @@ def train_vit_detector(
         
         # When resuming training, use the denoising config FROM THE CHECKPOINT, not the command-line args
         # This prevents adding/removing parameters which would break optimizer state dict loading
-        # The checkpoint already has dn_query_content set up correctly from the original training
+        # The checkpoint already has dn_query_embedding set up correctly from the original training
         if not continue_training_from_checkpoint:
             # Only apply new denoising settings if NOT resuming from this checkpoint
             model.config.enable_denoising = enable_denoising
@@ -226,9 +226,9 @@ def train_vit_detector(
             model.head.config.denoising_label_noise_ratio = denoising_label_noise_ratio
             model.head.config.denoising_box_noise_scale = denoising_box_noise_scale
             if enable_denoising and denoising_num_queries > 0:
-                model.head.dn_query_content = torch.nn.Embedding(denoising_num_queries, model.head.config.embed_dim)
+                model.head.dn_query_embedding = torch.nn.Embedding(denoising_num_queries, model.head.config.embed_dim)
             else:
-                model.head.dn_query_content = None
+                model.head.dn_query_embedding = None
     else:
         raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
 

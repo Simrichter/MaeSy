@@ -693,7 +693,7 @@ def compute_detection_metrics(
             }
 
         metrics["line_mAP"] = float(np.mean(line_ap_values)) if line_ap_values else 0.0
-        metrics["num_gt_lines"] = (float(sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions))
+        metrics["line_pred_gt_ratio"] = (float(sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions))
                                    / float(sum(target.get("line_points", torch.empty((0, 4))).shape[0] for target in targets)))
         # metrics["num_gt_lines"] = float(sum(target.get("line_points", torch.empty((0, 4))).shape[0] for target in targets))
         # metrics["num_pred_lines"] = float(sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions))

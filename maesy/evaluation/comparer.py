@@ -1,4 +1,6 @@
 import os
+from typing import List
+
 import matplotlib.pyplot as plt
 
 def _recursive_search_results(folder: str, search_name: str = "evaluation_metrics.txt", mode: str="strict") -> list[str]:
@@ -45,23 +47,65 @@ def _merge_data(data_list: list[dict]) -> dict:
             merged_data[k].append(v)
     return merged_data
 
-def _generate_barplot(merged_results: dict, output_dir: str, metric: str):
-    data = [float(x) for x in merged_results[metric]]
-    names = merged_results["Checkpoint"]
-    if len(data) != len(names):
-        print(f"Warning: Inconsistent data lengths between {metric} and Checkpoint names")
-        names = [f"Run {i+1}" for i in range(len(merged_results[metric]))]
-    plt.figure(figsize=(10, 6))
-    plt.bar(range(len(merged_results[metric])), data, color='blue')
-    plt.xticks(range(len(merged_results[metric])), names, rotation=45, ha="right")
+def _generate_barplot(merged_results: dict, output_dir: str, metrics: List[str]):
+    if not metrics:
+        raise ValueError("At least one metric is required to generate a grouped barplot")
+
+    names = merged_results.get("Checkpoint", [])
+    if not names:
+        inferred_count = max((len(merged_results.get(metric, [])) for metric in metrics), default=0)
+        if inferred_count == 0:
+            raise ValueError("No checkpoint names or metric values available for comparison")
+        names = [f"Run {i + 1}" for i in range(inferred_count)]
+
+    num_models = len(names)
+    palette = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["C0"])
+    bar_width = 0.8 / len(metrics)
+    x_positions = list(range(num_models))
+
+    plt.figure(figsize=(12, 6))
+    for idx, metric in enumerate(metrics):
+        raw_values = merged_results.get(metric, [])
+        values = [float(value) for value in raw_values[:num_models]]
+        if len(values) < num_models:
+            print(f"Warning: Missing values for metric '{metric}'. Padding with NaN.")
+            values.extend([float("nan")] * (num_models - len(values)))
+
+        offset = (idx - (len(metrics) - 1) / 2) * bar_width
+        positions = [x + offset for x in x_positions]
+        plt.bar(
+            positions,
+            values,
+            width=bar_width,
+            label=metric,
+            color=palette[idx % len(palette)],
+        )
+
+    plt.xticks(x_positions, names, rotation=45, ha="right")
     plt.xlabel("Checkpoints")
-    plt.ylabel(metric)
-    plt.title("Comparison of mAP@50 across checkpoints")
-    # plt.ylim(0, 1)
-    plt.grid(axis='y')
+    plt.ylabel("Metric value")
+    plt.title("Comparison of metrics across checkpoints")
+    plt.grid(axis="y")
+    plt.ylim(0, 65)
+    plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, f"{metric}_comparison_barplot.png"))
+    plt.savefig(os.path.join(output_dir, "comparison_grouped_barplot.png"))
     plt.close()
+
+def _generate_latex_table(merged_results: dict, output_dir: str, metrics: List[str]):
+    txt = [f"Descriptor & {' & '.join(metrics)}\\\\\n\\hline\n"]
+    for i, name in enumerate(merged_results['Checkpoint']):
+        row = [name.replace("_", "-").removeprefix("rtdetr6(").removesuffix(")")]
+        for met in metrics:
+            row.append('/'.join([merged_results[slash_met][i] for slash_met in met.split("/")]))
+        txt.append(f"{' & '.join(row)}\\\\")
+
+    first_block = [t for t in txt[1:] if all([c not in t.split('&')[0] for c in ['w', 'u', 'mae']])]
+    second_block = [t for t in txt[1:] if any([c in t.split('&')[0] for c in ['w', 'u']]) and 'mae' not in t.split('&')[0]]
+    third_block = [t for t in txt[1:] if 'mae' in t.split('&')[0]]
+    txt = first_block + ["\\hline"] + second_block + ["\\hline"] + third_block
+    with open(os.path.join(output_dir, "comparison_table.tex"), "w") as f:
+        f.write("\n".join(txt))
 
 expected_content = ["AP50_class_0",
                     "AP50_class_1",
@@ -126,7 +170,12 @@ def compare(result_folders: list[str], output_dir: str):
     merged_results = _merge_data([_read_results(txt) for txt in result_txts])
 
     print("Generating plots...")
-    _generate_barplot(merged_results, output_dir, "mAP50")
+    metrics = ["total_mAP", "mAP50", "mAP50_95", "f1_50", "f0.25_50", "line_AP@0.10", "line_mAP"]
+    _generate_barplot(merged_results, output_dir, metrics)
+
+    print("Generating LaTex table...")
+    metrics = ["total_mAP", "mAP50/mAP50_95", "f1_50/f0.25_50", "line_AP@0.10/line_mAP"]
+    _generate_latex_table(merged_results, output_dir, metrics)
 
     print("Generation finished. Comparison results saved to:", output_dir)
     print("="*60)

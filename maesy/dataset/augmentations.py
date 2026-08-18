@@ -388,8 +388,14 @@ class ODTrainTransforms:
         self.crop_scale = crop_scale
         self.color_jitter = transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02)
         self.random_grayscale = transforms.RandomGrayscale(p=0.05)
-        self.random_blur = transforms.RandomApply([transforms.GaussianBlur(3, sigma=(0.1, 2.0))], p=0.1)
-        self.random_sharpness = transforms.RandomAdjustSharpness(sharpness_factor=1.3, p=0.1)
+        # self.random_blur = transforms.RandomApply([transforms.GaussianBlur(3, sigma=(0.1, 2.0))], p=0.1)
+        # self.random_sharpness = transforms.RandomAdjustSharpness(sharpness_factor=1.3, p=0.1)
+        self.blur_sharp = transforms.Compose([
+            transforms.RandomChoice([
+                transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
+                transforms.RandomAdjustSharpness(sharpness_factor=1.3, p=1.0),
+            ], p=[0.1, 0.1])
+        ])
         self.random_autocontrast = transforms.RandomAutocontrast(p=0.1)
         self.random_erasing = transforms.RandomErasing(p=0.1, scale=(0.02, 0.12), ratio=(0.3, 3.3), value=0.0)
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -428,8 +434,9 @@ class ODTrainTransforms:
         image = self.color_jitter(image)
         image = self.random_autocontrast(image)
         image = self.random_grayscale(image)
-        image = self.random_blur(image)
-        image = self.random_sharpness(image)
+        # image = self.random_blur(image)
+        # image = self.random_sharpness(image)
+        image = self.blur_sharp(image)
         image = self.normalize(image) # Only deactivate for viszualizations?
 
         # image = self.random_erasing(image) # (i dont want this anymore)

@@ -14,7 +14,9 @@ from _maesy_core.model import (
     RTDETRConfig,
     MaeMultiscaleConfig,
     MaskedAutoencoderMultiscale,
-    MaskedAutoencoderViT, PatchClassificator, PatchClassificatorConfig,
+    MaskedAutoencoderViT,
+    PatchClassificator, PatchClassificatorConfig,
+    OnnxModel, OnnxModelConfig,
 )
 from _maesy_core.model.model_tools.checkpoint_handler import CheckpointHandler
 
@@ -28,6 +30,7 @@ def _print_model_info(model: "BaseModel"):
     print(f"Trainable parameters: {trainable_params:,}")
 
 def create_model_from_config(config: Dict) -> "BaseModel":
+    # TODO: Maybe merge with create_model function below?
     """
         Creates a model according to the provided config.
 
@@ -57,6 +60,8 @@ def create_model_from_config(config: Dict) -> "BaseModel":
             return RTDETR(_from_dict(RTDETRConfig, config))
         case "PatchClassificator":
             return PatchClassificator(_from_dict(PatchClassificatorConfig, config))
+        case "onnx":
+            return OnnxModel(_from_dict(OnnxModelConfig, config))
         case _:
             raise ValueError(f"Model type '{config.get('type', '')}' not recognized. Supported types: ['mae', 'mae-multiscale', 'detr', 'rt_detr']")
 
@@ -95,7 +100,7 @@ def create_model(model: str, config) -> "BaseModel":
 
     Parameters
     ----------
-    :param model:
+    :param model: The model type to be created. Must be one of ['mae', 'mae_multiscale', 'ViTDetector', 'detr', 'rt_detr', 'onnx']
     :param config: The config to be passed to the model
 
     Returns
@@ -103,38 +108,44 @@ def create_model(model: str, config) -> "BaseModel":
     -------
 
     """
-    if model == "mae":
-        from _maesy_core.model import MaskedAutoencoderViT, MAEConfig
+    if model == "onnx":
+        from _maesy_core.model import OnnxModel, OnnxModelConfig
+        if not isinstance(config, OnnxModelConfig):
+            raise TypeError(f"Model 'onnx' expects config type OnnxModelConfig, got {type(config).__name__}")
+        instance = OnnxModel(config=config)
 
+    elif model == "mae":
+        from _maesy_core.model import MaskedAutoencoderViT, MAEConfig
         if not isinstance(config, MAEConfig):
             raise TypeError(f"Model 'mae' expects config type MAEConfig, got {type(config).__name__}")
         instance = MaskedAutoencoderViT(config=config)
+
     elif model == "mae_multiscale":
         from _maesy_core.model import MaskedAutoencoderMultiscale, MaeMultiscaleConfig
-
         if not isinstance(config, MaeMultiscaleConfig):
             raise TypeError(f"Model 'mae_multiscale' expects config type MaeMultiscaleConfig, got {type(config).__name__}")
         instance = MaskedAutoencoderMultiscale(config=config)
+
     elif model == "ViTDetector":
         from _maesy_core.model import ViTDetector, ViTDetectorConfig
-
         if not isinstance(config, ViTDetectorConfig):
             raise TypeError(f"Model 'ViTDetector' expects config type ViTDetectorConfig, got {type(config).__name__}")
         instance = ViTDetector(config=config)
+
     elif model == "detr":
         from _maesy_core.model import DETR, DETRConfig
-
         if not isinstance(config, DETRConfig):
             raise TypeError(f"Model 'detr' expects config type DETRConfig, got {type(config).__name__}")
         instance = DETR(config=config)
+
     elif model == "rt_detr":
         from _maesy_core.model import RTDETR, RTDETRConfig
-
         if not isinstance(config, RTDETRConfig):
             raise TypeError(f"Model 'rt_detr' expects config type RTDETRConfig, got {type(config).__name__}")
         instance = RTDETR(config=config)
+
     else:
-        raise ValueError(f"Model {model} not recognized. Available models: ['mae', 'mae_multiscale', 'ViTDetector', 'detr', 'rt_detr']")
+        raise ValueError(f"Model {model} not recognized. Available models: ['mae', 'mae_multiscale', 'ViTDetector', 'detr', 'rt_detr', 'onnx']")
 
     _print_model_info(instance)
     return instance

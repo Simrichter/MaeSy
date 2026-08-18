@@ -9,6 +9,7 @@ from _maesy_core.model.vit_detector import ViTDetector, ViTDetectorConfig
 from _maesy_core.model.classification_CNN_model import ClassificationCNN, ClassificationCNNConfig
 from _maesy_core.model.DETR import DETR, DETRConfig
 from _maesy_core.model.rt_detr import RTDETR, RTDETRConfig
+from _maesy_core.model.onnx_model import OnnxModel, OnnxModelConfig
 from .patch_classification_model import PatchClassificator, PatchClassificatorConfig
 
 __all__ = [
@@ -29,4 +30,6 @@ __all__ = [
     "RTDETRConfig",
     "PatchClassificator",
     "PatchClassificatorConfig",
+    "OnnxModel",
+    "OnnxModelConfig",
 ]

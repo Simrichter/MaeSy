@@ -7,7 +7,7 @@ from torchvision.transforms.v2 import Transform
 @dataclass
 class BaseConfig:
     """Base configuration for backbones."""
-    pass
+    type: str
 
 class BaseBackbone(Protocol):
     """

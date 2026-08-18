@@ -1,16 +1,15 @@
 """Example script for MAE (Masked Autoencoder) pretraining."""
 from dataclasses import dataclass
-from pathlib import Path
 
 import torch
 
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2 as transforms
 
-from maesy.model_tools.model_factory import create_model_from_config
-from maesy.training import mae_trainer, BaseTrainingConfig
-from maesy.dataset import UnlabeledDataset, MaesyDataset
-from maesy.model_tools.model_factory import create_model, known_architectures, read_yaml, create_model_from_checkpoint
+from _maesy_core.model.model_tools.model_factory import create_model_from_config
+from maesy.training import BaseTrainingConfig
+from _maesy_core.dataset import MaesyDataset
+from _maesy_core.model.model_tools.model_factory import known_architectures, read_yaml, create_model_from_checkpoint
 
 from maesy.training import MaeTrainer
 

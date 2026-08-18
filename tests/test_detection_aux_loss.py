@@ -1,7 +1,7 @@
 import torch
 from unittest.mock import patch
 
-from maesy.model.heads.detr_head import DETRHead, DETRHeadConfig
+from _maesy_core.model.heads.detr_head import DETRHead, DETRHeadConfig
 from maesy.training.losses import DetectionLoss
 
 

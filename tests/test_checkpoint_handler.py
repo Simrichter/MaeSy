@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch import nn
 
-from maesy.model_tools.checkpoint_handler import CheckpointHandler
+from _maesy_core.model.model_tools.checkpoint_handler import CheckpointHandler
 
 
 class DummyPart(nn.Module):

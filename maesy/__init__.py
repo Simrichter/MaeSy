@@ -8,14 +8,12 @@ from typing import TYPE_CHECKING
 __all__ = [
     "DatasetManager",
     "ModelConfig",
-    "Evaluator",
 ]
 
 _LAZY_ATTRS = { # Lazy imports to increase "-h" response time in cli
     "DatasetManager": ("maesy.dataset", "DatasetManager"),
     "ObjectDetectionDataset": ("maesy.dataset", "ObjectDetectionDataset"),
     "ModelConfig": ("maesy.model", "ModelConfig"),
-    "Evaluator": ("maesy.evaluation", "Evaluator"),
 }
 
 
@@ -34,6 +32,5 @@ def __dir__():
 
 
 if TYPE_CHECKING:
-    from .dataset import DatasetManager
-    from .model import ModelConfig
-    from .evaluation import Evaluator
+    from _maesy_core.dataset import DatasetManager
+    from _maesy_core.model import ModelConfig

@@ -1,7 +1,7 @@
 import pytest
 
-from maesy.model import DETRConfig, RTDETRConfig
-from maesy.model_tools.model_factory import create_model
+from _maesy_core.model import DETRConfig, RTDETRConfig
+from _maesy_core.model.model_tools.model_factory import create_model
 
 
 def test_model_factory_creates_detr_and_rt_detr_models():

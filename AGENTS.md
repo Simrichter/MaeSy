@@ -6,17 +6,17 @@
 - Existing AI-guidance scan found `AGENTS.md` and `README.md`.
 
 ## Source-of-Truth Architecture
-- Dispatch boundary: `maesy/command_line.py` -> `maesy/dataset/cli_dataset.py`, `maesy/training/cli_train.py`, `maesy/evaluation/cli_evaluate.py`, `maesy/model_tools/cli_export.py`.
+- Dispatch boundary: `maesy/command_line.py` -> `_maesy_core/dataset/cli_dataset.py`, `maesy/training/cli_train.py`, `maesy/evaluation/cli_evaluate.py`, `_maesy_core/model/model_tools/cli_export.py`.
 - Real training/inference orchestration lives in `maesy/training/train_setups/*.py`; keep `cli_*` thin.
 - Training core is `BaseTrainer` (`maesy/training/base_trainer.py`); task behavior is in trainer overrides + setup files.
 - Keep framework model-agnostic: do not assume DETR-only paths; support multiple architectures/losses wired through configs/setups.
 
 ## Data + Batch Contracts (Must Preserve)
-- OD dataset format is YOLO-style: `<split>/images` + `<split>/labels` (`maesy/dataset/object_detection_dataset.py`).
-- Default training/inference uses `MaesyDataset` (`maesy/dataset/maesy_dataset.py`) and requires a `dataset.yaml` in the dataset root (or pass the yaml path directly) with `path`, split keys (`train`/`val`/`test`), `box_format` (`xyxy` or `cxcywh`), `nc`, and `names`.
+- OD dataset format is YOLO-style: `<split>/images` + `<split>/labels` (`_maesy_core/dataset/object_detection_dataset.py`).
+- Default training/inference uses `MaesyDataset` (`_maesy_core/dataset/maesy_dataset.py`) and requires a `dataset.yaml` in the dataset root (or pass the yaml path directly) with `path`, split keys (`train`/`val`/`test`), `box_format` (`xyxy` or `cxcywh`), `nc`, and `names`.
 - Label rows are normalized; `MaesyDataset` accepts `cxcywh` or `xyxy` per `box_format` and always returns normalized `boxes` in `xyxy` plus `labels` long tensors.
 - OD batch path is `MaesyDataset`/`ObjectDetectionDataset` -> `collate_detection_fn` -> `handle_raw_batch` -> detection loss matching.
-- `collate_detection_fn` and `handle_raw_batch` are implemented in `maesy/training/utils/utils.py` (see `tests/test_od_batch_contract.py`).
+- `collate_detection_fn` and `handle_raw_batch` are implemented in `maesy/training/collate_functions.py` (see `tests/test_od_batch_contract.py`).
 - `collate_detection_fn` output must stay `(images, List[target_dict])` for OD trainers/losses.
 - If line/ellipse detection is enabled, targets include normalized `target["line_points"]` (`x1 y1 x2 y2`) and `target["ellipses"]` (`center_x center_y log_a log_b cos(2*theta) sin(2*theta)`) when class names are mapped via `dataset.yaml` (`lines`, `ellipses`).
 
@@ -38,7 +38,7 @@
 
 ## Integration Contracts
 - W&B is initialized in `BaseTrainer`; run naming controls checkpoint subdirs.
-- Checkpoints are custom (`backbone`, `head`, type/config metadata) in `maesy/model_tools/checkpoint_handler.py`.
+- Checkpoints are custom (`backbone`, `head`, type/config metadata) in `_maesy_core/model/model_tools/checkpoint_handler.py`.
 - If checkpoint schema/model contracts change, update save/load compatibility checks together.
 - Inference/export load models from checkpoints via `create_model_from_checkpoint`; export can also take an architecture name from `cfg/*.yaml` when `--num-classes` (and special class ids) are provided.
 - Dataset creation supports optional clustering (`resnet_kmeans`, `resnet_faiss`) via `DatasetManager.create_dataset`.

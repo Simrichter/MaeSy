@@ -2,7 +2,7 @@ import math
 
 import torch
 
-from maesy.dataset.augmentations import (
+from _maesy_core.dataset import (
     _clip_line_to_bounds,
     _crop_targets,
     _resize_targets,

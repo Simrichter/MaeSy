@@ -1,5 +1,5 @@
 from maesy.pretraining import MaskedAutoencoderViT
-from maesy.model import ModelConfig
+from _maesy_core.model import ModelConfig
 import torch
 from torchvision.utils import save_image
 from torchvision.io import read_image

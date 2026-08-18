@@ -1,6 +1,6 @@
 import pytest
 
-from maesy.dataset.bounding_box import BoundingBox
+from _maesy_core.dataset import BoundingBox
 
 
 def test_scale_to_size_preserves_subpixel_precision():

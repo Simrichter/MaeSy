@@ -1,8 +1,8 @@
 import torch
 import pytest
 
-from maesy.model import MaeMultiscaleConfig, MaskedAutoencoderMultiscale
-from maesy.model.heads import MaeMultiscaleDecoder, MaeMultiscaleDecoderConfig
+from _maesy_core.model import MaeMultiscaleConfig, MaskedAutoencoderMultiscale
+from _maesy_core.model.heads import MaeMultiscaleDecoder, MaeMultiscaleDecoderConfig
 
 
 def test_mae_multiscale_decoder_returns_patch_predictions():

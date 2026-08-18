@@ -1,6 +1,6 @@
 import torch
 
-from maesy.model import RTDETR, RTDETRConfig
+from _maesy_core.model import RTDETR, RTDETRConfig
 
 
 def test_rt_detr_forward_matches_detection_contract():

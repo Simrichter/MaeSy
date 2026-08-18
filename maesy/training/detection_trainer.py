@@ -2,7 +2,6 @@
 
 from typing import Optional, List, Dict
 
-import cv2
 import torch
 from torchvision.utils import draw_bounding_boxes
 
@@ -10,7 +9,7 @@ from maesy.evaluation.metrics import (
     compute_detection_metrics,
     prepare_targets_for_detection_metrics,
 )
-from maesy.evaluation.visualizer import draw_objects_in_tensor
+from _maesy_core.dataset.visualizer import draw_objects_in_tensor
 from maesy.training import BaseTrainer
 
 

@@ -2,8 +2,6 @@ from typing import Optional
 
 import torch
 
-from ..model.components import Utils
-
 from maesy.training import BaseTrainer
 
 class MaeTrainer(BaseTrainer):

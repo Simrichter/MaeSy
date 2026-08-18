@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from maesy.model.base_model import BaseModel
+from _maesy_core.model.base_model import BaseModel
 from maesy.training.base_trainer import BaseTrainer
 from maesy.training import BaseTrainingConfig
 

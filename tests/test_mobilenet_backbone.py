@@ -1,6 +1,6 @@
 import pytest
 import torch
-from maesy.model.backbones.mobilenet_backbone import MobileNetBackbone, MobileNetBackboneConfig
+from _maesy_core.model.backbones.mobilenet_backbone import MobileNetBackbone, MobileNetBackboneConfig
 
 
 class TestMobileNetBackbone:

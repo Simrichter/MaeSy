@@ -10,10 +10,10 @@ import torch
 from torch.utils.data import DataLoader
 from .metrics import prepare_targets_for_detection_metrics, compute_iou
 
-from ..dataset import MaesyDataset
+from _maesy_core.dataset import MaesyDataset
 from .metrics import compute_detection_metrics
-from maesy.evaluation.inferer import Inferer
-from ..model_tools.model_factory import create_model_from_checkpoint
+from _maesy_core.inference.inferer import Inferer
+from _maesy_core.model.model_tools import create_model_from_checkpoint
 from torchvision.transforms import v2 as transforms
 
 from ..training.utils import collate_detection_fn

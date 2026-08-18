@@ -1,8 +1,7 @@
 """Test that denoising parameters are properly wired through training setup."""
-import torch
 from unittest.mock import patch, MagicMock
 from maesy.training.train_setups import train_vit_detector
-from maesy.model_tools import read_yaml
+from _maesy_core.model.model_tools import read_yaml
 
 
 def test_denoising_parameters_applied_to_model_from_config():
@@ -94,8 +93,8 @@ def test_denoising_parameters_applied_to_model_from_checkpoint():
         mock_dataset.return_value = mock_dataset_instance
 
         # Create a real model from checkpoint (we'll use rt-detr as fake checkpoint)
-        from maesy.model_tools import read_yaml
-        from maesy.model_tools.model_factory import create_model_from_config
+        from _maesy_core.model.model_tools import read_yaml
+        from _maesy_core.model.model_tools.model_factory import create_model_from_config
         config = read_yaml('cfg/rt-detr6.yaml')
         config['num_classes'] = 3
         model = create_model_from_config(config)

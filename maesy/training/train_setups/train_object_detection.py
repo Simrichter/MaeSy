@@ -1,28 +1,26 @@
 import shutil
 from dataclasses import dataclass
-from typing import List, Any
 import logging
 
 import torch
-import torchvision
 from torch.utils.data import DataLoader
 from pathlib import Path
 
 from tqdm import tqdm
 
-from maesy.evaluation.inferer import Inferer
+from _maesy_core.inference.inferer import Inferer
 # Import models
-from maesy.model_tools.layer_manipulations import replace_bn_with_frozenbn
-from maesy.model_tools.checkpoint_handler import  CheckpointHandler
-from maesy.model_tools.model_factory import create_model_from_config, known_architectures, create_model_from_checkpoint, read_yaml
+from _maesy_core.model.model_tools import replace_bn_with_frozenbn
+from _maesy_core.model.model_tools.checkpoint_handler import  CheckpointHandler
+from _maesy_core.model.model_tools.model_factory import create_model_from_config, known_architectures, create_model_from_checkpoint, read_yaml
 
 # Import training components
 from maesy.training import DetectionTrainer, BaseTrainingConfig
 from maesy.training.utils import collate_detection_fn
 
 # Import dataset
-from maesy.dataset import MaesyDataset, MultiDataset
-from maesy.dataset.augmentations import ODTrainTransforms, ODValTransforms
+from _maesy_core.dataset import MaesyDataset, MultiDataset
+from _maesy_core.dataset import ODValTransforms
 
 @dataclass
 class ODTrainingConfig(BaseTrainingConfig):

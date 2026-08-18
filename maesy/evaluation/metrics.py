@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 import numpy as np
 import torch
 
-from maesy.dataset import sanitize_xyxy
+from _maesy_core.dataset import sanitize_xyxy
 
 
 def compute_iou(box1: np.ndarray, box2: np.ndarray) -> float:

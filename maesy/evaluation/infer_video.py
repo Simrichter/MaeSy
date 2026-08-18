@@ -7,13 +7,13 @@ from torchvision import transforms
 from torchvision.transforms.functional import to_pil_image
 from tqdm import tqdm
 
-from maesy.evaluation.inferer import Inferer
-from maesy.dataset import UnlabeledDataset
-from maesy.model import MAEConfig
+from _maesy_core.inference.inferer import Inferer
+from _maesy_core.dataset import UnlabeledDataset
+from _maesy_core.model import MAEConfig
 
 from PIL import Image
 
-from maesy.model_tools.model_factory import create_model
+from _maesy_core.model.model_tools.model_factory import create_model
 
 
 def write_video_from_imgs(images:list, output_path:str, fps:int=30):

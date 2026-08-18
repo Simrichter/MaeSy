@@ -6,9 +6,9 @@ from typing import Tuple
 import torch
 from torch.utils.data import DataLoader
 
-from maesy.dataset import MaesyDataset, TrainPatchTransforms, ValPatchTransforms, MultiDataset
-from maesy.model import PatchClassificatorConfig, PatchClassificator
-from maesy.model_tools.model_factory import create_model_from_checkpoint, create_model_from_config
+from _maesy_core.dataset import MaesyDataset, TrainPatchTransforms, ValPatchTransforms, MultiDataset
+from _maesy_core.model import PatchClassificatorConfig, PatchClassificator
+from _maesy_core.model.model_tools.model_factory import create_model_from_checkpoint, create_model_from_config
 from maesy.training import ClassificationTrainer
 from maesy.training.base_trainer import BaseTrainingConfig
 from maesy.training.utils import collate_classification_fn

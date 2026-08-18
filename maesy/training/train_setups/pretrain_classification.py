@@ -4,11 +4,10 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader, Dataset
-from torchvision import datasets, transforms
+from torchvision import transforms
 
-from maesy.dataset import UnlabeledDataset
-from maesy.model import ClassificationCNN, ClassificationCNNConfig
-from maesy.model.classification_ViT_model import ClassificationViTConfig, ClassificationViT
+from _maesy_core.dataset import UnlabeledDataset
+from _maesy_core.model import ClassificationCNN, ClassificationCNNConfig
 from maesy.training import ClassificationTrainer
 from maesy.training.base_trainer import BaseTrainingConfig
 

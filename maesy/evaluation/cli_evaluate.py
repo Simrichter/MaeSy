@@ -32,7 +32,7 @@ def main(args):
                 # detector_arch=None if args.detector == "auto" else args.detector,
             )
         case "visualize":
-            from maesy.evaluation.visualizer import visualize_data
+            from _maesy_core.dataset.visualizer import visualize_data
             visualize_data(args.imgpath, args.out, args.splits, label_path=args.labels, label_file=args.label_file, special_classes={"lines": args.line_class_id, "ellipses": args.ellipse_class_id}, apply_transforms=args.transforms)
 
         case "test":

@@ -12,9 +12,9 @@ from typing import Optional, Dict, Any
 from wandb import Image
 
 from .losses import DetectionLoss, MaskedMSE, BaseLoss
-from ..model import BaseModel
-from .utils import handle_raw_batch
-from ..model_tools.checkpoint_handler import CheckpointHandler
+from _maesy_core.model import BaseModel
+from _maesy_core.dataset.utils import handle_raw_batch
+from _maesy_core.model.model_tools.checkpoint_handler import CheckpointHandler
 
 
 @dataclass
@@ -122,6 +122,7 @@ class BaseTrainer(ABC):
         self.scaler = torch.amp.GradScaler("cuda") if self.config.use_amp else None
 
         if issubclass(type(model), BaseModel):
+            assert model.is_trainable, "Error: Model is not trainable. Please ensure the model is set up for training."
             self.model = model
         else:
             raise ValueError(f"Unknown model type '{type(model)}'")

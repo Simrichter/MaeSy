@@ -1,7 +1,6 @@
 import torch
-from torch import nn
 
-from maesy.model.heads.rt_detr_head import (
+from _maesy_core.model.heads.rt_detr_head import (
     MultiScaleDeformableAttention,
     RTDETRHead,
     RTDETRHeadConfig,

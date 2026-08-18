@@ -1,5 +1,4 @@
 import argparse
-import shlex
 
 parser = argparse.ArgumentParser()
 subparsers = parser.add_subparsers(dest='module')
@@ -213,9 +212,9 @@ def dispatch_command(argv: list[str]) -> int:
         # case "predict":
         #     from .prediction.cli_predict import main
         case "dataset":
-            from .dataset.cli_dataset import main
+            from _maesy_core.dataset.cli_dataset import main
         case "export":
-            from .model_tools.cli_export import main
+            from _maesy_core.model.model_tools.cli_export import main
         case "bulk_execute":
             from .bulk_executor import main
             extra_args = (dispatch_command,)

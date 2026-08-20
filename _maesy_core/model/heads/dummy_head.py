@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Dict
 
 import torch
 import torch.nn as nn
@@ -8,7 +9,7 @@ from _maesy_core.model.heads.base_head import BaseHeadConfig
 
 @dataclass
 class DummyHeadConfig(BaseHeadConfig):
-    pass
+    type = "DummyHead"
 
 class DummyHead(nn.Module):
     """
@@ -16,10 +17,9 @@ class DummyHead(nn.Module):
     """
     def __init__(self) -> None:
         super().__init__()
-        self.type = "DummyHead"
         self.config = DummyHeadConfig()
 
-    def forward(self, features: torch.Tensor, *args,  **kwargs) -> torch.Tensor:
+    def forward(self, features: Dict[str, torch.Tensor], *args,  **kwargs) -> Dict[str, torch.Tensor]:
         """
         Dummy forward pass that returns the input as is.
         :param features: Input features

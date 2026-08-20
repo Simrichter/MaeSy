@@ -1,7 +1,6 @@
-"""Model architecture module for Vision Transformer object detection."""
+"""Module for model architecture definitions and configurations."""
 
-from .config import ModelConfig
-from .base_model import BaseModel
+from .base_model import BaseModel, BaseConfig
 from .resnet_featureextractor import ResnetFeatureExtractor
 from _maesy_core.model.mae_model import MaskedAutoencoderViT, MAEConfig
 from _maesy_core.model.mae_multiscale import MaskedAutoencoderMultiscale, MaeMultiscaleConfig
@@ -13,8 +12,8 @@ from _maesy_core.model.onnx_model import OnnxModel, OnnxModelConfig
 from .patch_classification_model import PatchClassificator, PatchClassificatorConfig
 
 __all__ = [
-    "ModelConfig",
     "BaseModel",
+    "BaseConfig",
     "MaskedAutoencoderViT",
     "MAEConfig",
     "MaskedAutoencoderMultiscale",

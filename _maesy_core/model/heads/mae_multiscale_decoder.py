@@ -8,6 +8,8 @@ import torch.nn.functional as F
 
 @dataclass
 class MaeMultiscaleDecoderConfig:
+    type = "MaeMultiscaleDecoder"
+
     embed_dim: int
     num_patches: int
     patch_size: int
@@ -117,7 +119,6 @@ class _SwinDecoderBlock(nn.Module):
 class MaeMultiscaleDecoder(nn.Module):
     def __init__(self, config: MaeMultiscaleDecoderConfig):
         super().__init__()
-        self.type = "MaeMultiscaleDecoder"
         self.config = config
 
         patch_grid = int(config.num_patches ** 0.5)
@@ -152,29 +153,29 @@ class MaeMultiscaleDecoder(nn.Module):
     def _resize_to_patch_grid(self, x: torch.Tensor) -> torch.Tensor:
         return F.interpolate(x, size=(self.patch_grid, self.patch_grid), mode="bilinear", align_corners=False)
 
-    def forward(self, x: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, features: Dict[str, torch.Tensor], *args, **kwargs) -> Dict[str, torch.Tensor]:
         """
         Decode multiscale feature maps to patch reconstructions.
 
         Args:
-            x: Dict of backbone feature maps (NCHW)
+            features: Dict of backbone feature maps (NCHW)
         Returns:
             Reconstructed patches [B, num_patches, patch_size**2 * C]
         """
         deepest_scale = self.config.feature_scales[-1]
-        if deepest_scale not in x:
+        if deepest_scale not in features:
             raise KeyError(f"Missing deepest decoder feature scale '{deepest_scale}'")
 
-        decoded = self._resize_to_patch_grid(self.input_projections[deepest_scale](x[deepest_scale]))
+        decoded = self._resize_to_patch_grid(self.input_projections[deepest_scale](features[deepest_scale]))
 
         if self.config.use_skip_connections:
             for scale in self.config.skip_scales:
-                if scale in x and scale in self.input_projections:
-                    decoded = decoded + self._resize_to_patch_grid(self.input_projections[scale](x[scale]))
+                if scale in features and scale in self.input_projections:
+                    decoded = decoded + self._resize_to_patch_grid(self.input_projections[scale](features[scale]))
 
         for block in self.blocks:
             decoded = block(decoded)
 
         tokens = decoded.flatten(2).transpose(1, 2)
         tokens = self.norm(tokens + self.pos_embed)
-        return self.pred(tokens)
+        return {"out": self.pred(tokens)}

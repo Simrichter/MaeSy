@@ -2,7 +2,7 @@ import torch
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
-from .base_model import BaseModel
+from .base_model import BaseModel, BaseConfig
 from .backbones import (
     MobileNetBackbone,
     MobileNetBackboneConfig,
@@ -16,7 +16,7 @@ from .heads import MaeMultiscaleDecoder, MaeMultiscaleDecoderConfig
 
 
 @dataclass
-class MaeMultiscaleConfig:
+class MaeMultiscaleConfig(BaseConfig):
     """
     Config class for the MaeMultiscale model, which is a masked autoencoder based on multi-scale backbones for self-supervised learning on vision tasks.
     This config includes parameters for the backbone architecture (e.g., ResNet, SWIN, MobileNet), input image size, and which feature scales to extract from the backbone.
@@ -48,11 +48,9 @@ class MaeMultiscaleConfig:
         self.num_patches = (self.image_size // self.patch_size) ** 2
 
 
-class MaskedAutoencoderMultiscale(BaseModel):
+class MaskedAutoencoderMultiscale(BaseModel[MaeMultiscaleConfig]):
     def __init__(self, config: MaeMultiscaleConfig) -> None:
-        super().__init__()
-        self.config = config
-
+        super().__init__(config)
         if self.config.backbone_version.startswith("resnet"):
             bbone_conf = ResNetBackboneConfig(
                 version=self.config.backbone_version,
@@ -103,13 +101,13 @@ class MaskedAutoencoderMultiscale(BaseModel):
         self.head = MaeMultiscaleDecoder(head_conf)
 
         print(
-            f"Created multiscale MAE model with backbone {self.backbone.type} and head {self.head.type}"
+            f"Created multiscale MAE model with backbone {self.backbone.config.type} and head {self.head.config.type}"
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, *args, **kwargs):
         """Forward pass expects already-masked (or unmasked) images from the trainer."""
         out = super().forward(x)
-        return Utils.unpatchify(out, self.config.image_size, self.config.patch_size, self.config.in_channels)
+        return Utils.unpatchify(out["out"], self.config.image_size, self.config.patch_size, self.config.in_channels)
 
     def reconstruct(self, out, orig_images=None, **kwargs):
         out = out.detach() * kwargs["mask"].unsqueeze(-1)

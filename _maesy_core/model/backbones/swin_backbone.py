@@ -18,6 +18,7 @@ class SWINBackboneConfig:
         :param feature_scales: Specify which feature scale levels to calculate and return during forward pass Selection of: ['c3', 'c4', 'c5']
     """
     version: str = "swin_tiny"  # Options: 'swin_tiny', 'swin_small', 'swin_base'
+    type = f"SWINBackbone_{version}"
     image_size: int = 224
     pretrained: bool = True
     feature_scales: Tuple[str, ...] = field(default_factory = ("c3", "c4", "c5"))
@@ -39,7 +40,6 @@ class SWINBackbone(nn.Module):
         """
         super().__init__()
         self.config = config
-        self.type = f"SWINBackbone_{self.config.version}"
 
         weights = None
         if config.pretrained:

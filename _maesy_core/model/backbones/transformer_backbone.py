@@ -8,6 +8,7 @@ from ..components import TransformerBlock, Utils
 @dataclass
 class TransformerBackboneConfig:
     """Configuration for Vision Transformer Backbone"""
+    type = "TransformerBackbone"
 
     # Image parameters
     image_size: int = 224
@@ -32,7 +33,6 @@ class TransformerBackboneConfig:
 class TransformerBackbone(nn.Module):
     def __init__(self, config: TransformerBackboneConfig):
         super().__init__()
-        self.type = "TransformerBackbone"
         self.config = config
 
         # Patch embedding
@@ -55,6 +55,7 @@ class TransformerBackbone(nn.Module):
         # Utils.init_weights(self)
 
     def forward(self, x: torch.Tensor, ids_shuffle: torch.Tensor) -> torch.Tensor: # WARNING: Removed **kwargs (unused and trouble for ONNX)
+        # TODO: Manually extract ids_shuffle from kwargs to restore typing consistency? Test onnx export behaviour!
         """
         Forward pass.
 

@@ -2,24 +2,14 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, List
 
 from torchvision.transforms.v2 import Transform
-
-from _maesy_core.model.backbones.base_backbone import BaseBackbone, BaseConfig
 import torch
 
 
 @dataclass
-class OnnxBackboneConfig(BaseConfig):
-    """
-    Config class for MobileNet backbones
-
-    Args:
-        :param version: MobileNet version ('mobilenetv2' is currently the only option)
-        :param image_size: Input image size (assumed square)
-        :param pretrained: Whether to use pre-trained weights
-        :param feature_scales: Specify which feature scale levels to calculate and return during forward pass (following resnet naming scheme)
-    """
+class OnnxBackboneConfig:
     image_size: int = 224
     onnx_path: str = ""
+    type = f"onnx_backbone_{onnx_path}"
 
 class OnnxBackbone:
     """ONNX Backbone for feature extraction."""
@@ -27,7 +17,6 @@ class OnnxBackbone:
     def __init__(self, config: OnnxBackboneConfig):
         super().__init__()
         self.config = config
-        self.type = f"onnx_backbone_{self.config.onnx_path}"
         import onnxruntime as ort
         self.ort_session = ort.InferenceSession(self.config.onnx_path)
 

@@ -6,9 +6,8 @@ import torch
 import yaml
 
 from _maesy_core.model import (
-    BaseModel,
-    DETR,
-    DETRConfig,
+    BaseModel, BaseConfig,
+    DETR, DETRConfig,
     MAEConfig,
     RTDETR,
     RTDETRConfig,
@@ -29,7 +28,7 @@ def _print_model_info(model: "BaseModel"):
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
 
-def create_model_from_config(config: Dict) -> "BaseModel":
+def create_model_from_config(config: BaseConfig | Dict) -> "BaseModel":
     # TODO: Maybe merge with create_model function below?
     """
         Creates a model according to the provided config.
@@ -41,7 +40,7 @@ def create_model_from_config(config: Dict) -> "BaseModel":
     """
     def _from_dict(cls, data):
         """
-        Create a MaeMultiscaleConfig instance from a dictionary, ignoring any extra keys that are not defined in the dataclass.
+        Create a cls instance from a dictionary, ignoring any extra keys that are not defined in the dataclass.
         """
         from dataclasses import fields
         valid = {f.name for f in fields(cls) if f.init}
@@ -67,7 +66,7 @@ def create_model_from_config(config: Dict) -> "BaseModel":
 
 def create_model_from_checkpoint(checkpoint: str) -> "BaseModel":
     """
-    Creates a model according to the provided checkpoint.
+    Creates a model according to the provided checkpoint path.
 
     Args:
         :param checkpoint: The checkpoint file to be loaded. Must be a .pth file created by this framework in an earlier training run

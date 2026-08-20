@@ -1,18 +1,16 @@
 """Masked Autoencoder Vision Transformer for pretraining."""
-from dataclasses import dataclass
-
-import torch
-
-from .base_model import BaseModel
+from .base_model import *
 from .backbones import TransformerBackbone, TransformerBackboneConfig
 from .components import Utils
 from .heads import MaeDecoderHead, MaeDecoderHeadConfig
 
 @dataclass
-class MAEConfig:
+class MAEConfig(BaseConfig):
     """
     Configuration for Masked Autoencoder model.
     """
+
+    type: str = "mae_model"
 
     # Image parameters
     image_size: int = 224
@@ -40,7 +38,7 @@ class MAEConfig:
             f"Image size {self.image_size} must be divisible by patch size {self.patch_size}"
         self.num_patches = (self.image_size // self.patch_size) ** 2
 
-class MaskedAutoencoderViT(BaseModel):
+class MaskedAutoencoderViT(BaseModel[MAEConfig]):
     """Masked Autoencoder Vision Transformer.
     
     This model implements a MAE architecture
@@ -83,7 +81,7 @@ class MaskedAutoencoderViT(BaseModel):
         )
         self.head = MaeDecoderHead(head_config)
 
-    def forward(self, x, **kwargs):
+    def forward(self, x: torch.Tensor, *args, **kwargs):
         x = Utils.patchify(x, self.config.image_size, self.config.patch_size)
         x, mask, ids_shuffle = Utils.random_masking(x, **kwargs)
         out = super().forward(x, **{"ids_shuffle": ids_shuffle}) # to(device=self.device, non_blocking=True)

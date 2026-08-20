@@ -1,20 +1,15 @@
 """Vision Transformer for Object Detection using BaseModel framework."""
-
-from dataclasses import dataclass
-import torch
-
-from .backbones.mobilenet_backbone import MobileNetBackbone
 from .backbones.resnet_backbone import ResNetBackboneConfig
-from .base_model import BaseModel
-from .backbones import TransformerBackbone, TransformerBackboneConfig, ResNetBackbone
-from .heads import ViTDetectionHead, DetectionHeadConfig
-from .components import Utils
+from .base_model import *
+from .backbones import ResNetBackbone
 from .heads.detr_head import DETRHeadConfig, DETRHead
 
 
 @dataclass
-class DETRConfig:
+class DETRConfig(BaseConfig):
     """Configuration for Vision Transformer Detector model."""
+    type: str = "DETR"
+
     image_size: int = 224
 
     resnet_version: str = "resnet18"
@@ -32,7 +27,7 @@ class DETRConfig:
     num_classes: int = 80
     num_queries: int = 100
     num_decoder_layers: int = 6
-    num_encoder_layers: int = 6,
+    num_encoder_layers: int = 6
     decoder_num_heads: int = 8
     encoder_num_heads: int = 8
     decoder_mlp_ratio: float = 4.0
@@ -47,7 +42,7 @@ class DETRConfig:
     giou_loss_coef: float = 2.0
     eos_coef: float = 0.1
 
-class DETR(BaseModel):
+class DETR(BaseModel[DETRConfig]):
     """Vision Transformer for Object Detection.
 
     This model implements a ViT-based object detection architecture following
@@ -63,15 +58,14 @@ class DETR(BaseModel):
         Args:
             config: Model configuration
         """
-        super().__init__()
-        self.config = config
+        super().__init__(config)
 
         # Create backbone configuration
         bbone_conf = ResNetBackboneConfig(
             version = "resnet50",
             image_size = 224,
             pretrained = True,
-            feature_scales = (self.config.feature_scale,)
+            feature_scales = (config.feature_scale,)
         )
         self.backbone = ResNetBackbone(bbone_conf)
         # self.backbone = MobileNetBackbone(version="v2", image_size=self.config.image_size, remove_layers=3)
@@ -83,7 +77,7 @@ class DETR(BaseModel):
 
         # Create detection head configuration
         head_config = DETRHeadConfig(
-            feature_channels=self.backbone.get_feature_dims()[self.config.feature_scale][0],
+            feature_channels=self.backbone.get_feature_dims()[config.feature_scale][0],
             embed_dim=config.embed_dim,
             num_classes=config.num_classes,
             num_queries=config.num_queries,
@@ -94,14 +88,14 @@ class DETR(BaseModel):
             mlp_ratio=config.decoder_mlp_ratio,
             dropout=config.decoder_dropout,
             hidden_dim_out_layers=config.hidden_dim_out_layers,
-            spatial_feature_size=tuple(self.backbone.get_feature_dims()[self.config.feature_scale][1:]),
+            spatial_feature_size=tuple(self.backbone.get_feature_dims()[config.feature_scale][1:]),
             enable_auxiliary_losses=config.enable_auxiliary_losses,
         )
         self.head = DETRHead(head_config)
 
-        print(f"Created DETR model with backbone {self.backbone.type} and head {self.head.type}\n Feature dims: {self.backbone.get_feature_dims()}")
+        print(f"Created DETR model with backbone {self.backbone.config.type} and head {self.head.config.type}\n Feature dims: {self.backbone.get_feature_dims()}")
 
-    def forward(self, x: torch.Tensor, **kwargs):
+    def forward(self, x: torch.Tensor, *args, **kwargs):
         """
         Forward pass through the model.
 
@@ -114,7 +108,7 @@ class DETR(BaseModel):
                 - pred_boxes: Bounding box predictions [B, num_queries, 4]
         """
         features = self.backbone(x) # [B, C, H, W] -> [B, feature_dim, H', W']
-        out = self.head(features[self.config.feature_scale])
+        out = self.head(features[self.config.feature_scale]) # TODO: Find elegant way to explain typechecking that this is indeed a DETRConfig
 
         return out
 

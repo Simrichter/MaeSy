@@ -12,6 +12,8 @@ from _maesy_core.model.model_tools.debug_helpers import check_finite
 
 @dataclass
 class RTDETRHeadConfig:
+    type = "RTDETRHead"
+
     feature_channels: Tuple[int, ...]
     num_classes: int = 80
     num_queries: int = 100
@@ -291,7 +293,6 @@ class RTDETRHead(nn.Module):
         super().__init__()
         self.encoder_class_head: MLP | None = None # Forward-definition with None. Is initialized in create_class_heads function
         self.decoder_class_heads: nn.ModuleList | None = None
-        self.type = "RTDETRHead"
         self.config = config
         if len(config.feature_channels) != config.num_feature_levels:
             raise ValueError("feature_channels length must match num_feature_levels")

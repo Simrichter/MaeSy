@@ -7,13 +7,13 @@ import torch
 from torch import nn
 
 from .backbones import ResNetBackbone, ResNetBackboneConfig, MobileNetBackbone, MobileNetBackboneConfig, SWINBackbone, SWINBackboneConfig
-from .base_model import BaseModel
+from .base_model import BaseModel, BaseConfig
 from .heads import RTDETRHead, RTDETRHeadConfig
 from _maesy_core.dataset import sanitize_xyxy
 
 
 @dataclass
-class RTDETRConfig:
+class RTDETRConfig(BaseConfig):
     type: str = "RT-DETR"
     image_size: int = 224
     backbone_version: str = "resnet50"
@@ -148,12 +148,11 @@ def _decode_detr_predictions(
     return decoded
 
 
-class RTDETR(BaseModel):
+class RTDETR(BaseModel[RTDETRConfig]):
     """RT-DETR detector"""
 
     def __init__(self, config: RTDETRConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
 
         if self.config.backbone_version.startswith("resnet"):
             bbone_conf = ResNetBackboneConfig(
@@ -210,11 +209,11 @@ class RTDETR(BaseModel):
         self.head:RTDETRHead = RTDETRHead(head_conf)
 
         print(
-            f"Created RT-DETR model with backbone {self.backbone.type} and head {self.head.type}"
+            f"Created RT-DETR model with backbone {self.backbone.config.type} and head {self.head.config.type}"
             # f"\n Feature channels: {self.backbone.get_feature_channels()}"
         )
 
-    def update_head_conf(self, num_classes: Optional[int] = None, special_classes: Dict[str, int] = None) -> None:
+    def update_head_conf(self, num_classes: Optional[int] = None, special_classes: Optional[Dict[str, int]] = None) -> None:
         """
             Update the configs with new number of classes or special class IDs and create a new classification head
 
@@ -266,9 +265,6 @@ class RTDETR(BaseModel):
     def get_export_wrapper(self):
         # return self
         return _ExportRTDETRWrapper(self)
-    # TODO: Make nice such that the BaseModel version of this automatically gives the model-specific exportWrapper if existent
-    def get_output_names(self):
-        return ["boxes", "labels", "scores", "line_points", "line_labels", "line_scores"]  # TODO: Check/make dynamic
 
 class _ExportRTDETRWrapper(nn.Module):
     def __init__(self, model):
@@ -287,7 +283,6 @@ class _ExportRTDETRWrapper(nn.Module):
         else:
             return outputs["pred_logits"], outputs["pred_boxes"]
     def get_output_names(self):
-        # return  ["boxes", "labels", "scores", "line_points", "line_labels", "line_scores"] # TODO: Check/make dynamic
         if self.model.config.enable_line_detection and not self.model.config.enable_ellipse_detection:
             return ["logits", "boxes", "lines"]
         elif not self.model.config.enable_line_detection and self.model.config.enable_ellipse_detection:

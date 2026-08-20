@@ -7,8 +7,10 @@ from typing import Dict
 
 
 @dataclass
-class DetectionHeadConfig:
+class ViTDetectionHeadConfig:
     """Configuration for Detection Head."""
+    type = "ViTDetectionHead"
+
     embed_dim: int = 128
     num_classes: int = 80
     num_queries: int = 100
@@ -27,9 +29,8 @@ class ViTDetectionHead(nn.Module):
     with learned object queries.
     """
     
-    def __init__(self, config: DetectionHeadConfig):
+    def __init__(self, config: ViTDetectionHeadConfig):
         super().__init__()
-        self.type = "DetectionHead"
         self.config = config
         
         # Object queries (learnable embeddings)

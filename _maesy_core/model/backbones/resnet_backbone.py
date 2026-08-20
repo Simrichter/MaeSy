@@ -1,10 +1,11 @@
+from _maesy_core.model import *
+
 from dataclasses import dataclass, field
 from typing import Tuple, Dict
 
 import torch
 import torch.nn as nn
 from torchvision.models import resnet50, ResNet50_Weights, resnet18, ResNet18_Weights, resnet34, ResNet34_Weights, resnet101, ResNet101_Weights, resnet152, ResNet152_Weights
-
 
 @dataclass
 class ResNetBackboneConfig:
@@ -18,11 +19,12 @@ class ResNetBackboneConfig:
             :param feature_scales: Specify which feature scale levels to calculate and return during forward pass
     """
     version: str = "resnet50"
+    type: str = f"ResNetBackbone_{version}"
     image_size: int = 224
     pretrained: bool = True
     feature_scales: Tuple[str, ...] = field(default_factory = ("c3", "c4", "c5"))
 
-class ResNetBackbone(nn.Module):
+class ResNetBackbone:
     """ResNet Backbone for feature extraction."""
 
     def __init__(self, config: ResNetBackboneConfig):
@@ -32,9 +34,7 @@ class ResNetBackbone(nn.Module):
         Args:
             :param config: ResNetBackboneConfig class that holds all necessary parameters
         """
-        super().__init__()
         self.config = config
-        self.type = f"ResNetBackbone_{self.config.version}"
 
         weights = None
         if config.pretrained:
@@ -103,6 +103,12 @@ class ResNetBackbone(nn.Module):
                         c6 = self.avgPool(c5)
                         feature_maps["c6"] = c6
         return {k: feature_maps[k] for k in self.config.feature_scales}
+
+    def __call__(self, *args, **kwargs):
+        """
+            Call the forward method of the backbone (neccessary, as this backbone is not a nn.Module subclass)
+        """
+        return self.forward(*args, **kwargs)
 
     def get_feature_dims(self) -> Dict[str, torch.Size]:
         """

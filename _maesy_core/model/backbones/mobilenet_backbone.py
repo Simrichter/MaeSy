@@ -20,6 +20,7 @@ class MobileNetBackboneConfig:
         :param feature_scales: Specify which feature scale levels to calculate and return during forward pass (following resnet naming scheme)
     """
     version: str = "mobilenetv2"
+    type = f"MobileNetBackbone_{version}"
     image_size: int = 224
     pretrained: bool = True
     feature_scales: Tuple[str, ...] = field(default_factory=lambda: ("c3", "c4", "c5"))
@@ -84,7 +85,6 @@ class MobileNetBackbone(nn.Module):
         """
         super().__init__()
         self.config = config
-        self.type = self.config.version
 
         self.calc_c3 = "c3" in self.config.feature_scales or "c4" in self.config.feature_scales or "c5" in self.config.feature_scales
         self.calc_c4 = "c4" in self.config.feature_scales or "c5" in self.config.feature_scales

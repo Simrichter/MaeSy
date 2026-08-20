@@ -1,16 +1,12 @@
 """Vision Transformer for Object Detection using BaseModel framework."""
-
-from dataclasses import dataclass
-import torch
-
-from .base_model import BaseModel
+from .base_model import *
 from .backbones import TransformerBackbone, TransformerBackboneConfig
-from .heads import ViTDetectionHead, DetectionHeadConfig
+from .heads import ViTDetectionHead, ViTDetectionHeadConfig
 from .components import Utils
 
 
 @dataclass
-class ViTDetectorConfig:
+class ViTDetectorConfig(BaseConfig):
     """Configuration for Vision Transformer Detector model."""
     
     # Image parameters
@@ -49,7 +45,7 @@ class ViTDetectorConfig:
         self.num_patches = (self.image_size // self.patch_size) ** 2
 
 
-class ViTDetector(BaseModel):
+class ViTDetector(BaseModel[ViTDetectorConfig]):
     """Vision Transformer for Object Detection.
     
     This model implements a ViT-based object detection architecture following
@@ -65,8 +61,7 @@ class ViTDetector(BaseModel):
         Args:
             config: Model configuration
         """
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         
         # Create backbone configuration
         backbone_config = TransformerBackboneConfig(
@@ -83,7 +78,7 @@ class ViTDetector(BaseModel):
         self.backbone = TransformerBackbone(backbone_config)
         
         # Create detection head configuration
-        head_config = DetectionHeadConfig(
+        head_config = ViTDetectionHeadConfig(
             embed_dim=config.embed_dim,
             num_classes=config.num_classes,
             num_queries=config.num_queries,
@@ -95,7 +90,7 @@ class ViTDetector(BaseModel):
         )
         self.head = ViTDetectionHead(head_config)
     
-    def forward(self, x: torch.Tensor, **kwargs):
+    def forward(self, x: torch.Tensor, *args, **kwargs):
         """
         Forward pass through the model.
         

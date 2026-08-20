@@ -16,7 +16,7 @@ from _maesy_core.model.model_tools.model_factory import create_model_from_config
 
 # Import training components
 from maesy.training import DetectionTrainer, BaseTrainingConfig
-from maesy.training.utils import collate_detection_fn
+from maesy.training.collate_functions import collate_detection_fn
 
 # Import dataset
 from _maesy_core.dataset import MaesyDataset, MultiDataset

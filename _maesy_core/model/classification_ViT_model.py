@@ -1,15 +1,15 @@
 """Classification Vision Transformer for pretraining."""
 from dataclasses import dataclass
 
-from _maesy_core.model.config import ModelConfig
-from .base_model import BaseModel
+from .base_model import BaseModel, BaseConfig
 from .heads import LinearHead, LinearHeadConfig
 from .backbones import TransformerBackbone, TransformerBackboneConfig
 @dataclass
-class ClassificationViTConfig(ModelConfig):
+class ClassificationViTConfig(BaseConfig):
     """
     Configuration for Vision Transformer Detector model.
     """
+    type: str = "classification_vit"
 
     # Image parameters
     image_size: int = 224
@@ -29,7 +29,7 @@ class ClassificationViTConfig(ModelConfig):
     num_classes: int = 3
 
 
-class ClassificationViT(BaseModel):
+class ClassificationViT(BaseModel[ClassificationViTConfig]):
     """Vision Transformer for image classification pretraining.
     
     This model implements standard supervised image classification pretraining
@@ -43,7 +43,7 @@ class ClassificationViT(BaseModel):
         Args:
             config: Model configuration
         """
-        super().__init__()
+        super().__init__(config)
 
         backbone_config = TransformerBackboneConfig(
             image_size=config.image_size,

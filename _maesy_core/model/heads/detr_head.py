@@ -10,6 +10,10 @@ from _maesy_core.model.components import Utils
 @dataclass
 class DETRHeadConfig:
     """Configuration for Detection Head."""
+
+    type = "DETRHead"
+
+    feature_stage: str = "c5"
     feature_channels: int = 1024
     embed_dim: int = 128
     spatial_feature_size: Tuple[int] = (7,7)
@@ -42,7 +46,6 @@ class DETRHead(nn.Module):
 
     def __init__(self, config: DETRHeadConfig):
         super().__init__()
-        self.type = "DETRHead"
         self.config = config
 
         # initial projection to connect backbone output to head input
@@ -60,7 +63,7 @@ class DETRHead(nn.Module):
         # Bounding box regression head
         self.bbox_embed = MLP(config.embed_dim, config.hidden_dim_out_layers, 4, config.dropout)
 
-    def forward(self, features: torch.Tensor, **kwargs) -> Dict[str, torch.Tensor]:
+    def forward(self, features: Dict[str, torch.Tensor], *args, **kwargs) -> Dict[str, torch.Tensor]:
         """
         Forward pass through detection head.
 
@@ -73,7 +76,7 @@ class DETRHead(nn.Module):
                 - pred_boxes: Bounding box predictions [B, num_queries, 4]
         """
 
-        features = self.input_projection(features)  # [B, feature_dim, H', W'] -> [B, embed_dim, H', W']
+        features = self.input_projection(features[self.config.feature_stage])  # [B, feature_dim, H', W'] -> [B, embed_dim, H', W']
         _, _, h, w = features.shape
         features = features.flatten(2).transpose(1, 2)  # [B, embed_dim, H', W'] -> [B, embed_dim, H'*W'] -> [B, H'*W', embed_dim]
 

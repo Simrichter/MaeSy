@@ -1,16 +1,11 @@
 """Classification Vision Transformer for pretraining."""
-from dataclasses import dataclass
-
-import torch
-
-from _maesy_core.model.config import ModelConfig
-from .base_model import BaseModel
+from .base_model import *
 from .heads import LinearHead, LinearHeadConfig
 from .backbones import ResNetBackbone, ResNetBackboneConfig
 
 
 @dataclass
-class PatchClassificatorConfig(ModelConfig):
+class PatchClassificatorConfig(BaseConfig):
     """
     Configuration for Vision Transformer Detector model.
     """
@@ -24,7 +19,7 @@ class PatchClassificatorConfig(ModelConfig):
     num_classes: int = 3
 
 
-class PatchClassificator(BaseModel):
+class PatchClassificator(BaseModel[PatchClassificatorConfig]):
     """ Network for patch classification
     """
 
@@ -35,8 +30,7 @@ class PatchClassificator(BaseModel):
         Args:
             config: Model configuration
         """
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         head_config = LinearHeadConfig(
             input_dim=config.head_in_dim,
             num_classes=config.num_classes
@@ -47,7 +41,7 @@ class PatchClassificator(BaseModel):
         self.head = LinearHead(head_config)
         self.headtype = "LinearHead"
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor, *args, **kwargs):
         """Forward pass through the model."""
         features = self.backbone(x)
         # print("Features shape:", features[self.config.feature_scale].shape)  # Debug print to check feature shape

@@ -1,3 +1,5 @@
+from typing import Dict
+
 import torch.nn as nn
 from dataclasses import dataclass, asdict
 import torch
@@ -16,11 +18,13 @@ class MaeDecoderHeadConfig:
     num_layers: int
     in_channels: int
 
+    feature_level: str = "c5"
+    type: str = "DecoderHead"
+
 
 class MaeDecoderHead(nn.Module):
     def __init__(self, config: MaeDecoderHeadConfig):
         super().__init__()
-        self.type = "DecoderHead"
         self.config = config
         # Decoder components
         self.decoder_embed = nn.Linear(config.embed_dim, config.embed_dim)
@@ -63,19 +67,19 @@ class MaeDecoderHead(nn.Module):
                 nn.init.constant_(m.weight, 1.0)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x: torch.Tensor, ids_shuffle: torch.Tensor) -> torch.Tensor:
+    def forward(self, features: Dict[str, torch.Tensor], ids_shuffle: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through decoder.
 
         Args:
-            x: Encoded visible patches [B, N_visible + 1, D]
+            features: Encoded visible patches [B, N_visible + 1, D]
             ids_shuffle: Indices that were used to shuffle the patches [B, num_patches]
 
         Returns:
             x: Reconstructed patches [B, num_patches, patch_size**2 * C]
         """
         # Embed tokens
-        x = self.decoder_embed(x)
+        x = self.decoder_embed(features[self.config.feature_level])
 
         # Append mask tokens to sequence
         ids_restore = torch.argsort(ids_shuffle, dim=1)

@@ -3,18 +3,18 @@ from dataclasses import dataclass
 
 import torch
 
-from _maesy_core.model.config import ModelConfig
-from .base_model import BaseModel
+from .base_model import BaseModel, BaseConfig
 from .heads import LinearHead, LinearHeadConfig
-from .backbones import ResNetBackbone
+from .backbones import ResNetBackbone, ResNetBackboneConfig
 
 
 @dataclass
-class ClassificationCNNConfig(ModelConfig):
+class ClassificationCNNConfig(BaseConfig):
     """
     Configuration for Vision Transformer Detector model.
     """
-    # Resnet backbone parameters
+    type: str = "classification_cnn"
+    # ResNet backbone parameters
     resnet_version: str = "resnet50"
 
     # Classification head parameters
@@ -22,7 +22,7 @@ class ClassificationCNNConfig(ModelConfig):
     num_classes: int = 3
 
 
-class ClassificationCNN(BaseModel):
+class ClassificationCNN(BaseModel[ClassificationCNNConfig]):
     """Vision Transformer for image classification pretraining.
 
     This model implements standard supervised image classification pretraining
@@ -36,19 +36,15 @@ class ClassificationCNN(BaseModel):
         Args:
             config: Model configuration
         """
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         head_config = LinearHeadConfig(
             input_dim=config.embed_dim,
             num_classes=config.num_classes
         )
-        self.backbone = ResNetBackbone(version="resnet18")
-        self.backbonetype = "ResnetBackbone"
-
+        self.backbone = ResNetBackbone(ResNetBackboneConfig(version="resnet18"))
         self.head = LinearHead(head_config)
-        self.headtype = "LinearHead"
 
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs) -> torch.Tensor:
         """Forward pass through the model."""
         features = self.backbone(x)
         # print("Features shape:", features.shape)  # Debug print to check feature shape

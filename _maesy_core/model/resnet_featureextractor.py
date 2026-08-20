@@ -8,7 +8,7 @@ from _maesy_core.model.heads import DummyHead
 
 @dataclass
 class ResNetFeatureExtractorConfig(BaseConfig):
-    resnet_model: str
+    resnet_model: str = "resnet18"
     image_size: int = 224
     pretrained: bool = True
     out_layers: Tuple[str, ...] = ("c3", "c4", "c5")

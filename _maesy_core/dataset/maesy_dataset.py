@@ -87,8 +87,8 @@ class MaesyDataset(Dataset):
             :param start_index: The index from which to start
             :param step: The step size for sampling images (e.g., step=2 will take every other image)
             # :param repeat_factor: The factor by which to repeat the dataset (e.g., repeat_factor=2 will repeat the dataset twice, effectively doubling its size)
-            :param enable_lines: Whether to include line annotations (if line_class_id is defined in dataset.yaml)
-            :param enable_ellipses: Whether to include ellipse annotations (if ellipse_class_id is defined in dataset.yaml)
+            :param enable_lines: Whether to include line annotations (if line_class_id is defined in dataset.yaml). Default: False
+            :param enable_ellipses: Whether to include ellipse annotations (if ellipse_class_id is defined in dataset.yaml). Default: False
             :param use_first_n: If not None, only use the first n samples from the dataset (after applying start_index, step, repeat_factor)
         """
 

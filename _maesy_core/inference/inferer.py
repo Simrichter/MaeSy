@@ -50,7 +50,7 @@ class Inferer:
         all_predictions = []
         all_targets = []
 
-        print(f"Running inference on {len(self.data_loader)} batches ({len(self.data_loader.dataset)} images)... (Device: {self.device.type})")
+        print(f"Running inference on {len(self.data_loader)} batches... (Device: {self.device.type})")
         for batch in tqdm(self.data_loader):
             images, targets = handle_raw_batch(batch, self.device)
             _, img_preds, targets = self.model.infer(images, targets, **kwargs)

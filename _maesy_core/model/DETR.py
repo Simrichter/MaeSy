@@ -1,6 +1,10 @@
 """Vision Transformer for Object Detection using BaseModel framework."""
+from dataclasses import dataclass
+
+import torch
+
 from .backbones.resnet_backbone import ResNetBackboneConfig
-from .base_model import *
+from .base_model import BaseModel, BaseConfig
 from .backbones import ResNetBackbone
 from .heads.detr_head import DETRHeadConfig, DETRHead
 

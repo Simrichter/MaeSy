@@ -2,7 +2,7 @@ from pathlib import Path
 import torch
 
 from _maesy_core.model import MAEConfig
-from _maesy_core.model.model_tools.model_factory import create_model
+from _maesy_core.model.model_tools.model_factory import create_model_from_config
 
 def export_model():
         mae_config = MAEConfig(
@@ -20,7 +20,7 @@ def export_model():
 
         # Create MAE model
         print("Creating model...")
-        model = create_model("ViTDetector", mae_config)# TransformerDetectionModel(mae_config)
+        model = create_model_from_config("ViTDetector", mae_config)# TransformerDetectionModel(mae_config)
         model.eval()
 
         # Create example inputs for exporting the model. The inputs should be a tuple of tensors.

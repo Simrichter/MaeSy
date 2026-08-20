@@ -1,12 +1,12 @@
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, Callable
 
 import torch
 import yaml
 
 from _maesy_core.model import (
-    BaseModel, BaseConfig,
+    # BaseModel, BaseConfig,
     DETR, DETRConfig,
     MAEConfig,
     RTDETR,
@@ -19,7 +19,7 @@ from _maesy_core.model import (
 )
 from _maesy_core.model.model_tools.checkpoint_handler import CheckpointHandler
 
-known_architectures = [config.rstrip(".yaml") for config in os.listdir((Path(os.path.realpath(__file__)).parent.parent.parent)/"cfg")]# ["rt-detr", "detr", "mae", "mae-multiscale"]
+known_architectures = [config.rstrip(".yaml") for config in os.listdir(Path(os.path.realpath(__file__)).parent.parent.parent.parent / "cfg")]# ["rt-detr", "detr", "mae", "mae-multiscale"]
 
 def _print_model_info(model: "BaseModel"):
     """Utility function to print model information."""
@@ -28,8 +28,7 @@ def _print_model_info(model: "BaseModel"):
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
 
-def create_model_from_config(config: BaseConfig | Dict) -> "BaseModel":
-    # TODO: Maybe merge with create_model function below?
+def create_model_from_dict(config: Dict) -> "BaseModel":
     """
         Creates a model according to the provided config.
 
@@ -87,14 +86,14 @@ def read_yaml(path:str) -> Dict:
         A dictionary containing the contents of the yaml file
     """
     if not os.path.isabs(path):
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         path = os.path.normpath(os.path.join(project_root, path))
     if not os.path.isfile(path) or not path.endswith((".yaml", ".yml")):
         raise FileNotFoundError(f"File '{path}' is not a yaml file or does not exist")
     with open(path, "r") as f:
         return yaml.full_load(f)
 
-def create_model(model: str, config) -> "BaseModel":
+def create_model_from_config(model: str, config) -> "BaseModel":
     """
 
     Parameters
@@ -148,3 +147,23 @@ def create_model(model: str, config) -> "BaseModel":
 
     _print_model_info(instance)
     return instance
+
+def create_model(model_info: str, overwrite_func: Optional[Callable[[Dict], Dict]] = None) -> "BaseModel":
+    """
+        Creates a model according to the provided model_info.
+        Arguments:
+            :param model_info: The model type to be created. Must be one of ['mae', 'mae_multiscale', 'ViTDetector', 'detr', 'rt_detr', 'onnx'] or a path to a .pth checkpoint file
+            :param overwrite_func: Optional function to overwrite the config dict before creating the model
+        Returns:
+            model: The initialized model according to the provided model_info
+    """
+    if model_info.lower() in known_architectures:
+        config = read_yaml(f"cfg/{model_info.lower()}.yaml")
+        if overwrite_func:
+            config = overwrite_func(config)
+        model = create_model_from_dict(config)
+    elif model_info.endswith(".pth"):
+        model = create_model_from_checkpoint(model_info)
+    else:
+        raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
+    return model

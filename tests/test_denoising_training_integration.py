@@ -94,10 +94,10 @@ def test_denoising_parameters_applied_to_model_from_checkpoint():
 
         # Create a real model from checkpoint (we'll use rt-detr as fake checkpoint)
         from _maesy_core.model.model_tools import read_yaml
-        from _maesy_core.model.model_tools.model_factory import create_model_from_config
+        from _maesy_core.model.model_tools.model_factory import create_model_from_dict
         config = read_yaml('cfg/rt-detr6.yaml')
         config['num_classes'] = 3
-        model = create_model_from_config(config)
+        model = create_model_from_dict(config)
         mock_create_from_ckpt.return_value = model
 
         # Call train_vit_detector with a checkpoint

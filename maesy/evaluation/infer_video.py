@@ -13,7 +13,7 @@ from _maesy_core.model import MAEConfig
 
 from PIL import Image
 
-from _maesy_core.model.model_tools.model_factory import create_model
+from _maesy_core.model.model_tools.model_factory import create_model_from_config
 
 
 def write_video_from_imgs(images:list, output_path:str, fps:int=30):
@@ -58,7 +58,7 @@ def infer_video(args):
 
     # Create MAE model
     print("Creating MAE model...")
-    model = create_model("mae", mae_config) # MaskedAutoencoderViT(config=mae_config,)
+    model = create_model_from_config("mae", mae_config) # MaskedAutoencoderViT(config=mae_config,)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

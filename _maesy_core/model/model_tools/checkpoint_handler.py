@@ -124,8 +124,8 @@ class CheckpointHandler:
         checkpoint = torch.load(filepath, map_location=self.device)
 
         if model is None:
-            from _maesy_core.model.model_tools.model_factory import create_model_from_config  # import here to prevent circular import error
-            model = create_model_from_config(checkpoint['modelconfig'])
+            from _maesy_core.model.model_tools.model_factory import create_model_from_dict  # import here to prevent circular import error
+            model = create_model_from_dict(checkpoint['modelconfig'])
 
         if 'backbone' in checkpoint and 'head' in checkpoint:
             self._autoload_model(checkpoint, model)

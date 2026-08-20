@@ -1,11 +1,11 @@
 import pytest
 
 from _maesy_core.model import DETRConfig, RTDETRConfig
-from _maesy_core.model.model_tools.model_factory import create_model
+from _maesy_core.model.model_tools.model_factory import create_model_from_config
 
 
 def test_model_factory_creates_detr_and_rt_detr_models():
-    detr = create_model(
+    detr = create_model_from_config(
         "detr",
         DETRConfig(
             image_size=64,
@@ -20,7 +20,7 @@ def test_model_factory_creates_detr_and_rt_detr_models():
             hidden_dim_out_layers=64,
         ),
     )
-    rt_detr = create_model(
+    rt_detr = create_model_from_config(
         "rt_detr",
         RTDETRConfig(
             image_size=64,
@@ -41,5 +41,5 @@ def test_model_factory_creates_detr_and_rt_detr_models():
 
 def test_model_factory_rejects_wrong_config_type():
     with pytest.raises(TypeError, match="expects config type"):
-        create_model("rt_detr", DETRConfig())
+        create_model_from_config("rt_detr", DETRConfig())
 

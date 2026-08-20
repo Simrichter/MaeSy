@@ -8,7 +8,7 @@ from _maesy_core.model.heads import DummyHead
 
 @dataclass
 class OnnxModelConfig(BaseConfig):
-    onnx_model_path: str
+    onnx_model_path: str = ""
     type: str = "onnx"
     drop_layers: int = 0
 

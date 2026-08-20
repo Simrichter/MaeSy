@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 from _maesy_core.dataset import MaesyDataset, TrainPatchTransforms, ValPatchTransforms, MultiDataset
 from _maesy_core.model import PatchClassificatorConfig, PatchClassificator
-from _maesy_core.model.model_tools.model_factory import create_model_from_checkpoint, create_model_from_config
+from _maesy_core.model.model_tools.model_factory import create_model_from_checkpoint, create_model_from_dict
 from maesy.training import ClassificationTrainer
 from maesy.training.base_trainer import BaseTrainingConfig
 from maesy.training.utils import collate_classification_fn
@@ -140,7 +140,7 @@ def export_patch_classificator(
             config["enable_ellipse_detection"] = True
         else:
             config["enable_ellipse_detection"] = False
-        model = create_model_from_config(config)
+        model = create_model_from_dict(config)
     elif model_info.endswith(".pth"):
         model = create_model_from_checkpoint(model_info)
     else:

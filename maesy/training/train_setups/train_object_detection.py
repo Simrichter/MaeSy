@@ -12,7 +12,7 @@ from _maesy_core.inference.inferer import Inferer
 # Import models
 from _maesy_core.model.model_tools import replace_bn_with_frozenbn
 from _maesy_core.model.model_tools.checkpoint_handler import  CheckpointHandler
-from _maesy_core.model.model_tools.model_factory import create_model_from_config, known_architectures, create_model_from_checkpoint, read_yaml
+from _maesy_core.model.model_tools.model_factory import *
 
 # Import training components
 from maesy.training import DetectionTrainer, BaseTrainingConfig
@@ -177,11 +177,11 @@ def train_vit_detector(
         pin_memory=True
     )
 
-    if model_info.lower() in known_architectures:
-        config = read_yaml(f"cfg/{model_info.lower()}.yaml")
+    def _overwrite_conf_values(config: Dict) -> Dict:
         config["softmax_activated"] = not training_config.use_focal_loss
         if config["num_classes"] != -1 and config["num_classes"] != train_dataset.get_num_classes():
-            raise ValueError("num_classes parameter in model config does not match the datasets 'nc' parameter. Leave value in config on '-1' to enable auto-detect.")
+            raise ValueError(
+                "num_classes parameter in model config does not match the datasets 'nc' parameter. Leave value in config on '-1' to enable auto-detect.")
         config["num_classes"] = train_dataset.get_num_classes()
         if enable_line_detection:
             if config["line_class_id"] != -1 and config["line_class_id"] != train_dataset.get_special_classes()["line_class_id"]:
@@ -203,43 +203,48 @@ def train_vit_detector(
         config["denoising_num_queries"] = denoising_num_queries
         config["denoising_label_noise_ratio"] = denoising_label_noise_ratio
         config["denoising_box_noise_scale"] = denoising_box_noise_scale
-        model = create_model_from_config(config)
-    elif model_info.endswith(".pth"):
-        model = create_model_from_checkpoint(model_info)
-        # Apply denoising parameters to the loaded model's config
-        assert model.config.softmax_activated == (not training_config.use_focal_loss), f"Model config softmax_activated ({model.config.softmax_activated}) does not match expected value based on training config use_focal_loss ({training_config.use_focal_loss}). This might lead to unexpected behavior during training. Please make sure the model config and training config are compatible."
-        
-        # When resuming training, use the denoising config FROM THE CHECKPOINT, not the command-line args
-        # This prevents adding/removing parameters which would break optimizer state dict loading
-        # The checkpoint already has dn_query_embedding set up correctly from the original training
-        if not continue_training_from_checkpoint:
-            # Only apply new denoising settings if NOT resuming from this checkpoint
-            model.config.enable_denoising = enable_denoising
-            model.config.denoising_num_queries = denoising_num_queries
-            model.config.denoising_label_noise_ratio = denoising_label_noise_ratio
-            model.config.denoising_box_noise_scale = denoising_box_noise_scale
-            # Recreate denoising query content if needed
-            model.head.config.enable_denoising = enable_denoising
-            model.head.config.denoising_num_queries = denoising_num_queries
-            model.head.config.denoising_label_noise_ratio = denoising_label_noise_ratio
-            model.head.config.denoising_box_noise_scale = denoising_box_noise_scale
-            if enable_denoising and denoising_num_queries > 0:
-                model.head.dn_query_embedding = torch.nn.Embedding(denoising_num_queries, model.head.config.embed_dim)
-            else:
-                model.head.dn_query_embedding = None
-    else:
-        raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
+        return config
+
+    model = create_model(model_info, _overwrite_conf_values)
+    assert model.config.softmax_activated == (not training_config.use_focal_loss), (f"Model config softmax_activated ({model.config.softmax_activated}) "
+                                                                                    f"does not match expected value based on training config use_focal_loss "
+                                                                                    f"({training_config.use_focal_loss}). This might lead to unexpected "
+                                                                                    f"behavior during training. Please make sure the model config and training"
+                                                                                    f" config are compatible.")
+    # When resuming training, use the denoising config FROM THE CHECKPOINT, not the command-line args
+    # This prevents adding/removing parameters which would break optimizer state dict loading
+    # The checkpoint already has dn_query_embedding set up correctly from the original training
+    if not continue_training_from_checkpoint:
+        # Only apply new denoising settings if NOT resuming from this checkpoint
+        model.config.enable_denoising = enable_denoising
+        model.config.denoising_num_queries = denoising_num_queries
+        model.config.denoising_label_noise_ratio = denoising_label_noise_ratio
+        model.config.denoising_box_noise_scale = denoising_box_noise_scale
+        # Recreate denoising query content if needed
+        model.head.config.enable_denoising = enable_denoising
+        model.head.config.denoising_num_queries = denoising_num_queries
+        model.head.config.denoising_label_noise_ratio = denoising_label_noise_ratio
+        model.head.config.denoising_box_noise_scale = denoising_box_noise_scale
+        if enable_denoising and denoising_num_queries > 0:
+            model.head.dn_query_embedding = torch.nn.Embedding(denoising_num_queries, model.head.config.embed_dim)
+        else:
+            model.head.dn_query_embedding = None
+
 
     if pretrained_backbone != "":
         print(f"Loading pretrained backbone weights from {pretrained_backbone}...")
         CheckpointHandler(device=training_config.device).load_backbone(pretrained_backbone, model)
 
-    if not continue_training_from_checkpoint and (model.config.num_classes != train_dataset.get_num_classes() or (enable_line_detection and model.config.line_class_id != train_dataset.get_special_classes()["line_class_id"]) or (enable_ellipse_detection and model.config.ellipse_class_id != train_dataset.get_special_classes()["ellipse_class_id"])):
-        print(f"!!!!!!!!!!!!!!!!!!!!\nDetected different classification setup:\nModel has {model.config.num_classes} classes, dataset provides {train_dataset.get_num_classes()}\nLine class of model is {model.config.line_class_id} and Ellipse class is {model.config.ellipse_class_id}, dataset provides {train_dataset.get_special_classes()}\nCreating a new classification head with {train_dataset.get_num_classes()} classes and matching special classes.\n!!!!!!!!!!!!!!!!!!!!")
+    if not continue_training_from_checkpoint and (model.config.num_classes != train_dataset.get_num_classes() or (
+            enable_line_detection and model.config.line_class_id != train_dataset.get_special_classes()["line_class_id"]) or (
+                                                          enable_ellipse_detection and model.config.ellipse_class_id != train_dataset.get_special_classes()[
+                                                      "ellipse_class_id"])):
+        print(
+            f"!!!!!!!!!!!!!!!!!!!!\nDetected different classification setup:\nModel has {model.config.num_classes} classes, dataset provides {train_dataset.get_num_classes()}\nLine class of model is {model.config.line_class_id} and Ellipse class is {model.config.ellipse_class_id}, dataset provides {train_dataset.get_special_classes()}\nCreating a new classification head with {train_dataset.get_num_classes()} classes and matching special classes.\n!!!!!!!!!!!!!!!!!!!!")
         if not hasattr(model.head, "create_class_heads"):
-            raise AttributeError(f"\nmodel.head has no 'create_class_heads()' method that could be used to create a new classification head. Found content: {[f for f in dir(model.head) if not f.startswith('_') and callable(getattr(model.head, f))]}")
+            raise AttributeError(
+                f"\nmodel.head has no 'create_class_heads()' method that could be used to create a new classification head. Found content: {[f for f in dir(model.head) if not f.startswith('_') and callable(getattr(model.head, f))]}")
         model.update_head_conf(train_dataset.get_num_classes(), train_dataset.get_special_classes())
-
 
     # Create trainer
     trainer = DetectionTrainer(
@@ -338,8 +343,6 @@ def export_vit_detector(
     line_class_id: int = -1,
     ellipse_class_id: int = -1,
 ) -> None:
-    # import warnings
-    # warnings.filterwarnings("error", message="*Missing annotation for parameter*")
     """
     Export a trained object detection model to ONNX format for deployment.
 
@@ -349,7 +352,8 @@ def export_vit_detector(
         # :param detector_arch: Architecture of the model. If None, the architecture will be inferred from the checkpoint. (e.g., "detr" or "rt_detr")
     """
 
-    if model_info.lower() in known_architectures:
+    def _overwrite_conf_values(config: Dict) -> Dict:
+        # TODO: Make nicer
         assert num_classes != -1 and (line_class_id != -1 or not enable_line_detection) and (ellipse_class_id != -1 or not enable_ellipse_detection) and output_path != "", f"If using an architecture specifier, additional input is required"
         config = read_yaml(f"cfg/{model_info.lower()}.yaml")
         if config["num_classes"] != -1 and config["num_classes"] != num_classes:
@@ -371,11 +375,9 @@ def export_vit_detector(
             config["enable_ellipse_detection"] = True
         else:
             config["enable_ellipse_detection"] = False
-        model = create_model_from_config(config)
-    elif model_info.endswith(".pth"):
-        model = create_model_from_checkpoint(model_info)
-    else:
-        raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint that ends with '.pth'")
+        return config
+
+    model = create_model(model_info, _overwrite_conf_values)
 
     model.eval()
 

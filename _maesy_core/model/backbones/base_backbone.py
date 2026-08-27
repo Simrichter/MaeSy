@@ -1,17 +1,18 @@
 from dataclasses import dataclass
 from typing import Protocol, Tuple, Dict, List
 import torch
+from torch import nn
 from torchvision.transforms.v2 import Transform
 
 
 @dataclass
-class BaseBackboneConfig(Protocol):
+class BaseBackboneConfig:
     """
         Base type for backbone configurations.
     """
     type: str
 
-class BaseBackbone(Protocol):
+class BaseBackbone(nn.Module):
     """
         Base type for backbones.
         Only used for typing, since this class is a Protocol.
@@ -24,6 +25,12 @@ class BaseBackbone(Protocol):
             Forward pass through the backbone. Should return a dict of feature maps for each requested feature scale, e.g. {"c3": c3_features, "c4": c4_features, "c5": c5_features}
         """
         raise NotImplementedError("forward")
+
+    def get_input_dims(self) -> torch.Size:
+        """
+            Return the input dimensions of the backbone as a torch.Size object
+        """
+        raise NotImplementedError("get_input_dims")
 
     def get_feature_dims(self) -> Dict[str, torch.Size]:
         """

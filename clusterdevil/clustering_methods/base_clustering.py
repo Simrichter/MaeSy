@@ -19,19 +19,9 @@ class BaseClustering(ABC):
         #     transforms.ToTensor(),
         #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Standard ImageNet normalization
         # ])
-        img_transforms = ClusterTransforms(image_size=forward_scale)
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        if len(paths) > 0:
-            # Create dataset from all image directories
-            internal_dataset = MultiDataset(
-                [MaesyDataset(dataset_dir=path, annotation_type="image_folder", transforms=img_transforms, step=step, start_index=start_index) for path in
-                 paths])
-        else:
-            raise ValueError("Failed: No data path specified!")
 
-        new_dataloader = DataLoader(internal_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=False, in_order=True)
 
         existing_dataloader = None
         if chosen_paths is not None:

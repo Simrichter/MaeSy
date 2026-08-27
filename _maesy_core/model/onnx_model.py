@@ -19,3 +19,17 @@ class OnnxModel(BaseModel[OnnxModelConfig]):
 
         self.backbone = OnnxBackbone(OnnxBackboneConfig(onnx_path=self.config.onnx_model_path))
         self.head = DummyHead()
+
+    def get_model_hash(self) -> str:
+        """
+            Returns a hash of the model's configuration and parameters.
+            This can be used to uniquely identify the model for caching or versioning purposes.
+        """
+        import hashlib
+        import json
+
+        # Create a hash of the model's configuration and parameters
+        config_str = json.dumps(self.config.__dict__, sort_keys=True)
+        params_str = json.dumps({k: v.tolist() for k, v in self.state_dict().items()}, sort_keys=True)
+        combined_str = config_str + params_str
+        return f"{self.config.onnx_model_path.split('/')[-1].replace('.', '_')}_{hashlib.md5(combined_str.encode()).hexdigest()}"

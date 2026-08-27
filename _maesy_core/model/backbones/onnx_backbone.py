@@ -4,19 +4,21 @@ from typing import Dict, Tuple, List
 from torchvision.transforms.v2 import Transform
 import torch
 
+from _maesy_core.model.backbones import BaseBackbone, BaseBackboneConfig
+
 
 @dataclass
-class OnnxBackboneConfig:
+class OnnxBackboneConfig(BaseBackboneConfig):
     image_size: int = 224
     onnx_path: str = ""
-    type = f"onnx_backbone_{onnx_path}"
+    type:str = f"onnx_backbone_{onnx_path}"
 
-class OnnxBackbone:
+class OnnxBackbone(BaseBackbone):
     """ONNX Backbone for feature extraction."""
 
     def __init__(self, config: OnnxBackboneConfig):
         super().__init__()
-        self.config = config
+        self.config:OnnxBackboneConfig = config
         import onnxruntime as ort
         self.ort_session = ort.InferenceSession(self.config.onnx_path)
 
@@ -30,6 +32,12 @@ class OnnxBackbone:
         outputs = self.ort_session.run(None, {self.ort_session.get_inputs()[0].name: x_np})
         # Convert output back to torch tensor
         return {"c6": torch.tensor(outputs[0], device=x.device, dtype=x.dtype)}
+
+    def get_input_dims(self) -> torch.Size:
+        """
+            Return the input dimensions of the backbone as a torch.Size object
+        """
+        return torch.Size(self.ort_session.get_inputs()[0].shape)
 
     def get_feature_dims(self) -> Dict[str, torch.Size]:
         """

@@ -19,7 +19,7 @@ This approach is useful for selecting diverse training samples from a large imag
 import torch
 import numpy as np
 from tqdm import tqdm
-from ruhrbot_cluster.clustering_methods.base_clustering import BaseClustering
+from clusterdevil.clustering_methods.base_clustering import BaseClustering
 from _maesy_core.inference.inferer import Inferer
 from _maesy_core.model import ResnetFeatureExtractor, BaseModel
 

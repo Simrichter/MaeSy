@@ -118,7 +118,8 @@ class MaesyDataset(Dataset):
 
         if use_first_n is not None:
             self.images = self.images[:use_first_n]
-            self.annotations = self.annotations[:use_first_n]
+            if self.return_labels and self.annotations:
+                self.annotations = self.annotations[:use_first_n]
 
     def _load_dataset(self, yaml_data: dict, split: str, annotation_type: str, enable_lines: bool, enable_ellipses: bool):
         assert split != "None", "Failed: Split must be specified for dataset types 'detection', 'classification' or 'None'!\nOnly type 'image_folder' does not require a split!"

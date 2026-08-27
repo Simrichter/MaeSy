@@ -4,8 +4,8 @@ import torch
 from sklearn.cluster import KMeans as skKMeans
 from tqdm import tqdm
 
-from ruhrbot_cluster.clustering_methods.base_clustering import BaseClustering
-from ruhrbot_cluster.clustering_methods.pca import pca_reduction
+from clusterdevil.clustering_methods.base_clustering import BaseClustering
+from clusterdevil.clustering_methods.pca import pca_reduction
 from _maesy_core.inference.inferer import Inferer
 from _maesy_core.model import ResnetFeatureExtractor, BaseModel
 

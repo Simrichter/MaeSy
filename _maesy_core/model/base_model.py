@@ -30,6 +30,9 @@ class BaseModel(ABC, nn.Module, Generic[ConfigT]):
         self.config = config
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor | Dict[str, torch.Tensor]:
+        """
+            Forward pass through the model.
+        """
         out = self.backbone.forward(x, **kwargs)
         return self.head.forward(out, **kwargs)
 
@@ -52,6 +55,13 @@ class BaseModel(ABC, nn.Module, Generic[ConfigT]):
         preds = raw_out # At this point, model-specific post-processing steps can be applied (usually argmax on class logits, etc.)
         return raw_out, preds, targets
 
+    def get_input_dims(self) -> torch.Size:
+        """
+            Returns the input dimensions of the model as a torch.Size object.
+            This is usually the input dimensions of the backbone, but can be overridden in specific model implementations if necessary.
+        """
+        return self.backbone.get_input_dims()
+
     def update_backbone_conf(self, *args, **kwargs) -> None:
         """
             Update the backbone configuration with new parameters and recreate the bakcbone's affected layers if necessary.
@@ -72,3 +82,17 @@ class BaseModel(ABC, nn.Module, Generic[ConfigT]):
             Efficiency optimizations or stripping from auxilliary training outputs can be done here
         """
         return self
+
+    def get_model_hash(self) -> str:
+        """
+            Returns a hash of the model's configuration and parameters.
+            This can be used to uniquely identify the model for caching or versioning purposes.
+        """
+        import hashlib
+        import json
+
+        # Create a hash of the model's configuration and parameters
+        config_str = json.dumps(self.config.__dict__, sort_keys=True)
+        params_str = json.dumps({k: v.tolist() for k, v in self.state_dict().items()}, sort_keys=True)
+        combined_str = config_str + params_str
+        return f"{self.head.config.type}_{self.backbone.config.type}_{hashlib.md5(combined_str.encode()).hexdigest()}"

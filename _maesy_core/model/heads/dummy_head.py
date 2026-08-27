@@ -9,7 +9,7 @@ from _maesy_core.model.heads.base_head import BaseHeadConfig
 
 @dataclass
 class DummyHeadConfig(BaseHeadConfig):
-    type = "DummyHead"
+    type:str = "DummyHead"
 
 class DummyHead(nn.Module):
     """

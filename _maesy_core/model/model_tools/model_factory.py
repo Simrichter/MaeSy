@@ -164,6 +164,11 @@ def create_model(model_info: str, overwrite_func: Optional[Callable[[Dict], Dict
         model = create_model_from_dict(config)
     elif model_info.endswith(".pth"):
         model = create_model_from_checkpoint(model_info)
+    elif model_info.endswith(".onnx"):
+        config = {"type": "onnx", "onnx_model_path": model_info}
+        if overwrite_func:
+            config = overwrite_func(config)
+        model = create_model_from_dict(config)
     else:
         raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")
     return model

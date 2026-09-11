@@ -9,7 +9,12 @@ from torchvision.transforms import v2 as transforms
 from _maesy_core.model.model_tools.model_factory import create_model_from_dict
 from maesy.training import BaseTrainingConfig
 from _maesy_core.dataset import MaesyDataset
-from _maesy_core.model.model_tools.model_factory import known_architectures, read_yaml, create_model_from_checkpoint
+from _maesy_core.model.model_tools.model_factory import (
+    known_architectures,
+    read_yaml,
+    create_model_from_checkpoint,
+    resolve_architecture_path,
+)
 
 from maesy.training import MaeTrainer
 
@@ -94,8 +99,9 @@ def train_mae(
     )
 
     # Create MAE model
-    if model_info.lower() in known_architectures:
-        mae_config = read_yaml(f"cfg/{model_info.lower()}.yaml")
+    architecture_path = resolve_architecture_path(model_info)
+    if architecture_path is not None:
+        mae_config = read_yaml(str(architecture_path))
         model = create_model_from_dict(mae_config)
     elif not model_info.endswith(".pth"):
         raise ValueError(f"Model {model_info} is neither in {known_architectures} nor is it a path to a training checkpoint (must end with '.pth')")

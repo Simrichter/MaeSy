@@ -31,7 +31,8 @@ setup(
     entry_points={
         "console_scripts": [
             "maesy = maesy.command_line:main",
-            "clusterdevil = clusterdevil.command_line:main"
+            "clusterdevil = clusterdevil.command_line:main",
+            "maesy-ui = maesy_ui.app:main"
         ]
     },
     extras_require={

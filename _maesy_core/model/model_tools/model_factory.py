@@ -20,7 +20,28 @@ from _maesy_core.model import (
 )
 from _maesy_core.model.model_tools.checkpoint_handler import CheckpointHandler
 
-known_architectures = [config.rstrip(".yaml") for config in os.listdir(Path(os.path.realpath(__file__)).parent.parent.parent.parent / "cfg")]# ["rt-detr", "detr", "mae", "mae-multiscale"]
+CONFIG_ROOT = Path(__file__).resolve().parents[3] / "cfg"
+
+
+def architecture_paths() -> dict[str, Path]:
+    """Return canonical, slash-separated architecture IDs and YAML paths."""
+    return {
+        path.relative_to(CONFIG_ROOT).with_suffix("").as_posix().lower(): path
+        for path in CONFIG_ROOT.rglob("*.yaml")
+    }
+
+
+def resolve_architecture_path(model_info: str) -> Path | None:
+    """Resolve a canonical ID or an unambiguous legacy basename."""
+    architectures = architecture_paths()
+    key = model_info.lower().replace("\\", "/")
+    if key in architectures:
+        return architectures[key]
+    matches = [path for identifier, path in architectures.items() if identifier.rsplit("/", 1)[-1] == key]
+    return matches[0] if len(matches) == 1 else None
+
+
+known_architectures = list(architecture_paths())
 
 def _print_model_info(model: "BaseModel"):
     """Utility function to print model information."""
@@ -166,8 +187,9 @@ def create_model(model_info: str, overwrite_func: Optional[Callable[[Dict], Dict
         Returns:
             model: The initialized model according to the provided model_info
     """
-    if model_info.lower() in known_architectures:
-        config = read_yaml(f"cfg/{model_info.lower()}.yaml")
+    architecture_path = resolve_architecture_path(model_info)
+    if architecture_path is not None:
+        config = read_yaml(str(architecture_path))
         if overwrite_func:
             config = overwrite_func(config)
         model = create_model_from_dict(config)

@@ -16,6 +16,7 @@ from _maesy_core.model import (
     MaskedAutoencoderViT,
     PatchClassificator, PatchClassificatorConfig,
     OnnxModel, OnnxModelConfig,
+    ResnetFeatureExtractor, ResnetFeatureExtractorConfig
 )
 from _maesy_core.model.model_tools.checkpoint_handler import CheckpointHandler
 
@@ -60,8 +61,10 @@ def create_model_from_dict(config: Dict) -> "BaseModel":
             return PatchClassificator(_from_dict(PatchClassificatorConfig, config))
         case "onnx":
             return OnnxModel(_from_dict(OnnxModelConfig, config))
+        case "resnet_feature_extractor":
+            return ResnetFeatureExtractor(_from_dict(ResnetFeatureExtractorConfig, config))
         case _:
-            raise ValueError(f"Model type '{config.get('type', '')}' not recognized. Supported types: ['mae', 'mae-multiscale', 'detr', 'rt_detr']")
+            raise ValueError(f"Model type '{config.get('type', '')}' not recognized. Supported types: ['mae', 'mae-multiscale', 'detr', 'rt_detr', 'onnx' 'resnet_feature_extractor']")
 
 def create_model_from_checkpoint(checkpoint: str) -> "BaseModel":
     """
@@ -141,6 +144,12 @@ def create_model_from_config(model: str, config) -> "BaseModel":
         if not isinstance(config, RTDETRConfig):
             raise TypeError(f"Model 'rt_detr' expects config type RTDETRConfig, got {type(config).__name__}")
         instance = RTDETR(config=config)
+
+    elif model.startswith("resnet"):
+        from _maesy_core.model import ResnetFeatureExtractor, ResnetFeatureExtractorConfig
+        if not isinstance(config, ResnetFeatureExtractorConfig):
+            raise TypeError(f"Model '{model}' expects config type ResnetFeatureExtractorConfig, got {type(config).__name__}")
+        instance = ResnetFeatureExtractor(config=config)
 
     else:
         raise ValueError(f"Model {model} not recognized. Available models: ['mae', 'mae_multiscale', 'ViTDetector', 'detr', 'rt_detr', 'onnx']")

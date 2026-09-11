@@ -1,48 +1,47 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Dict
 
 import torch
 from torch.utils.data import DataLoader
 from _maesy_core.dataset import MultiDataset, MaesyDataset
 from _maesy_core.dataset.augmentations import ClusterTransforms
 from _maesy_core.model import BaseModel
+import importlib
 
-class BaseClustering(ABC):
+def get_available_clustering_methods() -> list[str]:
+    """
+    Get a list of available clustering methods from the clustering_methods submodule.
+    Returns:
+        A list of available clustering method names.
+    """
+    import clusterdevil.clustering_methods
+    available_methods = [method for method in dir(clusterdevil.clustering_methods) if not method.startswith("_")]
+    return available_methods
 
-    def run(self, paths: list[str], chosen_paths: Optional[list[str]]=None, batch_size=256, forward_scale=224, step=1, start_index=0, **kwargs):
-        """
-        Execute the specific clustering
-        """
-        # Setup transforms for feature extraction
-        # img_transforms = transforms.Compose([
-        #     transforms.Resize(size=(forward_scale, forward_scale)),
-        #     transforms.ToTensor(),
-        #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Standard ImageNet normalization
-        # ])
+def run(new_features: Dict[str, torch.Tensor], clustering_method: str, preexisting_features: Optional[Dict[str, torch.Tensor]], **kwargs) -> Dict[str, torch.Tensor]:
+    """
+        Execute clustering on feature vectors
+        Args:
+            :param new_features: A dictionary containing path:feature vector pairs to cluster
+            :param clustering_method: The name of the clustering method. This should match the name of a class that inherits from BaseClustering
+            :param preexisting_features: A dictionary containing path:feature vector pairs that are already selected and should be used as reference
 
+        Returns:
+            A dictionary containing the clustered results.
+    """
+    print("=" * 60)
+    print("Starting clustering process...")
 
+    available_methods = get_available_clustering_methods()
+    # print("available methods: ", available_methods)
+    if clustering_method not in available_methods:
+        raise ValueError(f"Clustering method '{clustering_method}' is not available. Available methods: {available_methods}")
+    print(f"Selected clustering method: {clustering_method}")
+    print(f"Number of feature vectors: {len(new_features)}")
+    if preexisting_features:
+        print(f"Found {len(preexisting_features)} preexisting feature vectors to use as reference.")
 
-
-        existing_dataloader = None
-        if chosen_paths is not None:
-            print(f"Adding pre-chosen images to FAISS index...")
-            # Create dataset from all image directories
-            chosen_multi = MultiDataset([
-                MaesyDataset(dataset_dir=path, annotation_type="image_folder", transforms=img_transforms, step=step, start_index=start_index) for path in
-                chosen_paths
-            ])
-            existing_dataloader = DataLoader(chosen_multi, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=False)
-
-
-        model = self._create_model(forward_scale)
-
-        return self._cluster(new_dataloader, existing_dataloader, model, **kwargs)
-
-    @abstractmethod
-    def _create_model(self, forward_scale):
-        pass
-
-    @abstractmethod
-    def _cluster(self, new_dataloader: DataLoader, existing_dataloader: Optional[DataLoader], model: BaseModel, **kwargs):
-        pass
+    # import the function passed in clustering_method
+    sel_method = getattr(importlib.import_module("clusterdevil.clustering_methods." + clustering_method), "cluster")
+    return sel_method(new_features=new_features, preexisting_features=preexisting_features, **kwargs)
 

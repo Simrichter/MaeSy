@@ -7,18 +7,18 @@ from _maesy_core.model.backbones.resnet_backbone import ResNetBackboneConfig
 from _maesy_core.model.heads import DummyHead
 
 @dataclass
-class ResNetFeatureExtractorConfig(BaseConfig):
+class ResnetFeatureExtractorConfig(BaseConfig):
     resnet_model: str = "resnet18"
     image_size: int = 224
     pretrained: bool = True
     out_layers: Tuple[str, ...] = ("c3", "c4", "c5")
     type: str = "resnet_feature_extractor"
 
-class ResnetFeatureExtractor(BaseModel[ResNetFeatureExtractorConfig]):
+class ResnetFeatureExtractor(BaseModel[ResnetFeatureExtractorConfig]):
     """
         A feature extractor model using a ResNet backbone and a dummy head.
     """
-    def __init__(self, config: ResNetFeatureExtractorConfig):
+    def __init__(self, config: ResnetFeatureExtractorConfig):
         super().__init__(config)
 
         bbone_conf = ResNetBackboneConfig(

@@ -1,7 +1,7 @@
 """Module for model architecture definitions and configurations."""
 
 from .base_model import BaseModel, BaseConfig
-from .resnet_featureextractor import ResnetFeatureExtractor
+from .resnet_featureextractor import ResnetFeatureExtractor, ResnetFeatureExtractorConfig
 from _maesy_core.model.mae_model import MaskedAutoencoderViT, MAEConfig
 from _maesy_core.model.mae_multiscale import MaskedAutoencoderMultiscale, MaeMultiscaleConfig
 from _maesy_core.model.vit_detector import ViTDetector, ViTDetectorConfig

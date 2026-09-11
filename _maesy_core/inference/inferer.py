@@ -3,6 +3,7 @@ from typing import Optional
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from _maesy_core.utils import to_device
 
 from _maesy_core.dataset.utils import handle_raw_batch
 from _maesy_core.model import BaseModel
@@ -49,13 +50,17 @@ class Inferer:
 
         all_predictions = []
         all_targets = []
+        self.model = self.model.to(self.device)
+        assert next(self.model.parameters()).is_cuda == (self.device.type == "cuda"), f"Error: Model is on {next(self.model.parameters()).device}, but device is {self.device.type}."
 
         print(f"Running inference on {len(self.data_loader)} batches... (Device: {self.device.type})")
         for batch in tqdm(self.data_loader):
             images, targets = handle_raw_batch(batch, self.device)
             _, img_preds, targets = self.model.infer(images, targets, **kwargs)
+            img_preds = to_device(img_preds, torch.device("cpu"))
             all_predictions.append(img_preds)
             if targets:
+                targets = to_device(targets, torch.device("cpu"))
                 all_targets.extend(targets)
         print("Done.")
         return all_predictions, all_targets

@@ -1,0 +1,6 @@
+resnet_model: "resnet50"
+image_size: 224
+pretrained: True
+out_layers: !!python/tuple
+- c6
+type: "resnet_feature_extractor"

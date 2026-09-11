@@ -6,9 +6,10 @@ from typing import Tuple, Dict
 import torch
 import torch.nn as nn
 from torchvision.models import resnet50, ResNet50_Weights, resnet18, ResNet18_Weights, resnet34, ResNet34_Weights, resnet101, ResNet101_Weights, resnet152, ResNet152_Weights
+from _maesy_core.model.backbones import BaseBackbone, BaseBackboneConfig
 
 @dataclass
-class ResNetBackboneConfig:
+class ResNetBackboneConfig(BaseBackboneConfig):
     """
         Config class for ResNet backbones
 
@@ -24,7 +25,7 @@ class ResNetBackboneConfig:
     pretrained: bool = True
     feature_scales: Tuple[str, ...] = field(default_factory = ("c3", "c4", "c5"))
 
-class ResNetBackbone:
+class ResNetBackbone(BaseBackbone):
     """ResNet Backbone for feature extraction."""
 
     def __init__(self, config: ResNetBackboneConfig):
@@ -34,6 +35,8 @@ class ResNetBackbone:
         Args:
             :param config: ResNetBackboneConfig class that holds all necessary parameters
         """
+        super().__init__()
+
         self.config = config
 
         weights = None
@@ -109,6 +112,15 @@ class ResNetBackbone:
             Call the forward method of the backbone (neccessary, as this backbone is not a nn.Module subclass)
         """
         return self.forward(*args, **kwargs)
+
+    def get_input_dims(self) -> torch.Size:
+        """
+        Get the input dimensions of the backbone.
+
+        Returns:
+            :return: Input dimensions as a torch.Size object
+        """
+        return torch.Size((3, self.config.image_size, self.config.image_size))
 
     def get_feature_dims(self) -> Dict[str, torch.Size]:
         """

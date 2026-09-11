@@ -31,25 +31,24 @@ def extract_features(model: BaseModel, paths: List[str], device:Optional[str]=No
 
     model.eval()
     in_dims = model.get_input_dims()
-    assert in_dims[-2] == in_dims[-1], "Failed, at the moment the model input dimensions must be square (height == width)"
-    img_transforms = ClusterTransforms(image_size=in_dims[-1])
+    assert in_dims[-2] == in_dims[-1], "Failed, only models with square input dimensions are supported (height == width)"
 
     if len(paths) > 0:
+        img_transforms = ClusterTransforms(image_size=in_dims[-1])
         # Create dataset from all image directories
         print(f"Extracting features for {len(paths)} paths...")
         internal_dataset = MultiDataset([MaesyDataset(dataset_dir=path, annotation_type="image_folder", transforms=img_transforms, use_first_n=10) for path in paths])
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else torch.device(device)
+
+        new_dataloader = DataLoader(internal_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory="cuda" in str(device), drop_last=False, in_order=True)
+
+        inferer = Inferer(model, new_dataloader, device=device)
+        preds, _ = inferer.infer()
+
+        paths = [str(internal_dataset.get_image_path(i)) for i in range(len(internal_dataset))]
+        final_features.update({path: feature for path, feature in zip(paths, torch.cat([p["c6"] for p in preds], dim=0))})
     else:
         print("No further paths to extract features from.")
-        return {}
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else torch.device(device)
-
-    new_dataloader = DataLoader(internal_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory="cuda" in str(device), drop_last=False, in_order=True)
-
-    inferer = Inferer(model, new_dataloader)
-    preds, _ = inferer.infer()
-
-    paths = [str(internal_dataset.get_image_path(i)) for i in range(len(internal_dataset))]
-    final_features.update({path: feature for path, feature in zip(paths, torch.cat([p["c6"] for p in preds], dim=0))})
     store_features(final_features, model_hash)
     return final_features

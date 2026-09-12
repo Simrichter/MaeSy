@@ -355,7 +355,6 @@ def export_vit_detector(
     def _overwrite_conf_values(config: Dict) -> Dict:
         # TODO: Make nicer
         assert num_classes != -1 and (line_class_id != -1 or not enable_line_detection) and (ellipse_class_id != -1 or not enable_ellipse_detection) and output_path != "", f"If using an architecture specifier, additional input is required"
-        config = read_yaml(f"cfg/{model_info.lower()}.yaml")
         if config["num_classes"] != -1 and config["num_classes"] != num_classes:
             raise ValueError("num_classes parameter in model config does not match the datasets 'nc' parameter. Leave value in config on '-1' to enable auto-detect.")
         config["num_classes"] = num_classes

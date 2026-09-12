@@ -37,7 +37,7 @@ def extract_features(model: BaseModel, paths: List[str], device:Optional[str]=No
         img_transforms = ClusterTransforms(image_size=in_dims[-1])
         # Create dataset from all image directories
         print(f"Extracting features for {len(paths)} paths...")
-        internal_dataset = MultiDataset([MaesyDataset(dataset_dir=path, annotation_type="image_folder", transforms=img_transforms, use_first_n=10) for path in paths])
+        internal_dataset = MultiDataset([MaesyDataset(dataset_dir=path, annotation_type="image_folder", transforms=img_transforms, use_first_n=None) for path in paths])
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else torch.device(device)
 

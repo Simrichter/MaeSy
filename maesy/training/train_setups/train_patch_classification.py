@@ -8,7 +8,13 @@ from torch.utils.data import DataLoader
 
 from _maesy_core.dataset import MaesyDataset, TrainPatchTransforms, ValPatchTransforms, MultiDataset
 from _maesy_core.model import PatchClassificatorConfig, PatchClassificator
-from _maesy_core.model.model_tools.model_factory import create_model_from_checkpoint, create_model_from_dict
+from _maesy_core.model.model_tools.model_factory import (
+    create_model_from_checkpoint,
+    create_model_from_dict,
+    known_architectures,
+    read_yaml,
+    resolve_architecture_path,
+)
 from maesy.training import ClassificationTrainer
 from maesy.training.base_trainer import BaseTrainingConfig
 from maesy.training.utils import collate_classification_fn
@@ -118,9 +124,10 @@ def export_patch_classificator(
         # :param detector_arch: Architecture of the model. If None, the architecture will be inferred from the checkpoint. (e.g., "detr" or "rt_detr")
     """
 
-    if model_info.lower() in known_architectures:
+    architecture_path = resolve_architecture_path(model_info)
+    if architecture_path is not None:
         assert num_classes != -1 and (line_class_id != -1 or not enable_line_detection) and (ellipse_class_id != -1 or not enable_ellipse_detection) and output_path != "", f"If using an architecture specifier, additional input is required"
-        config = read_yaml(f"cfg/{model_info.lower()}.yaml")
+        config = read_yaml(str(architecture_path))
         if config["num_classes"] != -1 and config["num_classes"] != num_classes:
             raise ValueError("num_classes parameter in model config does not match the datasets 'nc' parameter. Leave value in config on '-1' to enable auto-detect.")
         config["num_classes"] = num_classes

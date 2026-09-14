@@ -30,11 +30,11 @@ def extract_features(model: BaseModel, paths: List[str], device:Optional[str]=No
     paths = [path for path in paths if not any(path.startswith(loaded_path.removesuffix(f"features_{model_hash}.feat")) for loaded_path in loaded_paths)]
 
     model.eval()
-    in_dims = model.get_input_dims()
-    assert in_dims[-2] == in_dims[-1], "Failed, only models with square input dimensions are supported (height == width)"
+    # assert in_dims[-2] == in_dims[-1], "Failed, only models with square input dimensions are supported (height == width)"
 
     if len(paths) > 0:
-        img_transforms = ClusterTransforms(image_size=in_dims[-1])
+        in_dims = model.get_input_dims()
+        img_transforms = ClusterTransforms(image_height=in_dims[-2], image_width=in_dims[-1])
         # Create dataset from all image directories
         print(f"Extracting features for {len(paths)} paths...")
         internal_dataset = MultiDataset([MaesyDataset(dataset_dir=path, annotation_type="image_folder", transforms=img_transforms, use_first_n=None) for path in paths])

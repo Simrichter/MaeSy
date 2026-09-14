@@ -553,8 +553,12 @@ class ValPatchTransforms:
         return self.normalize(image), target
 
 class ClusterTransforms:
-    def __init__(self, image_size: int = 224) -> None:
-        self.image_size = image_size
+    """
+        Image transforms for use with clusterdevil feature extraction. Resizes the image to the specified size and normalizes it.
+        Passing targets triggers a warning, as ClusterTransforms does not support target transformations.
+    """
+    def __init__(self, image_height: int = 224, image_width: int = 224) -> None:
+        self.image_size = [image_height, image_width]
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     def __call__(self, image: torch.Tensor, target: Optional[Dict[str, torch.Tensor]] = None):
@@ -562,11 +566,10 @@ class ClusterTransforms:
         height, width = _get_hw(image)
         image = F.resize(
             image,
-            size=[self.image_size, self.image_size],
+            size=self.image_size,
             interpolation=InterpolationMode.BILINEAR,
             antialias=True,
         )
-        if target is None:
-            return self.normalize(image)
-        target = _resize_targets(target, (height, width), (self.image_size, self.image_size))
-        return self.normalize(image), target
+        if target is not None:
+            print("Warning: ClusterTransforms does not support target transformations. Ignoring target.")
+        return self.normalize(image)

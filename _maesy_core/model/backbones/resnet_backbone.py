@@ -64,9 +64,9 @@ class ResNetBackbone(BaseBackbone):
         self.calc_c5 = "c5" in self.config.feature_scales or "c6" in self.config.feature_scales
         self.calc_c6 = "c6" in self.config.feature_scales
 
-        self.feature_dim: Dict[str, int] = {"c3":128, "c4":256, "c5":512} if self.config.version in {"resnet18", "resnet34"} else {"c3":512, "c4":1024, "c5":2048}
+        self.feature_dim: Dict[str, int] = {"c3":128, "c4":256, "c5":512, "c6": 512} if self.config.version in {"resnet18", "resnet34"} else {"c3":512, "c4":1024, "c5":2048, "c6": 2048}
 
-        self.spatial_feature_size = {"c3":self.config.image_size // 8, "c4":self.config.image_size // 16, "c5":self.config.image_size // 32}
+        self.spatial_feature_size = {"c3":self.config.image_size // 8, "c4":self.config.image_size // 16, "c5":self.config.image_size // 32, "c6": 1}
 
         model = constructors[config.version](weights=weights)
 

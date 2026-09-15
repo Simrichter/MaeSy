@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Tuple, Dict
+
+import torch
 
 from _maesy_core.model import *
 from _maesy_core.model.backbones import ResNetBackbone
@@ -29,3 +31,6 @@ class ResnetFeatureExtractor(BaseModel[ResnetFeatureExtractorConfig]):
         )
         self.backbone = ResNetBackbone(bbone_conf)
         self.head = DummyHead()
+
+    def get_output_dims(self) -> Dict[str, torch.Size]:
+        return self.backbone.get_feature_dims()

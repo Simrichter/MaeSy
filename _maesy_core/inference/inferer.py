@@ -51,7 +51,7 @@ class Inferer:
         all_predictions = []
         all_targets = []
         self.model = self.model.to(self.device)
-        assert self.model.get_device() == self.device, f"Error: Model is on {self.model.get_device()}, but device is {self.device}."
+        assert self.model.get_device().type == self.device.type, f"Error: Model is on '{self.model.get_device().type}', but device is '{self.device.type}'."
 
         print(f"Running inference on {len(self.data_loader)} batches... (Device: {self.device.type})")
         for batch in tqdm(self.data_loader):

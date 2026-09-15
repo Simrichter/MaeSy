@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Dict
 
 import torch
 
@@ -33,3 +34,9 @@ class OnnxModel(BaseModel[OnnxModelConfig]):
         params_str = json.dumps({k: v.tolist() for k, v in self.state_dict().items()}, sort_keys=True)
         combined_str = config_str + params_str
         return f"{self.config.onnx_model_path.split('/')[-1].replace('.', '_')}_{hashlib.md5(combined_str.encode()).hexdigest()}"
+
+    def get_output_dims(self) -> Dict[str, torch.Size]:
+        return self.backbone.get_feature_dims()
+
+    def get_device(self) -> torch.device:
+        return self.backbone.get_device()

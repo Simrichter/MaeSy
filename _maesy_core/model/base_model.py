@@ -55,12 +55,26 @@ class BaseModel(ABC, nn.Module, Generic[ConfigT]):
         preds = raw_out # At this point, model-specific post-processing steps can be applied (usually argmax on class logits, etc.)
         return raw_out, preds, targets
 
+    def get_device(self) -> torch.device:
+        """
+            Returns the device on which the model's parameters are located.
+            This is useful for ensuring that inputs are moved to the same device as the model before inference.
+        """
+        return next(self.parameters()).device
+
     def get_input_dims(self) -> torch.Size:
         """
             Returns the input dimensions of the model as a torch.Size object.
             This is usually the input dimensions of the backbone, but can be overridden in specific model implementations if necessary.
         """
         return self.backbone.get_input_dims()
+
+    def get_output_dims(self) -> Dict[str, torch.Size]:
+        """
+            Returns the output dimensions of all the model's outputs as a dictionary of torch.Size objects.
+            This is usually the output dimensions of the head, but can be overridden in specific model implementations if necessary.
+        """
+        return self.head.get_output_dims()
 
     def update_backbone_conf(self, *args, **kwargs) -> None:
         """

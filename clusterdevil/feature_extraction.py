@@ -3,13 +3,14 @@ from _maesy_core.model import BaseModel
 from clusterdevil.utils import store_features, find_and_load_features
 
 
-def extract_features(model: BaseModel, paths: List[str], device:Optional[str]=None, batch_size=1):
+def extract_features(model: BaseModel, paths: List[str], device:Optional[str]=None, batch_size=1, intermediate_layer: Optional[str] = None):
     """
     Extract features from a model given a dataloader and device.
     :param model: The model to extract features from
     :param paths: List of paths to the datasets to extract features from
     :param device: The device to run the model on (e.g., 'cuda' or 'cpu')
     :param batch_size: The batch size for the dataloader
+    :param intermediate_layer: The name of the intermediate layer to use for feature extraction (only for ONNX models)
     :return: A list of extracted features
     """
     from _maesy_core.dataset import MaesyDataset, MultiDataset
@@ -47,7 +48,7 @@ def extract_features(model: BaseModel, paths: List[str], device:Optional[str]=No
         preds, _ = inferer.infer()
 
         paths = [str(internal_dataset.get_image_path(i)) for i in range(len(internal_dataset))]
-        final_features.update({path: feature for path, feature in zip(paths, torch.cat([p["c6"] for p in preds], dim=0))})
+        final_features.update({path: feature for path, feature in zip(paths, torch.cat([p[list(model.get_output_dims().keys())[0]] for p in preds], dim=0))})
     else:
         print("No further paths to extract features from.")
     store_features(final_features, model_hash)

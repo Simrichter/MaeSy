@@ -24,3 +24,9 @@ class BaseHead(Protocol):
             Forward pass through the head. Should return the final output of the model, e.g. class logits, bounding box predictions, etc.
         """
         raise NotImplementedError("forward")
+
+    def get_output_dims(self) -> Dict[str, torch.Size]:
+        """
+            Returns the output dimensions of the head as a dictionary of torch.Size objects.
+        """
+        raise NotImplementedError("get_output_dims")

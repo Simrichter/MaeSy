@@ -32,6 +32,7 @@ from .argparse_adapter import (
     validate_argv,
 )
 from .registry import ArchitectureTree, CliTarget, registered_targets
+from .state import decode_target_state, load_state, save_state, target_state
 
 
 def browser_selection(
@@ -113,7 +114,9 @@ class MaesyUiApp:
                 pass
         self._configure_style()
         self._build_layout()
+        self._restore_state()
         self._render_form()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(50, self._drain_output)
 
     def _load_logo(self) -> tk.PhotoImage | None:
@@ -320,8 +323,11 @@ class MaesyUiApp:
 
     def _on_target_changed(self, _event: object = None) -> None:
         self._capture_values()
-        self.subcommand_values.clear()
-        self.form_values.clear()
+        self._remember_target(self._last_target_name)
+        self.subcommand_values, self.form_values = decode_target_state(
+            self._target_states.get(self.target.display_name), self.target.parser()
+        )
+        self._last_target_name = self.target.display_name
         self._render_form()
 
     def _selected_path(self) -> tuple[str, ...]:
@@ -687,6 +693,28 @@ class MaesyUiApp:
         self.form_values.update(
             {key: widget_field.value() for key, widget_field in self.widget_fields.items()}
         )
+
+    def _restore_state(self) -> None:
+        saved = load_state()
+        self._target_states = {name: raw for name, raw in saved.items() if isinstance(raw, dict)}
+        target_name = saved.get("target")
+        if isinstance(target_name, str) and target_name in self.target_by_name:
+            self.target_var.set(target_name)
+        self.subcommand_values, self.form_values = decode_target_state(
+            self._target_states.get(self.target.display_name), self.target.parser()
+        )
+        self._last_target_name = self.target.display_name
+
+    def _remember_target(self, name: str) -> None:
+        self._target_states[name] = target_state(self.subcommand_values, self.form_values)
+
+    def _on_close(self) -> None:
+        self._capture_values()
+        self._remember_target(self._last_target_name)
+        state = dict(self._target_states)
+        state["target"] = self.target.display_name
+        save_state(state)
+        self.root.destroy()
 
     def run(self) -> None:
         if self.running:

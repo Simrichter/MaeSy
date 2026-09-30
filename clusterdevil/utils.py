@@ -35,12 +35,12 @@ def find_and_load_features (paths: List[str], model_hash: str) -> tuple[Dict[str
     import torch
     features = {}
     for path in paths:
-        print(f"Loading features from {path}...")
+        # print(f"Loading features from {path}...")
         loaded_features = torch.load(path)
         if not isinstance(loaded_features, dict):
             raise ValueError(f"Expected a dictionary of features in file {path}, but got {type(loaded_features).__name__}")
         features.update(loaded_features)
-    print(f"Success")
+    # print(f"Success")
     return features, paths
 
 def _find_feature_files(paths: List[str], model_hash: str) -> List[str]:
@@ -61,10 +61,9 @@ def _find_feature_files(paths: List[str], model_hash: str) -> List[str]:
             print(f"Warning: Path '{path}' does not exist. Skipping.")
             continue
         if os.path.isdir(path):
-            for root, _, files in os.walk(path):
-                for file in files:
-                    if file.endswith(f"features_{model_hash}.feat"):
-                        feature_files.append(os.path.join(root, file))
+            for entry in os.scandir(path):
+                if entry.is_file() and entry.name.endswith(f"features_{model_hash}.feat"):
+                    feature_files.append(entry.path)
         elif os.path.isfile(path) and path.endswith(f"features_{model_hash}.feat"):
             feature_files.append(path)
     return feature_files

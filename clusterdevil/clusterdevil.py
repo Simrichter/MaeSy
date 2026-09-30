@@ -1,15 +1,16 @@
 from typing import List, Optional
 
 
-def cluster(model_info: str, dataset_paths: List[str], intermediate_layer: Optional[str] = None, faiss_threshold: float = 0.75):
+def cluster(model_info: str, dataset_paths: List[str], preexisting_paths: List[str], intermediate_layer: Optional[str] = None, faiss_threshold: float = 0.75):
     """
     Cluster images in a dataset using a specified model.
 
     Args:
-        model_info (str): The path to the model to use for feature extraction.
-        dataset_paths (List[str]): The paths to the datasets to cluster.
-        intermediate_layer (Optional[str]): The name of the intermediate layer to use for feature extraction (only for ONNX models).
-        faiss_threshold (float): The largest acceptable similarity threshold for FAISS clustering. Lower values result in less images.
+        :param model_info: (str): The path to the model to use for feature extraction.
+        :param dataset_paths: (List[str]): The paths to the datasets to cluster.
+        :param preexisting_paths: (List[str]): The paths to the datasets that contain preexisting features to use as reference.
+        :param intermediate_layer: (Optional[str]): The name of the intermediate layer to use for feature extraction (only for ONNX models).
+        :param faiss_threshold: (float): The largest acceptable similarity threshold for FAISS clustering. Lower values result in less images.
     """
     from _maesy_core.model.model_tools.model_factory import create_model
     from _maesy_core.inference.inferer import Inferer
@@ -17,8 +18,16 @@ def cluster(model_info: str, dataset_paths: List[str], intermediate_layer: Optio
     from clusterdevil.clustering_methods.base_clustering import run
 
     model = create_model(model_info)
+    preexisting_dict = {}
+    if preexisting_paths:
+        print("Loading reference data...")
+        preexisting_dict = extract_features(model, preexisting_paths, intermediate_layer = intermediate_layer)
+    print("="*30)
+    print("Loading data...")
     feature_dict = extract_features(model, dataset_paths, intermediate_layer = intermediate_layer)
-    selected = run(new_features=feature_dict, clustering_method="FAISS", preexisting_features=None, similarity_threshold=faiss_threshold)
+    print("Clustering data...")
+    # print("feature_dict keys: ", [*feature_dict.keys()])
+    selected = run(new_features=feature_dict, clustering_method="FAISS", preexisting_features=preexisting_dict, similarity_threshold=faiss_threshold)
 
     _copy_selected_images(list(selected.keys()), dataset_paths[0]+"/clustered_output")
 

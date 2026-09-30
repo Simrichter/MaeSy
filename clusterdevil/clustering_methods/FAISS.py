@@ -103,14 +103,12 @@ def cluster(new_features: Dict[str, torch.Tensor], similarity_threshold: float, 
     index = faiss.IndexFlatIP(feature_dim)
 
     # Add preexisting features to the FAISS index if provided
-    if preexisting_features is not None:
+    if preexisting_features is not None and len(preexisting_features) > 0:
         assert feature_dim == preexisting_features[next(iter(preexisting_features))].flatten().shape[0], "Feature dimensions of new and preexisting features must match!"
         # features_cpu = features.cpu().numpy()
-        feature_norm = _get_feature_norm(preexisting_features)
         for _, feature in preexisting_features.items():
             # Normalize features for cosine similarity
-            feature = feature / feature_norm
-            feature = feature.flatten()#.unsqueeze(0)  # Ensure feature is a 1D vector
+            feature = (feature/feature.norm()).flatten().unsqueeze(0)
             index.add(feature)
 
     selected = {}

@@ -19,17 +19,21 @@ def extract_features(model: BaseModel, paths: List[str], device:Optional[str]=No
     from _maesy_core.dataset.augmentations import ClusterTransforms
     import torch
 
+    if not paths or len(paths) == 0:
+        return {}
+
     # Check if features already exist for the given paths and model hash
     model_hash = model.get_model_hash()
     final_features, loaded_paths = find_and_load_features(paths, model_hash)
     if len(loaded_paths) > 0:
-        print(f"Found existing features for model hash '{model_hash}' in the following paths:")
+        print(f"Found existing features in the following paths:")
         for loaded_path in loaded_paths:
             print(f" - {loaded_path}")
-    else:
-        print(f"No existing features found for model hash '{model_hash}' in the provided paths.")
-    paths = [path for path in paths if not any(path.startswith(loaded_path.removesuffix(f"features_{model_hash}.feat")) for loaded_path in loaded_paths)]
+    # else:
+    #     print(f"No existing features found for model hash '{model_hash}' in the provided paths.")
 
+    # Ignore paths that are already loaded
+    paths = [path for path in paths if not any(path.startswith(loaded_path.removesuffix(f"/features_{model_hash}.feat")) for loaded_path in loaded_paths)]
     model.eval()
     # assert in_dims[-2] == in_dims[-1], "Failed, only models with square input dimensions are supported (height == width)"
 
@@ -49,7 +53,7 @@ def extract_features(model: BaseModel, paths: List[str], device:Optional[str]=No
 
         paths = [str(internal_dataset.get_image_path(i)) for i in range(len(internal_dataset))]
         final_features.update({path: feature for path, feature in zip(paths, torch.cat([p[list(model.get_output_dims().keys())[0]] for p in preds], dim=0))})
-    else:
-        print("No further paths to extract features from.")
-    store_features(final_features, model_hash)
+        store_features(final_features, model_hash)
+    # else:
+    #     print("No further paths to extract features from.")
     return final_features

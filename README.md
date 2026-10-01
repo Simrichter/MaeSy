@@ -19,9 +19,8 @@ Install the package
 pip install MaeSy
 ```
 ## Usage
-The maesy framework is organized hierarchically.
-Use the -h flag at every level to obtain the parameter options of a (sub)module
 
+The maesy framework is organized hierarchically.
 The modules are structured as follows:
 ```
 maesy
@@ -44,6 +43,16 @@ maesy
 ├── export: exports a model to onnx format
 └── bulk_execute: Automatically execute maesy-commands from a text file
 ```
+
+### GUI
+A GUI application can be started from the command line with
+```
+maesy-ui
+```
+
+### CLI
+Alternatively, commands can be passed to the maesy framework directly via the command line.
+Use the -h flag at every level to obtain the parameter options of a (sub)module
 
 Example commands:
 ```

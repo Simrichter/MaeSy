@@ -29,8 +29,10 @@ def visualize_dataset(dataset: MaesyDataset, output_dir: str, label_file: str = 
 
     for idx, (img, targets) in tqdm(enumerate(dataset)):
         drawn = draw_objects_in_tensor((img * 255).to(torch.uint8), targets["boxes"],targets["labels"][:len(targets["boxes"])], targets["line_points"], targets["ellipses"])
-        out_path = os.path.join(output_dir, dataset.get_image_path(idx).name)
-        save_image(drawn / 255, out_path)
+        relative_path = dataset.get_image_path(idx).relative_to(dataset.images_dir)
+        out_path = Path(output_dir) / relative_path
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        save_image(drawn / 255, str(out_path))
         # save_image(img, out_path)
 
 
@@ -96,54 +98,54 @@ def visualize_data(input_dir: str, output_dir: str, splits: Optional[list[str]] 
     if special_classes is None:
         special_classes = {}
 
-    lbl_dir = input_dir if label_path == "" else Path(label_path)
+    input_root = Path(input_dir)
+    lbl_dir = input_root if label_path == "" else Path(label_path)
+    image_paths = sorted(
+        path for path in input_root.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg"}
+    )
 
-    for file in tqdm(os.listdir(input_dir)):
-        suffix = "." + file.split(".")[-1]
-        if suffix in (".png", ".jpg", ".jpeg"):
-            img_path = os.path.join(input_dir, file)
-            txt_path = os.path.join(lbl_dir, file.replace(suffix, ".txt"))
+    for image_path in tqdm(image_paths):
+        relative_path = image_path.relative_to(input_root)
+        file = image_path.name
+        img_path = str(image_path)
+        txt_path = lbl_dir / relative_path.with_suffix(".txt")
 
-            # Bild laden
-            if not os.path.exists(txt_path):
-                print(f"WARNING: No annotation file found for image {img_path}, skipping visualization.\n (Expected annotation file: {txt_path})")
-                continue
+        if not txt_path.exists():
+            print(f"WARNING: No annotation file found for image {img_path}, skipping visualization.\n (Expected annotation file: {txt_path})")
+            continue
 
-            boxes = []
-            labels = []
-            lines = []
-            ellipses = []
-            for l in open(txt_path, "r").readlines():
-                parts = l.split(" ")
+        boxes = []
+        labels = []
+        lines = []
+        ellipses = []
+        with txt_path.open("r", encoding="utf-8") as annotations:
+            for line in annotations:
+                parts = line.split()
+                if not parts:
+                    continue
                 cls_id = int(parts[0])
                 if cls_id not in special_classes.values():
-                    boxes.append((box := BoundingBox.from_str(l, xyxy=True)).coordinates_as_tensor())
+                    box = BoundingBox.from_str(line, xyxy=True)
+                    boxes.append(box.coordinates_as_tensor())
                     labels.append(box.cls())
-                elif cls_id == special_classes["lines"]:
-                    lines.append([float(x) for x in parts[1:]])
-                elif cls_id == special_classes["ellipses"]:
-                    ellipses.append([float(x) for x in parts[1:]])
+                elif cls_id == special_classes.get("lines"):
+                    lines.append([float(value) for value in parts[1:]])
+                elif cls_id == special_classes.get("ellipses"):
+                    ellipses.append([float(value) for value in parts[1:]])
 
-                if len(boxes) == 0:
-                    log_print(f"Empty annotations for image {img_path}, skipping visualization.\n (Boxes: {boxes})")
-                    continue
-                # img = draw_boxes_in_image(img_path, boxes, name_coding=name_coding).float() / 255.0
-            img = read_image(img_path)[:3]  # Convert RGBA to RGB by dropping alpha channel if necessary
-            if len(boxes) > 0:
-                b = torch.stack(boxes)
-                img = _draw_boxes_in_tensor(img, b, labels=torch.tensor(labels), name_coding=name_coding, xyxy=True)
-            img = _draw_lines_in_tensor(img, torch.tensor(lines))
-            img = _draw_ellipses_in_tensor(img, torch.tensor(ellipses))
-            img = img / 255.0
+        img = read_image(img_path)[:3]  # Convert RGBA to RGB by dropping alpha channel if necessary
+        if len(boxes) > 0:
+            b = torch.stack(boxes)
+            img = _draw_boxes_in_tensor(img, b, labels=torch.tensor(labels), name_coding=name_coding, xyxy=True)
+        img = _draw_lines_in_tensor(img, torch.tensor(lines))
+        img = _draw_ellipses_in_tensor(img, torch.tensor(ellipses))
+        img = img / 255.0
 
-            # Annotiertes Bild speichern
-            out_path = os.path.join(output_dir, file)
-            save_image(img, out_path)
-
-            # drawn = draw_objects_in_tensor((img * 255).to(torch.uint8), targets["boxes"], targets["labels"][:len(targets["boxes"])], targets["line_points"],
-            #                                targets["ellipses"])
-            # out_path = os.path.join(output_dir, dataset.get_image_path(idx).name)
-            # save_image(drawn / 255, out_path)
+        # Annotiertes Bild speichern
+        out_path = Path(output_dir) / relative_path
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        save_image(img, str(out_path))
 
     print(f"Fertig! Annotierte Bilder liegen in: {output_dir}")
 

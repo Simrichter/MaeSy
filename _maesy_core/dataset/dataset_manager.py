@@ -1,9 +1,10 @@
 """Dataset manager for downloading and managing datasets."""
 
+import math
 import os
 import shutil
 import zipfile
-from math import ceil
+
 
 import requests
 from pathlib import Path
@@ -13,6 +14,42 @@ import yaml
 from tqdm import tqdm
 import tarfile
 import random
+import tempfile
+
+
+def _allocate_split_counts(num_images: int, percentages: List[float]) -> List[int]:
+    """Allocate every image once and populate nonzero splits when possible."""
+    if num_images <= 0:
+        return [0, 0, 0]
+
+    exact_counts = [num_images * percentage for percentage in percentages]
+    counts = [math.floor(value) for value in exact_counts]
+    remaining = num_images - sum(counts)
+    remainder_order = sorted(
+        range(len(percentages)),
+        key=lambda index: (exact_counts[index] - counts[index], percentages[index], -index),
+        reverse=True,
+    )
+    for index in remainder_order[:remaining]:
+        counts[index] += 1
+
+    active_splits = [index for index, percentage in enumerate(percentages) if percentage > 0]
+    target_nonempty = min(num_images, len(active_splits))
+    while sum(counts[index] > 0 for index in active_splits) < target_nonempty:
+        receivers = [index for index in remainder_order if index in active_splits and counts[index] == 0]
+        donors = [index for index in active_splits if counts[index] > 1]
+        if not receivers or not donors:
+            break
+        receiver = receivers[0]
+        donor = max(
+            donors,
+            key=lambda index: (
+                counts[index] - exact_counts[index], counts[index], -index
+            ),
+        )
+        counts[donor] -= 1
+        counts[receiver] += 1
+    return counts
 
 
 class DatasetManager:
@@ -128,44 +165,89 @@ class DatasetManager:
                 raise ValueError(f"Unknown clustering method {cluster_method}")
 
     @staticmethod
-    def _copy_resize(source_paths: List[Path], target_paths: List[Path], resize: List[int] | None, label_target_paths: Optional[List[Path]] = None):
-
-        def _check_collision(path) -> str:
-            while os.path.exists(path):  # name collision
-                path = path.parent / f"{path.stem}_copy{path.suffix}"
-            return path
-
-        collision_count = 0
-        if resize is not None:
-            if len(resize) > 2:
-                raise ValueError(
-                    "Too many values in resize. Resize parameter must either be None or a list of one or two integers: [WIDTH] or [WIDTH HEIGHT]")
-            from PIL import Image
-            for img_file, target_path in tqdm(zip(source_paths, target_paths),
-                                              desc=f"Copying and resizing {len(source_paths)} files"):
-                if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
-                    with Image.open(img_file) as img:
-                        img = img.resize((resize[0], resize[1] if len(resize) == 2 else resize[0]))
-                        if not os.path.exists(target_path.parent):
-                            target_path.parent.mkdir(parents=True, exist_ok=True)
-                        target_path = _check_collision(target_path)
-                        img.save(target_path)#/ img_file.name
-        else:
-            for img_file, target_path in tqdm(zip(source_paths, target_paths), desc=f"Copying {len(source_paths)} files"):
-                if not os.path.exists(target_path.parent):
-                    target_path.parent.mkdir(parents=True, exist_ok=True)
-                target_path = _check_collision(target_path)
-                shutil.copy(img_file, target_path)
-
-        if label_target_paths is not None:
-            for img_file, target_path in tqdm(zip(source_paths, label_target_paths), desc=f"Copying label files"):
-                label_file = img_file.with_suffix('.txt')  # Assuming label files have the same name but .json extension
-                if label_file.exists():
-                    target_path = _check_collision(target_path)
-                    shutil.copy(label_file, target_path) #/ label_file.name
+    def _validate_resize(resize: List[int] | None) -> None:
+        if resize is None:
+            return
+        if (
+            not isinstance(resize, (list, tuple))
+            or not 1 <= len(resize) <= 2
+            or any(type(dimension) is not int or dimension <= 0 for dimension in resize)
+        ):
+            raise ValueError(
+                "resize must be None or one/two positive integer dimensions: [WIDTH] or [WIDTH HEIGHT]"
+            )
 
     @staticmethod
-    def _create_yaml(dataset_dir: Path, splits: List[str], num_classes: Optional[int] = None, class_names: Optional[List[str]] = None, special_classes: Optional[Dict[str, str]] = None, box_format: str = "xyxy"):
+    def _copy_resize(
+        source_paths: List[Path],
+        target_paths: List[Path],
+        resize: List[int] | None,
+        label_target_paths: Optional[List[Path]] = None,
+        require_labels: bool = False,
+        source_label_paths: Optional[List[Path]] = None,
+    ):
+        DatasetManager._validate_resize(resize)
+        if len(source_paths) != len(target_paths):
+            raise ValueError("Each source image must have exactly one target path")
+        if label_target_paths is not None and len(source_paths) != len(label_target_paths):
+            raise ValueError("Each source image must have exactly one label target path")
+        if source_label_paths is not None and len(source_paths) != len(source_label_paths):
+            raise ValueError("Each source image must have exactly one source label path")
+        from PIL import Image
+
+        written_targets = []
+        for index, (img_file, target_path) in enumerate(
+            tqdm(zip(source_paths, target_paths), desc=f"Copying {len(source_paths)} files")
+        ):
+            if not img_file.is_file() or img_file.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+                written_targets.append(None)
+                continue
+
+            label_file = (
+                source_label_paths[index]
+                if source_label_paths is not None
+                else img_file.with_suffix(".txt")
+            )
+            label_target = (
+                label_target_paths[index] if label_target_paths is not None else None
+            )
+            if require_labels and not label_file.is_file():
+                raise FileNotFoundError(
+                    f"Label file {label_file} is missing for source image {img_file}"
+                )
+
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            if label_target is not None:
+                label_target.parent.mkdir(parents=True, exist_ok=True)
+
+            # Rename the image and its label together to keep their stems paired.
+            while target_path.exists() or (
+                label_target is not None and label_target.exists()
+            ):
+                target_path = target_path.with_name(
+                    f"{target_path.stem}_copy{target_path.suffix}"
+                )
+                if label_target is not None:
+                    label_target = label_target.with_name(f"{target_path.stem}.txt")
+
+            if resize is None:
+                shutil.copy2(img_file, target_path)
+            else:
+                with Image.open(img_file) as image:
+                    image.resize((resize[0], resize[1] if len(resize) == 2 else resize[0])).save(
+                        target_path
+                    )
+
+            if label_target is not None:
+                if label_file.is_file():
+                    shutil.copy2(label_file, label_target)
+                else:
+                    label_target.touch()
+            written_targets.append(target_path)
+        return written_targets
+
+    @staticmethod
+    def _create_yaml(dataset_dir: Path, splits: List[str], num_classes: Optional[int] = None, class_names: Optional[List[str]] = None, special_classes: Optional[Dict[str, str]] = None, box_format: str = "xyxy", yaml_root: Optional[Path] = None):
         """
             Create a dataset.yaml file in MaesyDataset format.
 
@@ -184,7 +266,7 @@ class DatasetManager:
                 num_classes = len(class_names)
 
         yaml_content = {
-            'path' : str(dataset_dir),
+            'path' : str((yaml_root or dataset_dir).resolve()),
             'nc': num_classes,
             'names': class_names if class_names is not None else [f'class_{i}' for i in range(num_classes)],
             'box_format': box_format
@@ -253,98 +335,315 @@ class DatasetManager:
                 abs(sum(split_percentages) - 1.0) < 1e-6 or abs(sum(split_percentages) - 100.0) < 1e-6):
             print("WARNING: Using default split_percentages [0.8, 0.1, 0.1]")
             split_percentages = [0.8, 0.1, 0.1]
-        if abs(sum(split_percentages) - 100.0) < 1e-6:
+        if any(not isinstance(percent, (int, float)) for percent in split_percentages):
+            raise ValueError("split percentages must be numeric")
+        if any(not math.isfinite(percent) for percent in split_percentages):
+            raise ValueError("split percentages must be finite")
+        total_percentage = sum(split_percentages)
+        if abs(total_percentage - 100.0) < 1e-6:
             split_percentages = [p / 100.0 for p in split_percentages]
+        elif total_percentage > 0:
+            split_percentages = [p / total_percentage for p in split_percentages]
+
+        self._validate_resize(resize)
 
         # Set up dataset folder structure
         # Always using YOLO-Style dataset structure (with train/val/test top-level folders and images/labels subfolders)
         dataset_dir = self.data_root / dataset_name
+        resolved_data_root = self.data_root.resolve()
+        resolved_dataset_dir = dataset_dir.resolve()
+        if resolved_dataset_dir == resolved_data_root or resolved_data_root not in resolved_dataset_dir.parents:
+            raise ValueError(f"Dataset destination must be inside data_root: {dataset_dir}")
         if os.path.exists(dataset_dir):
             raise ValueError(f"Dataset directory {dataset_dir} already exists. Please choose a different name or delete the existing folder.")
-        splits = [s for i, s in enumerate(["train", "val", "test"])]
+        splits = ["train", "val", "test"]
         split_paths = [dataset_dir / split for split in splits]
 
-        def _get_paths():  # folder_names, cluster_method, start_index=0, step=1
-            img_paths = []
-            if cluster_method is None:
-                for folder in folder_names:
-                    folder_path = Path(folder)
-                    if not folder_path.exists() or not folder_path.is_dir():
-                        print(f"WARNING: Folder {folder} does not exist or is not a directory. Skipping...")
-                        continue
+        if step <= 0:
+            raise ValueError("step must be a positive integer")
+        if type(start_index) is not int or start_index < 0:
+            raise ValueError("start_index must be a non-negative integer")
+        if any(percent < 0 for percent in split_percentages) or sum(split_percentages) <= 0:
+            raise ValueError("split percentages must be non-negative and have a positive total")
+        if abs(sum(split_percentages) - 1.0) > 1e-6:
+            raise ValueError("split percentages must sum to 1")
+        if convert == "obb":
+            raise ValueError(
+                "OBB annotations are not supported by MaesyDataset; use 'dataset convert --input-format obb' for standalone Ultralytics export"
+            )
+        if convert and left_right:
+            raise ValueError("left_right is not supported together with dataset conversion")
 
-                    image_paths = [folder_path / f for f in folder_path.iterdir() if
-                                   f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']][start_index::step]
-                    if len(image_paths) == 0:
-                        print(f"WARNING: No image files found in folder {folder}. Skipping...")
-                        continue
-                    img_paths.extend(image_paths)
-                return img_paths
-            else:
-                folder_path = self.cluster_data(folder_names, chosen_paths, cluster_method=cluster_method, step=step, start_index=start_index,
-                                                batch_size=cluster_batch_size, num_clusters=num_clusters, similarity_threshold=similarity_threshold)
-                image_paths = [f for f in folder_path if f.is_file() and f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
-                if len(image_paths) == 0:
-                    raise ValueError(f"No image files found after clustering. Exiting...")
+        converted_roots = []
+        conversion_metadata = None
+        conversion_context = tempfile.TemporaryDirectory(prefix="maesy-convert-") if convert else None
+        staging_dir = None
+        try:
+            if convert:
+                match convert:
+                    case "datumaro":
+                        from _maesy_core.dataset import datumaro_to_devils_yolo
+                        conversion_function = datumaro_to_devils_yolo
+                    case "robert":
+                        from _maesy_core.dataset import robert_to_devils_yolo
+                        conversion_function = robert_to_devils_yolo
+                    case _:
+                        raise ValueError(f"Unknown dataset type {convert}. Conversion failed...")
+
+                for index, folder in enumerate(folder_names):
+                    converted_root = Path(conversion_context.name) / f"source-{index}"
+                    _root, converted_nc, converted_names, converted_special = conversion_function(
+                        folder,
+                        box_format=box_format,
+                        class_id_blacklist=convert_id_blacklist,
+                        merge_ids=merge_ids,
+                        permute_ids=permute_ids,
+                        output_path=converted_root,
+                    )
+                    metadata = (converted_nc, converted_names, converted_special)
+                    if conversion_metadata is not None and metadata != conversion_metadata:
+                        raise ValueError("All converted input folders must have identical class metadata")
+                    conversion_metadata = metadata
+                    converted_roots.append(converted_root)
+
+            def _source_label_path(image_path: Path) -> Path:
+                image_path = image_path.resolve()
+                for folder in folder_names:
+                    source_root = Path(folder).resolve()
+                    if image_path.is_relative_to(source_root):
+                        relative_image = image_path.relative_to(source_root)
+                        for images_dir in (source_root, *source_root.parents):
+                            if images_dir.name.casefold() == "images":
+                                relative_to_images = image_path.relative_to(images_dir)
+                                return images_dir.parent / "labels" / relative_to_images.with_suffix(".txt")
+                        return image_path.with_suffix(".txt")
+                return image_path.with_suffix(".txt")
+
+            def _left_image_path(image_path: Path) -> Path:
+                image_path = image_path.resolve()
+                for folder in folder_names:
+                    right_root = Path(folder).resolve()
+                    if image_path.is_relative_to(right_root):
+                        relative_image = image_path.relative_to(right_root)
+                        left_name = f"{relative_image.stem.removesuffix('_right')}_left{relative_image.suffix}"
+                        return right_root.parent / "Left" / relative_image.parent / left_name
+                raise ValueError(f"Right image {image_path} is not under an input folder")
+
+            def _get_paths():
+                img_paths = []
+                if cluster_method is None:
+                    for folder in folder_names:
+                        folder_path = Path(folder)
+                        if not folder_path.exists() or not folder_path.is_dir():
+                            print(f"WARNING: Folder {folder} does not exist or is not a directory. Skipping...")
+                            continue
+                        image_paths = sorted(
+                            path.resolve() for path in folder_path.rglob("*")
+                            if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+                        )
+                        image_paths = image_paths[start_index::step]
+                        if not image_paths:
+                            print(f"WARNING: No image files found in folder {folder}. Skipping...")
+                        img_paths.extend(image_paths)
+                    return img_paths
+
+                selected = self.cluster_data(
+                    folder_names, chosen_paths, cluster_method=cluster_method, step=step,
+                    start_index=start_index, batch_size=cluster_batch_size,
+                    num_clusters=num_clusters, similarity_threshold=similarity_threshold,
+                )
+                image_paths = [
+                    Path(path).resolve() for path in selected
+                    if Path(path).is_file() and Path(path).suffix.lower() in {".jpg", ".jpeg", ".png"}
+                ]
+                if not image_paths:
+                    raise ValueError("No image files found after clustering")
                 return image_paths
 
-        if convert is not None and convert !="":
-            match convert:
-                case "datumaro":
-                    from _maesy_core.dataset import datumaro_to_devils_yolo
-                    conversion_function = datumaro_to_devils_yolo
-                case "robert":
-                    from _maesy_core.dataset import robert_to_devils_yolo
-                    conversion_function = robert_to_devils_yolo
-                case "obb":
-                    from _maesy_core.dataset import datumaro_to_ultralyticsOBB
-                    conversion_function = datumaro_to_ultralyticsOBB
-                case _:
-                    raise ValueError(f"Unknown dataset type {convert}. Conversion failed...")
-            out_folders = []
-            for folder in folder_names:
-                img_dir, nc, class_names, special_classes = conversion_function(folder, box_format, convert_id_blacklist, merge_ids, permute_ids)
-                out_folders.append(img_dir)
-            folder_names = out_folders
+            source_label_files = None
+            if convert:
+                converted_pairs = []
+                converted_image_map = {}
+                converted_image_roots = []
+                for converted_root in converted_roots:
+                    if convert == "datumaro":
+                        candidate_splits = [(
+                            converted_root / "default" / "images",
+                            converted_root / "default" / "labels",
+                        )]
+                    else:
+                        candidate_splits = [
+                            (converted_root / split / "images", converted_root / split / "labels")
+                            for split in splits
+                            if (converted_root / split / "images").is_dir()
+                        ]
+                    for image_root, label_root in candidate_splits:
+                        converted_image_roots.append(image_root)
+                        for image_file in sorted(
+                            path for path in image_root.rglob("*")
+                            if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+                        ):
+                            relative = image_file.relative_to(image_root)
+                            label_file = label_root / relative.with_suffix(".txt")
+                            converted_pairs.append((image_file, label_file))
+                            converted_image_map[image_file.resolve()] = label_file
+                if cluster_method is not None:
+                    selected = self.cluster_data(
+                        [str(root) for root in converted_image_roots], chosen_paths,
+                        cluster_method=cluster_method, step=step, start_index=start_index,
+                        batch_size=cluster_batch_size, num_clusters=num_clusters,
+                        similarity_threshold=similarity_threshold,
+                    )
+                    selected_paths = [Path(path) for path in selected]
+                    converted_pairs = [
+                        (image, converted_image_map[image.resolve()])
+                        for image in selected_paths
+                        if image.resolve() in converted_image_map
+                    ]
+                    if not converted_pairs:
+                        raise ValueError("No converted images found after clustering")
+                else:
+                    # Match the non-converted behavior: apply sampling independently
+                    # to each input tree before combining the selected examples.
+                    pairs_by_root = []
+                    for image_root in converted_image_roots:
+                        root_pairs = [
+                            pair for pair in converted_pairs
+                            if pair[0].is_relative_to(image_root)
+                        ]
+                        pairs_by_root.extend(root_pairs[start_index::step])
+                    converted_pairs = pairs_by_root
+                image_files = [image for image, _label in converted_pairs]
+                source_label_files = [label for _image, label in converted_pairs]
+            else:
+                image_files = _get_paths()
+                source_label_files = [_source_label_path(image) for image in image_files]
+                if cluster_method is None:
+                    image_label_pairs = []
+                    seen_images = set()
+                    folder_paths = sorted(
+                        (Path(folder).resolve() for folder in folder_names),
+                        key=lambda path: len(path.parts),
+                        reverse=True,
+                    )
+                    for folder_path in folder_paths:
+                        folder_pairs = [
+                            (image, _source_label_path(image))
+                            for image in image_files
+                            if image.is_relative_to(folder_path) and image not in seen_images
+                        ]
+                        image_label_pairs.extend(folder_pairs)
+                        seen_images.update(image for image, _label in folder_pairs)
+                else:
+                    image_label_pairs = list(zip(image_files, source_label_files))
+            if not image_files:
+                raise ValueError("No image files found for dataset creation")
+            if not convert:
+                image_files = [image for image, _label in image_label_pairs]
+                source_label_files = [label for _image, label in image_label_pairs]
 
-        image_files = _get_paths()
-        num_images = len(image_files)
+            # Keep each image and its label together while assigning dataset splits.
+            if convert:
+                image_label_pairs = list(zip(image_files, source_label_files))
+            random.shuffle(image_label_pairs)
+            num_images = len(image_label_pairs)
+            train_count, val_count, test_count = _allocate_split_counts(
+                num_images, split_percentages
+            )
+            assignments = [
+                split_path
+                for split_path, count in zip(split_paths, (train_count, val_count, test_count))
+                for _ in range(count)
+            ]
 
-        # Calculate split indices
-        train_end = int(ceil(split_percentages[0] * num_images))
-        val_end = train_end + int(ceil(split_percentages[1] * num_images))
-        random.shuffle(image_files)
+            image_files = [image for image, _label in image_label_pairs]
+            source_label_files = [label for _image, label in image_label_pairs]
+            image_targets = []
+            label_targets = [] if with_labels else None
+            for image_file, split_path in zip(image_files, assignments):
+                # Flatten nested source IDs; _copy_resize resolves basename collisions
+                # by renaming the image and label together.
+                if convert:
+                    root = next(
+                        candidate for candidate in converted_image_roots
+                        if image_file.is_relative_to(candidate)
+                    )
+                    target_relative = image_file.relative_to(root)
+                else:
+                    target_relative = Path(image_file.name)
+                image_targets.append(split_path / "images" / target_relative)
+                if label_targets is not None:
+                    label_targets.append(split_path / "labels" / target_relative.with_suffix(".txt"))
 
-        target_paths = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
-            2]) / f"images/{'Right/' if left_right else ''}{img_file.name}" for i, img_file in enumerate(image_files)]
-        if with_labels:
-            target_paths_lbls = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
-                2]) / f"labels/{img_file.with_suffix('.txt').name}" for i, img_file in enumerate(image_files)]
-        else:
-            target_paths_lbls = None
+            left_images = None
+            if left_right:
+                left_images = [_left_image_path(path) for path in image_files]
+                missing_left_images = [path for path in left_images if not path.is_file()]
+                if missing_left_images:
+                    raise FileNotFoundError(
+                        f"Missing {len(missing_left_images)} corresponding left-camera image(s), "
+                        f"including {missing_left_images[0]}"
+                    )
 
-        # Delay directory creation to only create if all other steps were successful
-        os.makedirs(dataset_dir, exist_ok=True)
-        for split_path in split_paths:
-            os.makedirs(split_path / "images", exist_ok=True)
-            if with_labels:
-                os.makedirs(split_path / "labels", exist_ok=True)
+            staging_dir = Path(tempfile.mkdtemp(
+                prefix=f".{Path(dataset_name).name}.staging-", dir=self.data_root
+            ))
+            staging_split_paths = [staging_dir / split for split in splits]
+            staging_image_targets = [
+                staging_dir / assignment.name / "images"
+                / target.relative_to(assignment / "images")
+                for target, assignment in zip(image_targets, assignments)
+            ]
+            staging_label_targets = [
+                staging_dir / assignment.name / "labels"
+                / target.relative_to(assignment / "labels")
+                for target, assignment in zip(label_targets, assignments)
+            ] if label_targets is not None else None
+            for split_path in staging_split_paths:
+                (split_path / "images").mkdir(parents=True, exist_ok=True)
+                if with_labels:
+                    (split_path / "labels").mkdir(parents=True, exist_ok=True)
+            final_image_targets = self._copy_resize(
+                image_files, staging_image_targets, resize, staging_label_targets,
+                require_labels=bool(convert and with_labels),
+                source_label_paths=source_label_files,
+            )
+            final_image_targets = [
+                image_target if image_target is not None else target
+                for image_target, target in zip(final_image_targets, staging_image_targets)
+            ]
 
-        self._copy_resize(image_files, target_paths, resize, target_paths_lbls)
-
-        if left_right:
-            print("Copying corresponding left files")
-            image_files = [f.parent.parent/"Left"/f"{Path(f).name.removesuffix('_right.png')}_left.png" for f in image_files]
-            target_paths = [(split_paths[0] if i < train_end else split_paths[1] if i < val_end else split_paths[
-            2]) / f"images/Left/{img_file.name}" for i, img_file in enumerate(image_files)]
-            self._copy_resize(image_files, target_paths, resize, target_paths_lbls)
-
-        print("Creating dataset.yaml")
-        if nc is None or class_names is None or special_classes is None:
-            print(f"!!!\nWarning: Not all parameters for dataset.yaml specified. Manual corrections required in {dataset_dir/'dataset.yaml'}\n!!!")
-        self._create_yaml(dataset_dir, num_classes=nc, splits=splits, class_names=class_names, special_classes=special_classes, box_format=box_format)
-        print("Creation successful!")
-        return dataset_dir
+            if left_right:
+                print("Copying corresponding left files")
+                left_targets = [
+                    target.parent / f"{target.stem.removesuffix('_right')}_left{target.suffix}"
+                    for target in final_image_targets
+                ]
+                left_label_targets = [
+                    target.parent.parent / "labels" / f"{target.stem}.txt"
+                    for target in left_targets
+                ] if label_targets is not None else None
+                left_label_sources = [_source_label_path(path) for path in left_images]
+                self._copy_resize(
+                    left_images, left_targets, resize, left_label_targets,
+                    source_label_paths=left_label_sources,
+                )
+            if conversion_metadata is not None:
+                nc, class_names, special_classes = conversion_metadata
+            print("Creating dataset.yaml")
+            self._create_yaml(
+                staging_dir, num_classes=nc, splits=splits, class_names=class_names,
+                special_classes=special_classes, box_format=box_format, yaml_root=dataset_dir,
+            )
+            staging_dir.rename(dataset_dir)
+            staging_dir = None
+            print("Creation successful!")
+            return dataset_dir
+        finally:
+            if staging_dir is not None:
+                shutil.rmtree(staging_dir, ignore_errors=True)
+            if conversion_context is not None:
+                conversion_context.cleanup()
 
     def list_datasets(self) -> list:
         """

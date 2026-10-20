@@ -1,5 +1,6 @@
 from typing import Optional
 
+import math
 import torch
 
 from maesy.training import BaseTrainer
@@ -25,31 +26,13 @@ class MaeTrainer(BaseTrainer):
     def _create_patch_mask(self, images: torch.Tensor) -> torch.Tensor:
         model_patch_size: int = self.model.config.patch_size
         mask_patch_size: int = getattr(self.config, "mask_patch_size", model_patch_size)
-    #
+        mask_ratio: float = getattr(self.config, "mask_ratio", 0.75)
+        if not math.isfinite(mask_ratio) or not 0.0 < mask_ratio <= 1.0:
+            raise ValueError(f"mask_ratio ({mask_ratio}) must be finite, greater than 0, and at most 1")
         if mask_patch_size < model_patch_size or mask_patch_size % model_patch_size != 0:
             raise ValueError(
                 f"mask_patch_size ({mask_patch_size}) must be a multiple of model patch_size ({model_patch_size})"
             )
-    #
-    #     patches_per_side = self.model.config.image_size // model_patch_size
-    #     group = mask_patch_size // model_patch_size
-    #     if patches_per_side % group != 0:
-    #         raise ValueError(
-    #             f"image_size/patch_size ({patches_per_side}) must be divisible by mask group size ({group})"
-    #         )
-    #
-    #     coarse_side = patches_per_side // group
-    #     coarse_mask = self._sample_random_mask(
-    #         batch_size=images.shape[0],
-    #         num_tokens=coarse_side * coarse_side,
-    #         mask_ratio=self.config.mask_ratio,
-    #         device=images.device,
-    #     )
-    #     coarse_mask = coarse_mask.view(images.shape[0], coarse_side, coarse_side)
-    #     fine_mask = coarse_mask.repeat_interleave(group, dim=1).repeat_interleave(group, dim=2)
-    #     return fine_mask.reshape(images.shape[0], -1)
-        # model_patch_size = 4 # self.model.config.patch_size
-        # mask_patch_size = 16 # getattr(self.config, "mask_patch_size", model_patch_size)
 
         image_size = images.shape[-1]
         patches_per_side = image_size // model_patch_size
@@ -63,7 +46,7 @@ class MaeTrainer(BaseTrainer):
         coarse_mask = self._sample_random_mask(
             batch_size=images.shape[0],
             num_tokens=coarse_side * coarse_side,
-            mask_ratio=0.75,
+            mask_ratio=mask_ratio,
             device=images.device,
         )
         coarse_mask = coarse_mask.view(images.shape[0], coarse_side, coarse_side)

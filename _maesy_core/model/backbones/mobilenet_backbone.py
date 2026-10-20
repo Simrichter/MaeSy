@@ -90,10 +90,12 @@ class MobileNetBackbone(nn.Module):
         self.calc_c4 = "c4" in self.config.feature_scales or "c5" in self.config.feature_scales
         self.calc_c5 = "c5" in self.config.feature_scales
 
-        if self.config.version.startswith("mobilenetv2"):
+        if self.config.version == "mobilenetv2":
             self._init_v2()
-        elif self.config.version.startswith("mobilenetv4"):
+        elif self.config.version in {"mobilenetv4_s", "mobilenetv4_m"}:
             self._init_v4()
+        else:
+            raise ValueError(f"Unsupported MobileNet version: {self.config.version}")
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> Dict[str, torch.Tensor]:
         """

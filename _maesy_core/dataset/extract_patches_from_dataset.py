@@ -1,13 +1,14 @@
 """
  Provides utility to extract patches of arbitrary classes from MaesyDatasets (supports transforms)
 """
+from hashlib import sha1
 from pathlib import Path
 from typing import List, Tuple
 from PIL import Image
 from tqdm import tqdm
 
 from _maesy_core.dataset import MaesyDataset
-from maesy.training.utils import collate_detection_fn
+from maesy.training.collate_functions import collate_detection_fn
 
 import numpy as np
 
@@ -35,8 +36,13 @@ class Patch:
             img.save(save_path)
 
 def _save_patches(patches: List[Patch], save_path: str, cls: int):
-    for i, p in enumerate(patches):
-        p.save_patch_to(Path(save_path) / f"patch_{Path(p.original_image_path).name.split('.')[0]}_{cls}.png")
+    output_dir = Path(save_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for index, patch in enumerate(patches):
+        image_path = Path(patch.original_image_path)
+        stem = image_path.stem
+        source_id = sha1(str(image_path.resolve()).encode("utf-8")).hexdigest()[:10]
+        patch.save_patch_to(output_dir / f"patch_{stem}_{source_id}_{cls}_{index}.png")
 
 def _overlap_with_existing(box, boxes_in_image, threshold=0.0):
     """
@@ -116,18 +122,25 @@ def _generate_patches_from_dataset(dataset: MaesyDataset, desired_class_id, outp
                     else:
                         retries += 1
 
+    if output_fp and len(fp_list) < len(patch_list):
+        print(
+            f"Warning: generated {len(fp_list)} false-positive patches for "
+            f"{len(patch_list)} positive patches after bounded retries"
+        )
     return patch_list, fp_list
 
 def extract_patches(dataset_path: str, split: List[str], patch_path: str, desired_class_id: int, output_fp: bool, margin: float):
     """
     Extract patches of selected class from MaesyDataset
     """
+    loaded_splits = 0
     for s in split:
         try:
             dataset = MaesyDataset(dataset_path, s, annotation_type="detection")
-        except Exception as e:
-            print(f"Failed to load dataset for split '{s}'")
+        except Exception as error:
+            print(f"Failed to load dataset for split '{s}': {error}")
             continue
+        loaded_splits += 1
         if len(dataset) == 0:
             print(f"No content, skipping {s}...")
             continue
@@ -135,8 +148,10 @@ def extract_patches(dataset_path: str, split: List[str], patch_path: str, desire
         op = patch_path
         if op == "":
             op = f"{dataset_path}/extracted_patches/{s}/images"
-            Path(op).mkdir(parents=True, exist_ok=True)
+        Path(op).mkdir(parents=True, exist_ok=True)
         robot_patches, fp_patches = _generate_patches_from_dataset(dataset, desired_class_id, output_fp=output_fp, margin=margin)
         _save_patches(robot_patches, op, 1)
         if output_fp:
             _save_patches(fp_patches, op, 0)
+    if loaded_splits == 0:
+        raise ValueError(f"None of the requested dataset splits could be loaded: {split}")

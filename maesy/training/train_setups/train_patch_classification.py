@@ -17,7 +17,7 @@ from _maesy_core.model.model_tools.model_factory import (
 )
 from maesy.training import ClassificationTrainer
 from maesy.training.base_trainer import BaseTrainingConfig
-from maesy.training.utils import collate_classification_fn
+from maesy.training.collate_functions import collate_classification_fn
 
 
 @dataclass

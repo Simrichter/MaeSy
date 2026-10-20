@@ -37,7 +37,8 @@ class ViTDetectorConfig(BaseConfig):
     giou_loss_coef: float = 2.0
     eos_coef: float = 0.1
     # TODO: Class value to name translations?
-    
+    type: str = "ViTDetector"
+
     def __post_init__(self):
         """Validate configuration."""
         assert self.image_size % self.patch_size == 0, \
@@ -115,6 +116,8 @@ class ViTDetector(BaseModel[ViTDetectorConfig]):
 
     def infer(self, images, targets, **kwargs):
         out = self.forward(images, **kwargs)
-        out['pred_logits'] = out['pred_logits'].softmax(-1)[..., :-1].detach()
+        # Preserve the no-object channel so Inferer can discard queries whose
+        # strongest prediction is background, just like other DETR variants.
+        out['pred_logits'] = out['pred_logits'].softmax(-1).detach()
         out['pred_boxes'] = out['pred_boxes'].detach()
         return out, targets

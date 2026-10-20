@@ -16,6 +16,7 @@ class ClassificationCNNConfig(BaseConfig):
     type: str = "classification_cnn"
     # ResNet backbone parameters
     resnet_version: str = "resnet50"
+    backbone_pretrained: bool = True
 
     # Classification head parameters
     embed_dim: int = 512
@@ -23,31 +24,33 @@ class ClassificationCNNConfig(BaseConfig):
 
 
 class ClassificationCNN(BaseModel[ClassificationCNNConfig]):
-    """Vision Transformer for image classification pretraining.
-
-    This model implements standard supervised image classification pretraining
-    using the ViT architecture.
-    """
+    """ResNet-based image classifier."""
 
     def __init__(self, config: ClassificationCNNConfig):
-        """
-        Initialize classification model.
-
-        Args:
-            config: Model configuration
-        """
+        """Initialize the classifier with the configured ResNet variant."""
         super().__init__(config)
-        head_config = LinearHeadConfig(
-            input_dim=config.embed_dim,
-            num_classes=config.num_classes
+        feature_level = "c6"
+        self.backbone = ResNetBackbone(
+            ResNetBackboneConfig(
+                version=config.resnet_version,
+                pretrained=config.backbone_pretrained,
+                feature_scales=(feature_level,),
+            )
         )
-        self.backbone = ResNetBackbone(ResNetBackboneConfig(version="resnet18"))
+        # The channel count differs across ResNet families (e.g. 512 for
+        # ResNet-18 and 2048 for ResNet-50), so derive the head width from the
+        # selected backbone feature instead of the legacy fixed embed_dim.
+        head_config = LinearHeadConfig(
+            input_dim=self.backbone.get_feature_channels()[0],
+            num_classes=config.num_classes,
+            feature_level=feature_level,
+        )
         self.head = LinearHead(head_config)
 
     def forward(self, x, *args, **kwargs) -> torch.Tensor:
-        """Forward pass through the model."""
-        features = self.backbone(x)
-        # print("Features shape:", features.shape)  # Debug print to check feature shape
-        out = self.head(torch.flatten(features, 1))
-        return out
+        """Return class logits with shape ``[batch_size, num_classes]``."""
+        features = self.backbone(x, *args, **kwargs)
+        feature_level = self.head.config.feature_level
+        pooled_features = torch.flatten(features[feature_level], start_dim=1)
+        return self.head({feature_level: pooled_features}, *args, **kwargs)["out"]
 

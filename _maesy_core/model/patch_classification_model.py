@@ -12,6 +12,7 @@ class PatchClassificatorConfig(BaseConfig):
     # Resnet backbone parameters
     resnet_version: str = "resnet50"
     feature_scale: str = "c3"
+    backbone_pretrained: bool = True
     type: str = "PatchClassificator"
 
     # Classification head parameters
@@ -35,7 +36,7 @@ class PatchClassificator(BaseModel[PatchClassificatorConfig]):
             input_dim=config.head_in_dim,
             num_classes=config.num_classes
         )
-        self.backbone = ResNetBackbone(ResNetBackboneConfig(version=self.config.resnet_version, feature_scales=(self.config.feature_scale,)))
+        self.backbone = ResNetBackbone(ResNetBackboneConfig(version=self.config.resnet_version, pretrained=self.config.backbone_pretrained, feature_scales=(self.config.feature_scale,)))
         self.backbonetype = "ResnetBackbone"
 
         self.head = LinearHead(head_config)

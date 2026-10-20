@@ -76,9 +76,17 @@ def create_model_from_dict(config: Dict) -> "BaseModel":
             raise ValueError("model type 'vit' is not supported")
         case "detr":
             return DETR(_from_dict(DETRConfig, config))
+        case "vitdetector":
+            from _maesy_core.model import ViTDetector, ViTDetectorConfig
+
+            return ViTDetector(_from_dict(ViTDetectorConfig, config))
+        case "classification_cnn":
+            from _maesy_core.model import ClassificationCNN, ClassificationCNNConfig
+
+            return ClassificationCNN(_from_dict(ClassificationCNNConfig, config))
         case "rt-detr":
             return RTDETR(_from_dict(RTDETRConfig, config))
-        case "PatchClassificator":
+        case "patchclassificator":
             return PatchClassificator(_from_dict(PatchClassificatorConfig, config))
         case "onnx":
             return OnnxModel(_from_dict(OnnxModelConfig, config))

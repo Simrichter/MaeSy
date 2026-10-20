@@ -1,0 +1,54 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Campus-KI: proxy",
+      "type": "process",
+      "command": "/home/simon/Desktop/MaeSy/campus-claude-linux-x86_64",
+      "args": [
+        "--serve",
+        "--port",
+        "8787"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": [],
+      "isBackground": true,
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    },
+    {
+      "label": "Campus-KI: on",
+      "type": "process",
+      "command": "/home/simon/Desktop/MaeSy/campus-claude-linux-x86_64",
+      "args": [
+        "--vscode",
+        "on"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": [],
+      "isBackground": false
+    },
+    {
+      "label": "Campus-KI: off",
+      "type": "process",
+      "command": "/home/simon/Desktop/MaeSy/campus-claude-linux-x86_64",
+      "args": [
+        "--vscode",
+        "disable"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": [],
+      "isBackground": false
+    }
+  ]
+}

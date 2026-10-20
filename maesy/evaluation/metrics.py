@@ -570,6 +570,8 @@ def compute_detection_metrics(
         fb_beta=1.0,
     ) if eval_class_ids else (0.0, 0.0, 0.0)
 
+    num_predictions = sum(pred["boxes"].shape[0] for pred in predictions)
+    num_targets = sum(target["boxes"].shape[0] for target in targets)
     metrics: Dict[str, Any] = {
         "mAP50": map50,
         "mAP50_95": map50_95,
@@ -577,7 +579,7 @@ def compute_detection_metrics(
         "recall50": recall50,
         "f1_50": f1_50,
         f"f{fb_beta}_50": fb_50,
-        "pred_gt_ratio": float(sum(pred["boxes"].shape[0] for pred in predictions)) / float(sum(target["boxes"].shape[0] for target in targets)),
+        "pred_gt_ratio": float(num_predictions) / float(num_targets) if num_targets else 0.0,
         # "num_gt_boxes": float(sum(target["boxes"].shape[0] for target in targets)),
         # "num_pred_boxes": float(sum(pred["boxes"].shape[0] for pred in predictions)),
     }
@@ -693,8 +695,9 @@ def compute_detection_metrics(
             }
 
         metrics["line_mAP"] = float(np.mean(line_ap_values)) if line_ap_values else 0.0
-        metrics["line_pred_gt_ratio"] = (float(sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions))
-                                   / float(sum(target.get("line_points", torch.empty((0, 4))).shape[0] for target in targets)))
+        num_pred_lines = sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions)
+        num_target_lines = sum(target.get("line_points", torch.empty((0, 4))).shape[0] for target in targets)
+        metrics["line_pred_gt_ratio"] = float(num_pred_lines) / float(num_target_lines) if num_target_lines else 0.0
         # metrics["num_gt_lines"] = float(sum(target.get("line_points", torch.empty((0, 4))).shape[0] for target in targets))
         # metrics["num_pred_lines"] = float(sum(pred.get("line_points", torch.empty((0, 4))).shape[0] for pred in predictions))
 
@@ -765,37 +768,57 @@ def compute_detection_metrics(
 
     return metrics
 
-def compute_classification_metrics(predictions: List[torch.Tensor], targets: List[torch.Tensors]):
-    TP = 0
-    FP = 0
-    FN = 0
-    TN = 0
-    for p, t in zip(predictions, targets):
-        if p == 1 and t == 1:
-            TP += 1
-        elif p == 1 and t == 0:
-            FP += 1
-        elif p == 0 and t == 1:
-            FN += 1
-        elif p == 0 and t == 0:
-            TN += 1
-        else:
-            ... # impossible
-    acc = (TP + TN)/len(predictions)
-    prec = TP/(TP+FP)
-    rec = TP/(TP+FN)
-    f1 = 2*prec*rec/(prec+rec)
-    beta = 0.25
-    fb = (1+beta**2)*prec*rec/(beta**2*prec + rec)
-    metrics = {
-        "Accuracy": acc,
-        "Precision": prec,
-        "Recall": rec,
-        "F1": f1,
-        f"F{beta}": fb
-    }
-    return metrics
+def compute_classification_metrics(predictions: List[torch.Tensor], targets: List[torch.Tensor]) -> Dict[str, float]:
+    """Compute multiclass accuracy and macro-averaged precision/recall/F scores."""
+    def _flatten(values: List[torch.Tensor]) -> torch.Tensor:
+        if isinstance(values, torch.Tensor):
+            return values.detach().reshape(-1).long()
+        tensors = [torch.as_tensor(value).detach().reshape(-1).long() for value in values]
+        return torch.cat(tensors) if tensors else torch.empty((0,), dtype=torch.long)
 
+    predicted = _flatten(predictions)
+    expected = _flatten(targets)
+    if predicted.numel() != expected.numel():
+        raise ValueError(
+            f"Prediction/target count mismatch: {predicted.numel()} predictions "
+            f"for {expected.numel()} targets"
+        )
+    if predicted.numel() == 0:
+        return {"Accuracy": 0.0, "Precision": 0.0, "Recall": 0.0, "F1": 0.0, "F0.25": 0.0}
+
+    class_ids = torch.unique(torch.cat((predicted, expected)))
+    true_positive = torch.tensor(
+        [((predicted == class_id) & (expected == class_id)).sum() for class_id in class_ids],
+        dtype=torch.float64,
+    )
+    predicted_count = torch.tensor(
+        [(predicted == class_id).sum() for class_id in class_ids], dtype=torch.float64
+    )
+    target_count = torch.tensor(
+        [(expected == class_id).sum() for class_id in class_ids], dtype=torch.float64
+    )
+    precision_per_class = torch.where(predicted_count > 0, true_positive / predicted_count, 0.0)
+    recall_per_class = torch.where(target_count > 0, true_positive / target_count, 0.0)
+    f1_per_class = torch.where(
+        precision_per_class + recall_per_class > 0,
+        2 * precision_per_class * recall_per_class / (precision_per_class + recall_per_class),
+        0.0,
+    )
+    beta_squared = 0.25 ** 2
+    f_beta_per_class = torch.where(
+        beta_squared * precision_per_class + recall_per_class > 0,
+        (1 + beta_squared) * precision_per_class * recall_per_class
+        / (beta_squared * precision_per_class + recall_per_class),
+        0.0,
+    )
+
+    return {
+        "Accuracy": float((predicted == expected).float().mean().item()),
+        "Precision": float(precision_per_class.mean().item()),
+        "Recall": float(recall_per_class.mean().item()),
+        "F1": float(f1_per_class.mean().item()),
+        "F0.25": float(f_beta_per_class.mean().item()),
+    }
 def compute_map(
     predictions: List[Dict[str, torch.Tensor]],
     targets: List[Dict[str, torch.Tensor]],

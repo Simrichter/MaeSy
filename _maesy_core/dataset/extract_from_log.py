@@ -59,11 +59,16 @@ exact_match
     counter = 0
     while reader.has_next():
         topic, data, t = reader.read_next()
-        if not exact_match and any([topic.endswith(t) for t in topic_name]):
+        matches_topic = (
+            topic in topic_name
+            if exact_match
+            else any(topic.endswith(name) for name in topic_name)
+        )
+        if matches_topic:
             topic_dirs[topic] = _create_path_to_topic(topic)
             topic_dirs[topic].mkdir(parents=True, exist_ok=True)
 
-        if topic in topic_dirs.keys():
+        if topic in topic_dirs:
             msg = deserialize_message(data, Image)
 
             # Direkt aus Buffer lesen
@@ -92,7 +97,7 @@ exact_match
             counter += 1
         if pbar is not None:
             pbar.update(1)
-    pbar.close()
+    if pbar is not None:
+        pbar.close()
     print("Done.")
     print("="*60)
-

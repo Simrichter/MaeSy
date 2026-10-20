@@ -9,9 +9,9 @@ __all__ = [
     "DatasetManager",
 ]
 
-_LAZY_ATTRS = { # Lazy imports to increase "-h" response time in cli
-    "DatasetManager": ("maesy.dataset", "DatasetManager"),
-    "ObjectDetectionDataset": ("maesy.dataset", "ObjectDetectionDataset"),
+_LAZY_ATTRS = {  # Lazy imports to keep CLI help fast.
+    "DatasetManager": ("_maesy_core.dataset", "DatasetManager"),
+    "ObjectDetectionDataset": ("_maesy_core.dataset", "MaesyDataset"),
 }
 
 
@@ -30,4 +30,4 @@ def __dir__():
 
 
 if TYPE_CHECKING:
-    from _maesy_core.dataset import DatasetManager
+    from _maesy_core.dataset import DatasetManager, MaesyDataset as ObjectDetectionDataset

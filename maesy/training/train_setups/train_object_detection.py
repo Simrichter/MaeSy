@@ -277,7 +277,7 @@ def infer_vit_detector(
     visualize: bool,
     device: torch.device,
     split: str,
-    confidence: float,
+    confidence: float | None,
 ) -> None:
     """
     Run inference with a trained object detection model.
@@ -300,10 +300,15 @@ def infer_vit_detector(
     model.eval()
     infer_transforms = ODValTransforms(image_size=224)
 
-    dataset = MaesyDataset(dataset_path, split, "None", transforms=infer_transforms)
+    if split:
+        dataset = MaesyDataset(dataset_path, split, "None", transforms=infer_transforms)
+    else:
+        dataset = MaesyDataset(dataset_path, annotation_type="image_folder", transforms=infer_transforms)
+        dataset.images_dir = Path(dataset.images_dir)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
     inferer = Inferer(model=model, data_loader=dataloader, device=device)
-    preds, _ = inferer.infer(score_threshold=confidence) # List[Dict] with keys "boxes" (B X num_querys X 4) and "labels" (B X num_queries) (scores, lines etc.)
+    inference_kwargs = {} if confidence is None else {"score_threshold": confidence}
+    preds, _ = inferer.infer(**inference_kwargs) # List[Dict] with keys "boxes" (B X num_queries X 4) and "labels" (B X num_queries)
 
     print("=" * 60)
     print(f"Saving inference results to {out_path}...")
@@ -315,23 +320,41 @@ def infer_vit_detector(
     out_path = Path(out_path)
     out_path.mkdir(parents=True, exist_ok=True)
     for img, pred in tqdm(zip(dataset.images, preds)):
-        img_path = images_dir/img
-        shutil.copy(img_path, out_path/img)
-        with open(out_path/Path(img).with_suffix(".txt"), "w") as f:
+        img_path = images_dir / img
+        image_output = out_path / img
+        label_output = (out_path / img).with_suffix(".txt")
+        image_output.parent.mkdir(parents=True, exist_ok=True)
+        label_output.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(img_path, image_output)
+        with open(label_output, "w") as f:
             boxes = pred["boxes"]
             labels = pred["labels"]
             scores = pred["scores"]
-            for box, label, score in zip(boxes, labels, scores):
-                cx, cy, w, h = box
-                f.write(f"{label.item()} {cx.item()} {cy.item()} {w.item()} {h.item()}\n")
-            for line in pred["line_points"]:
+            for box, label, _score in zip(boxes, labels, scores):
+                x1, y1, x2, y2 = box
+                f.write(f"{label.item()} {x1.item()} {y1.item()} {x2.item()} {y2.item()}\n")
+            for line in pred.get("line_points", []):
                 f.write(f"{model.head.config.line_class_id} {line[0].item()} {line[1].item()} {line[2].item()} {line[3].item()}\n")
-            for ellipse in pred["ellipses"]:
+            for ellipse in pred.get("ellipses", []):
                 f.write(f"{model.head.config.ellipse_class_id} {ellipse[0].item()} {ellipse[1].item()} {ellipse[2].item()} {ellipse[3].item()} {ellipse[4].item()} {ellipse[5].item()}\n")
 
     if visualize:
-        from maesy.evaluation import visualize_data
-        visualize_data(str(out_path), "", special_classes={"lines": model.head.config.line_class_id, "ellipses": model.head.config.ellipse_class_id})
+        from _maesy_core.dataset.visualizer import visualize_data
+
+        head_config = getattr(getattr(model, "head", None), "config", None)
+        line_class_id = getattr(head_config, "line_class_id", -1)
+        ellipse_class_id = getattr(head_config, "ellipse_class_id", -1)
+        special_classes = {
+            "lines": line_class_id if line_class_id is not None else -1,
+            "ellipses": ellipse_class_id if ellipse_class_id is not None else -1,
+        }
+        visualize_data(
+            str(out_path),
+            "",
+            special_classes=special_classes,
+            enable_lines=special_classes["lines"] >= 0,
+            enable_ellipses=special_classes["ellipses"] >= 0,
+        )
 
 def export_vit_detector(
     model_info: str,

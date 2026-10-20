@@ -14,10 +14,11 @@ import yaml
 from _maesy_core.dataset.bounding_box import BoundingBox
 
 
-def _load_yaml_data(dataset_dir: str, annotation_type: str) -> Tuple[dict, str]:
+def _load_yaml_data(dataset_dir: str | Path, annotation_type: str) -> Tuple[dict, str]:
     """
     auto-search yaml, auto-infer annotation type if not specified (currently only 'image_folder')
     """
+    dataset_dir = os.fspath(dataset_dir)
     if annotation_type == "image_folder":
         return {}, "image_folder"
     if dataset_dir.endswith((".yaml", ".yml")):
@@ -45,7 +46,7 @@ def _load_yaml_data(dataset_dir: str, annotation_type: str) -> Tuple[dict, str]:
     else:
         raise FileNotFoundError(f"Failed to read file {yaml_path}!")
 
-def _infer_annotation_type(dataset_dir, yaml_data: dict) -> str:
+def _infer_annotation_type(dataset_dir, yaml_data: dict, split: str = "None") -> str:
     """
     Check for entry in yaml. If not present, interpret existing labels folder as 'detection', otherwise 'None'
     """
@@ -54,7 +55,9 @@ def _infer_annotation_type(dataset_dir, yaml_data: dict) -> str:
         print(f"Inferred annotation type '{annotation_type}' from dataset.yaml")
         return annotation_type
     else:
-        if (Path(dataset_dir) / "labels").exists():
+        if (Path(dataset_dir) / "labels").exists() or (
+            split != "None" and (Path(dataset_dir) / split / "labels").exists()
+        ):
             print("Found 'labels' folder in dataset directory. Assuming annotation type 'detection'.")
             return "detection"
         else:
@@ -94,13 +97,17 @@ class MaesyDataset(Dataset):
 
         if not os.path.exists(dataset_dir):
             raise ValueError(f"Path '{dataset_dir}' does not exist.")
+        dataset_yaml_path = Path(dataset_dir) if str(dataset_dir).endswith((".yaml", ".yml")) else None
+        self.dataset_yaml_path = dataset_yaml_path.resolve() if dataset_yaml_path else Path(dataset_dir).resolve() / "dataset.yaml"
 
         self.transforms = transforms
         self.annotation_type = annotation_type
 
         yaml_data, annotation_type = _load_yaml_data(dataset_dir, annotation_type)
         if annotation_type == "auto":
-            annotation_type = _infer_annotation_type(dataset_dir, yaml_data)
+            inference_path = str(dataset_yaml_path.parent) if dataset_yaml_path else dataset_dir
+            annotation_type = _infer_annotation_type(inference_path, yaml_data, split)
+        self.annotation_type = annotation_type
 
         if annotation_type == "image_folder":
             self.repeat_factor = 1 # image folders currently don't support repetition (because factor is set in dataset.yaml)
@@ -126,6 +133,8 @@ class MaesyDataset(Dataset):
 
         dataset_dir = yaml_data.get("path")
         assert dataset_dir is not None, "Failed: Could not find information about data path in yaml file!"
+        if not Path(dataset_dir).is_absolute() and hasattr(self, "dataset_yaml_path"):
+            dataset_dir = str(self.dataset_yaml_path.parent / dataset_dir)
 
         self.box_format = str(yaml_data.get("box_format", "")).lower()
         if self.box_format not in {"xyxy", "cxcywh"} and annotation_type == "detection":
@@ -140,7 +149,11 @@ class MaesyDataset(Dataset):
         self.images_dir = split_path / "images"
         assert self.images_dir.exists()
 
-        self.images: List[Path] = [Path(img) for img in sorted(os.listdir(self.images_dir)) if img.endswith((".jpg", ".jpeg", ".png"))]
+        self.images: List[Path] = sorted(
+            path.relative_to(self.images_dir)
+            for path in self.images_dir.rglob("*")
+            if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+        )
 
         if self.return_labels:
             self.annotations_dir = split_path / "labels"
@@ -167,7 +180,7 @@ class MaesyDataset(Dataset):
 
             self.annotations = []
             for img in self.images:
-                annotation_path = Path(img).with_suffix(".txt")
+                annotation_path = img.with_suffix(".txt")
                 if not (self.annotations_dir / annotation_path).exists():
                     raise FileNotFoundError(f"Annotation file {annotation_path} not found for image {img}")
                 self.annotations.append(annotation_path)
@@ -177,8 +190,12 @@ class MaesyDataset(Dataset):
     def _load_image_folder(self, dataset_dir):
         assert os.path.exists(dataset_dir), f"Failed: Image folder {dataset_dir} does not exist!"
         self.return_labels = False
-        self.images_dir = dataset_dir
-        self.images: List[Path] = [Path(img) for img in sorted(os.listdir(dataset_dir)) if img.endswith((".jpg", ".jpeg", ".png"))]
+        self.images_dir = Path(dataset_dir)
+        self.images: List[Path] = [
+            path.relative_to(self.images_dir)
+            for path in sorted(self.images_dir.rglob("*"))
+            if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+        ]
 
         print(f"Loaded image folder from path {dataset_dir}...")
         print("-" * 30)
@@ -199,12 +216,12 @@ class MaesyDataset(Dataset):
         Returns:
             Dictionary containing the image and target annotations as a List[Object]
         """
-        image_path = os.path.join(self.images_dir, self.images[idx])
+        image_path = Path(self.images_dir) / self.images[idx]
         target = None
         # Load image
         with Image.open(image_path).convert('RGB') as image:
             if self.return_labels:
-                annotation_path = os.path.join(self.annotations_dir, self.annotations[idx])
+                annotation_path = self.annotations_dir / self.annotations[idx]
                 # if annotation_path.split("/")[-1].split(".")[0] != image_path.split("/")[-1].split(".")[0]:
                 if Path(annotation_path).stem != Path(image_path).stem:
                     print("\n\nWARNING: Annotation file name does not match image file name! Check that the annotation file names in the labels folder match the image file names in the images folder (except for the extension). Annotation file: {}, Image file: {}\n\n".format(
@@ -449,7 +466,7 @@ class MaesyDataset(Dataset):
         Returns:
             Image tensor
         """
-        image_path = os.path.join(self.images_dir, self.images[idx])
+        image_path = Path(self.images_dir) / self.images[idx]
         with Image.open(image_path).convert('RGB') as image:
             image = torchvision.tv_tensors.Image(image) / 255.0
             # Apply transforms (if any). We intentionally keep all geometric
@@ -469,7 +486,7 @@ class MaesyDataset(Dataset):
         Returns:
             List of dictionaries containing "label" and the cls id
         """
-        image_path = os.path.join(self.images_dir, self.images[idx])
+        image_path = Path(self.images_dir) / self.images[idx]
         with Image.open(image_path).convert('RGB') as image:
             image = torchvision.tv_tensors.Image(image) / 255.0
             # Apply transforms (if any). We intentionally keep all geometric
@@ -512,7 +529,7 @@ class MaesyDataset(Dataset):
         Returns:
             Full path to the image file
         """
-        return Path(os.path.join(self.images_dir, self.images[idx]))
+        return Path(self.images_dir) / self.images[idx]
 
     def get_special_classes(self) -> Dict[str, int]:
         """

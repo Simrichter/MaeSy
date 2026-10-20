@@ -1,144 +1,183 @@
-"""Test that denoising parameters are properly wired through training setup."""
-from unittest.mock import patch, MagicMock
-from maesy.training.train_setups import train_vit_detector
-from _maesy_core.model.model_tools import read_yaml
+"""Denoising configuration behavior in object-detection training setup."""
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import torch
+
+import maesy.training.train_setups.train_object_detection as train_object_detection
 
 
-def test_denoising_parameters_applied_to_model_from_config():
-    """Test that denoising parameters are applied to the model when loaded from config."""
-    captured_model = {}
+def _patch_training_dependencies(monkeypatch, trainer_type):
+    dataset = MagicMock()
+    dataset.get_num_classes.return_value = 3
+    dataset.get_special_classes.return_value = {
+        "line_class_id": -1,
+        "ellipse_class_id": -1,
+    }
 
-    def mock_trainer_init(self, model, train_loader, val_loader, config, project_name, enable_wandb):
-        captured_model['model'] = model
-        raise RuntimeError("Stop execution here")
+    monkeypatch.setattr(train_object_detection, "ODValTransforms", lambda **kwargs: object())
+    monkeypatch.setattr(train_object_detection, "MaesyDataset", lambda *args, **kwargs: object())
+    monkeypatch.setattr(train_object_detection, "MultiDataset", lambda datasets: dataset)
+    monkeypatch.setattr(train_object_detection, "DataLoader", lambda *args, **kwargs: object())
+    monkeypatch.setattr(train_object_detection, "DetectionTrainer", trainer_type)
+    monkeypatch.setattr(train_object_detection, "replace_bn_with_frozenbn", lambda backbone: None)
+    return dataset
 
-    with patch('maesy.training.train_setups.train_object_detection.MaesyDataset'), \
-         patch('maesy.training.train_setups.train_object_detection.MultiDataset') as mock_dataset, \
-         patch('maesy.training.train_setups.train_object_detection.DataLoader'), \
-         patch('maesy.training.train_setups.train_object_detection.DetectionTrainer.__init__', mock_trainer_init), \
-         patch('maesy.training.train_setups.train_object_detection.replace_bn_with_frozenbn'):
 
-        # Setup mocks
-        mock_dataset_instance = MagicMock()
-        mock_dataset_instance.get_num_classes.return_value = 3
-        mock_dataset_instance.get_special_classes.return_value = {
+def test_denoising_settings_are_applied_to_new_training_model(monkeypatch):
+    captured = {}
+
+    class CapturingTrainer:
+        def __init__(self, model, **kwargs):
+            self.model = model
+            captured["model"] = model
+
+        def train(self):
+            captured["trained"] = True
+
+    _patch_training_dependencies(monkeypatch, CapturingTrainer)
+
+    model = SimpleNamespace(
+        config=SimpleNamespace(
+            num_classes=3,
+            softmax_activated=True,
+            line_class_id=-1,
+            ellipse_class_id=-1,
+            enable_denoising=False,
+            denoising_num_queries=0,
+            denoising_label_noise_ratio=0.2,
+            denoising_box_noise_scale=0.4,
+        ),
+        head=SimpleNamespace(
+            config=SimpleNamespace(
+                enable_denoising=False,
+                denoising_num_queries=0,
+                denoising_label_noise_ratio=0.2,
+                denoising_box_noise_scale=0.4,
+                embed_dim=8,
+            ),
+            dn_query_embedding=None,
+        ),
+        backbone=object(),
+    )
+
+    def create_model(model_info, overwrite_func):
+        captured["model_info"] = model_info
+        captured["config"] = overwrite_func({
+            "num_classes": 3,
             "line_class_id": -1,
-            "ellipse_class_id": -1
-        }
-        mock_dataset.return_value = mock_dataset_instance
+            "ellipse_class_id": -1,
+        })
+        return model
 
-        # Call train_vit_detector with denoising enabled
-        try:
-            train_vit_detector(
-                model_info="rt-detr6",
-                dataset_paths=["/tmp/dummy_dataset"],
-                output_dir="/tmp/checkpoints",
-                finetune=False,
-                continue_training_from_checkpoint=False,
-                pretrained_backbone="",
-                enable_wandb=False,
-                enable_denoising=True,
-                denoising_num_queries=6,
-                denoising_label_noise_ratio=0.3,
-                denoising_box_noise_scale=0.5,
-                enable_line_detection=False,
-                enable_ellipse_detection=False,
-                seed=42
-            )
-        except RuntimeError:
-            # Expected - we stopped execution here to capture the model
-            pass
+    monkeypatch.setattr(train_object_detection, "create_model", create_model)
 
-        # Get the model that was passed to the trainer
-        assert 'model' in captured_model, "Model should have been captured"
-        model = captured_model['model']
+    train_object_detection.train_vit_detector(
+        model_info="rt-detr",
+        dataset_paths=["/tmp/dummy_dataset"],
+        output_dir="/tmp/checkpoints",
+        finetune=False,
+        continue_training_from_checkpoint=False,
+        pretrained_backbone="",
+        wandb_name=None,
+        enable_wandb=False,
+        enable_denoising=True,
+        denoising_num_queries=6,
+        denoising_label_noise_ratio=0.3,
+        denoising_box_noise_scale=0.5,
+        enable_line_detection=False,
+        enable_ellipse_detection=False,
+    )
 
-        # Verify denoising parameters are set on the model config
-        assert model.config.enable_denoising is True, "enable_denoising should be True"
-        assert model.config.denoising_num_queries == 6, "denoising_num_queries should be 6"
-        assert model.config.denoising_label_noise_ratio == 0.3, "denoising_label_noise_ratio should be 0.3"
-        assert model.config.denoising_box_noise_scale == 0.5, "denoising_box_noise_scale should be 0.5"
-
-        # Verify head config is also updated
-        assert model.head.config.enable_denoising is True, "head enable_denoising should be True"
-        assert model.head.config.denoising_num_queries == 6, "head denoising_num_queries should be 6"
-
-        # Verify dn_query_embedding is created
-        assert hasattr(model.head, 'dn_query_embedding'), "head should have dn_query_embedding"
-        assert model.head.dn_query_embedding is not None, "dn_query_embedding should not be None"
+    model = captured["model"]
+    assert captured["trained"] is True
+    assert captured["model_info"] == "rt-detr"
+    assert captured["config"]["enable_denoising"] is True
+    assert captured["config"]["denoising_num_queries"] == 6
+    assert captured["config"]["denoising_label_noise_ratio"] == 0.3
+    assert captured["config"]["denoising_box_noise_scale"] == 0.5
+    assert model.config.enable_denoising is True
+    assert model.config.denoising_num_queries == 6
+    assert model.config.denoising_label_noise_ratio == 0.3
+    assert model.config.denoising_box_noise_scale == 0.5
+    assert model.head.config.enable_denoising is True
+    assert model.head.config.denoising_num_queries == 6
+    assert model.head.config.denoising_label_noise_ratio == 0.3
+    assert model.head.config.denoising_box_noise_scale == 0.5
+    assert isinstance(model.head.dn_query_embedding, torch.nn.Embedding)
+    assert model.head.dn_query_embedding.weight.shape == (6, 8)
 
 
-def test_denoising_parameters_applied_to_model_from_checkpoint():
-    """Test that denoising parameters are applied to the model when loaded from checkpoint."""
-    captured_model = {}
+def test_resuming_training_preserves_checkpoint_denoising_settings(monkeypatch):
+    checkpoint_embedding = object()
+    checkpoint_settings = {
+        "enable_denoising": True,
+        "denoising_num_queries": 4,
+        "denoising_label_noise_ratio": 0.15,
+        "denoising_box_noise_scale": 0.25,
+    }
+    model = SimpleNamespace(
+        config=SimpleNamespace(
+            num_classes=3,
+            softmax_activated=False,
+            **checkpoint_settings,
+        ),
+        head=SimpleNamespace(
+            config=SimpleNamespace(**checkpoint_settings, embed_dim=8),
+            dn_query_embedding=checkpoint_embedding,
+        ),
+        backbone=object(),
+    )
+    captured = {}
 
-    def mock_trainer_init(self, model, train_loader, val_loader, config, project_name, enable_wandb):
-        captured_model['model'] = model
-        raise RuntimeError("Stop execution here")
+    class CapturingTrainer:
+        def __init__(self, model, **kwargs):
+            self.model = model
+            captured["model"] = model
 
-    with patch('maesy.training.train_setups.train_object_detection.MaesyDataset'), \
-         patch('maesy.training.train_setups.train_object_detection.MultiDataset') as mock_dataset, \
-         patch('maesy.training.train_setups.train_object_detection.DataLoader'), \
-         patch('maesy.training.train_setups.train_object_detection.DetectionTrainer.__init__', mock_trainer_init), \
-         patch('maesy.training.train_setups.train_object_detection.replace_bn_with_frozenbn'), \
-         patch('maesy.training.train_setups.train_object_detection.create_model_from_checkpoint') as mock_create_from_ckpt:
+        def resume(self, checkpoint_path):
+            captured["resumed_from"] = checkpoint_path
 
-        # Setup mocks
-        mock_dataset_instance = MagicMock()
-        mock_dataset_instance.get_num_classes.return_value = 3
-        mock_dataset_instance.get_special_classes.return_value = {
-            "line_class_id": -1,
-            "ellipse_class_id": -1
-        }
-        mock_dataset.return_value = mock_dataset_instance
+        def train(self):
+            raise AssertionError("resume setup must not start a new training run")
 
-        # Create a real model from checkpoint (we'll use rt-detr as fake checkpoint)
-        from _maesy_core.model.model_tools import read_yaml
-        from _maesy_core.model.model_tools.model_factory import create_model_from_dict
-        config = read_yaml('cfg/rt-detr/rt-detr6.yaml')
-        config['num_classes'] = 3
-        model = create_model_from_dict(config)
-        mock_create_from_ckpt.return_value = model
+    _patch_training_dependencies(monkeypatch, CapturingTrainer)
 
-        # Call train_vit_detector with a checkpoint
-        try:
-            train_vit_detector(
-                model_info="/tmp/checkpoint.pth",
-                dataset_paths=["/tmp/dummy_dataset"],
-                output_dir="/tmp/checkpoints",
-                finetune=False,
-                continue_training_from_checkpoint=True,
-                pretrained_backbone="",
-                enable_wandb=False,
-                enable_denoising=True,
-                denoising_num_queries=6,
-                denoising_label_noise_ratio=0.3,
-                denoising_box_noise_scale=0.5,
-                enable_line_detection=False,
-                enable_ellipse_detection=False,
-                seed=42
-            )
-        except RuntimeError:
-            # Expected - we stopped execution here to capture the model
-            pass
+    def load_checkpoint_model(model_info, overwrite_func):
+        captured["model_info"] = model_info
+        captured["overwrite_func"] = overwrite_func
+        return model
 
-        # Get the model that was passed to the trainer
-        assert 'model' in captured_model, "Model should have been captured"
-        model = captured_model['model']
+    monkeypatch.setattr(train_object_detection, "create_model", load_checkpoint_model)
+    checkpoint_path = "/tmp/checkpoint.pth"
 
-        # Verify denoising parameters were set on the model config
-        assert model.config.enable_denoising is True, "enable_denoising should be True"
-        assert model.config.denoising_num_queries == 6, "denoising_num_queries should be 6"
-        assert model.config.denoising_label_noise_ratio == 0.3, "denoising_label_noise_ratio should be 0.3"
-        assert model.config.denoising_box_noise_scale == 0.5, "denoising_box_noise_scale should be 0.5"
+    train_object_detection.train_vit_detector(
+        model_info=checkpoint_path,
+        dataset_paths=["/tmp/dummy_dataset"],
+        output_dir="/tmp/checkpoints",
+        finetune=False,
+        continue_training_from_checkpoint=True,
+        pretrained_backbone="",
+        wandb_name=None,
+        enable_wandb=False,
+        # Deliberately differ from the settings stored in the checkpoint.
+        enable_denoising=False,
+        denoising_num_queries=99,
+        denoising_label_noise_ratio=0.9,
+        denoising_box_noise_scale=0.8,
+        enable_line_detection=False,
+        enable_ellipse_detection=False,
+    )
 
-        # Verify head config was also updated
-        assert model.head.config.enable_denoising is True, "head enable_denoising should be True"
-        assert model.head.config.denoising_num_queries == 6, "head denoising_num_queries should be 6"
-        assert model.head.config.denoising_label_noise_ratio == 0.3, "head denoising_label_noise_ratio should be 0.3"
-        assert model.head.config.denoising_box_noise_scale == 0.5, "head denoising_box_noise_scale should be 0.5"
-
-
-
-
-
+    assert captured["model"] is model
+    assert captured["model_info"] == checkpoint_path
+    assert captured["resumed_from"] == checkpoint_path
+    assert model.config.enable_denoising is True
+    assert model.config.denoising_num_queries == 4
+    assert model.config.denoising_label_noise_ratio == 0.15
+    assert model.config.denoising_box_noise_scale == 0.25
+    assert model.head.config.enable_denoising is True
+    assert model.head.config.denoising_num_queries == 4
+    assert model.head.config.denoising_label_noise_ratio == 0.15
+    assert model.head.config.denoising_box_noise_scale == 0.25
+    assert model.head.dn_query_embedding is checkpoint_embedding

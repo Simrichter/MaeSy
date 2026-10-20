@@ -8,10 +8,24 @@ if TYPE_CHECKING:
 
 class CheckpointHandler:
     @staticmethod
+    def _component_type(component) -> str:
+        """Return a stable component identifier without using nn.Module.type()."""
+        config_type = getattr(getattr(component, "config", None), "type", None)
+        if isinstance(config_type, str):
+            return config_type
+
+        component_type = getattr(component, "type", None)
+        if isinstance(component_type, str):
+            return component_type
+
+        return type(component).__name__
+
+    @staticmethod
     def _assert_compatible_config(checkpoint_config: dict, current_config: dict, part_name: str):
         mismatches = {}
+        initialization_only = {"pretrained", "backbone_pretrained"}
         for key, value in checkpoint_config.items():
-            if key in current_config and current_config[key] != value:
+            if key not in initialization_only and key in current_config and current_config[key] != value:
                 mismatches[key] = {"checkpoint": value, "current": current_config[key]}
         if mismatches:
             raise ValueError(
@@ -44,10 +58,10 @@ class CheckpointHandler:
             'epoch': current_epoch,
             'global_step': global_step,
             'backbone': model.backbone.state_dict(),
-            'backbonetype': model.backbone.type,
+            'backbonetype': self._component_type(model.backbone),
             'backboneconfig': model.backbone.config.__dict__,
             'head': model.head.state_dict(),
-            'headtype': model.head.type,
+            'headtype': self._component_type(model.head),
             'headconfig': model.head.config.__dict__,
             'optimizer_state_dict': optimizer.state_dict(),
             'best_val_loss': best_val_loss,
@@ -79,7 +93,7 @@ class CheckpointHandler:
         )
 
     def _load_head(self, checkpoint, model):
-        if model.head.type != checkpoint['headtype']:
+        if self._component_type(model.head) != checkpoint['headtype']:
             return False
         self._check_head_configs(checkpoint, model)
         # Handle legacy key name for dn_query_content
@@ -89,8 +103,8 @@ class CheckpointHandler:
         return True
 
     def _load_backbone(self, checkpoint, model):
-        if model.backbone.type != checkpoint['backbonetype']:
-            print(f"{model.backbone.type} != {checkpoint['backbonetype']}")
+        if self._component_type(model.backbone) != checkpoint['backbonetype']:
+            print(f"{self._component_type(model.backbone)} != {checkpoint['backbonetype']}")
             return False
         self._check_bb_configs(checkpoint, model)
         model.backbone.load_state_dict(checkpoint['backbone'])
@@ -103,12 +117,12 @@ class CheckpointHandler:
         if bb_success and head_success:
             print(f"Model weights loaded successfully")
         elif head_success: # Loaded Head
-                print(f"\nWarning: Could only load head weights of type {model.head.type}, NOT backbone!!!!\n")
+                print(f"\nWarning: Could only load head weights of type {self._component_type(model.head)}, NOT backbone!!!!\n")
         elif bb_success: # Loaded Backbone
-            print(f"Loaded only backbone weights of type {model.backbone.type}")
+            print(f"Loaded only backbone weights of type {self._component_type(model.backbone)}")
         else: # Load failed
             raise ValueError(
-                f"Incompatible model architecture. Checkpoint backbone type: {checkpoint['backbonetype']}, actual backbone type: {model.backbone.type}. Checkpoint head type: {checkpoint['headtype']}, actual head type: {model.head.type}.")
+                f"Incompatible model architecture. Checkpoint backbone type: {checkpoint['backbonetype']}, actual backbone type: {self._component_type(model.backbone)}. Checkpoint head type: {checkpoint['headtype']}, actual head type: {self._component_type(model.head)}.")
 
     def load_model(self, filepath: str, model=None) -> "BaseModel":
         """
@@ -125,7 +139,14 @@ class CheckpointHandler:
 
         if model is None:
             from _maesy_core.model.model_tools.model_factory import create_model_from_dict  # import here to prevent circular import error
-            model = create_model_from_dict(checkpoint['modelconfig'])
+
+            # The checkpoint contains the complete backbone weights; reconstruction
+            # must not fetch initialization weights from the network first.
+            model_config = dict(checkpoint["modelconfig"])
+            for key in ("pretrained", "backbone_pretrained"):
+                if key in model_config:
+                    model_config[key] = False
+            model = create_model_from_dict(model_config)
 
         if 'backbone' in checkpoint and 'head' in checkpoint:
             self._autoload_model(checkpoint, model)
@@ -145,7 +166,7 @@ class CheckpointHandler:
         checkpoint = torch.load(filepath, map_location=self.device)
 
         if not self._load_backbone(checkpoint, model):
-            raise KeyError(f"Cant load backbone type {checkpoint['backbonetype']} for model with backbone type {model.backbone.type}")
+            raise KeyError(f"Cant load backbone type {checkpoint['backbonetype']} for model with backbone type {self._component_type(model.backbone)}")
 
         print(f"Backbone loaded from {filepath}")
 

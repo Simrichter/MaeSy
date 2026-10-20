@@ -2,14 +2,14 @@
 
 import torch
 import torch.nn as nn
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict
 
 
 @dataclass
 class ViTDetectionHeadConfig:
     """Configuration for Detection Head."""
-    type = "ViTDetectionHead"
+    type: str = field(default="ViTDetectionHead", kw_only=True)
 
     embed_dim: int = 128
     num_classes: int = 80

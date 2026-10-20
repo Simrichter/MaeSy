@@ -1,0 +1,24 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787",
+    "ANTHROPIC_AUTH_TOKEN": "campus",
+    "ANTHROPIC_MODEL": "campus-ki",
+    "ANTHROPIC_CUSTOM_MODEL_OPTION": "campus-ki",
+    "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "Campus KI",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "256000",
+    "CLAUDE_CODE_EFFORT_LEVEL": "high"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/home/simon/Desktop/MaeSy/campus-claude-linux-x86_64\" \"--agent-hook\""
+          }
+        ]
+      }
+    ]
+  }
+}

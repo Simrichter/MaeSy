@@ -10,12 +10,20 @@ def store_features(features: Dict[str, torch.Tensor], model_hash: str):
         model_hash (str): A unique hash representing the model configuration and parameters.
     """
     print("Storing features to disk...")
+    import os
     import torch
-    distinct_paths = {p.removesuffix(p.split("/")[-1]) for p in features.keys()}
+    distinct_paths = {
+        os.path.normpath(os.path.dirname(os.path.abspath(path)))
+        for path in features
+    }
     print(f"Found {len(distinct_paths)} distinct paths.")
-    for path in distinct_paths:
-        selected_features = {k: v for k, v in features.items() if k.startswith(path)}
-        save_path = f"{path}/features_{model_hash}.feat"
+    for path in sorted(distinct_paths):
+        selected_features = {
+            image_path: feature
+            for image_path, feature in features.items()
+            if os.path.normpath(os.path.dirname(os.path.abspath(image_path))) == path
+        }
+        save_path = os.path.join(path, f"features_{model_hash}.feat")
         print(f"Storing {len(selected_features)} features at: '{save_path}'")
         torch.save(selected_features, save_path)
     print("Success")
@@ -56,14 +64,19 @@ def _find_feature_files(paths: List[str], model_hash: str) -> List[str]:
     """
     import os
     feature_files = []
+    expected_name = f"features_{model_hash}.feat"
     for path in paths:
         if not os.path.exists(path):
             print(f"Warning: Path '{path}' does not exist. Skipping.")
             continue
         if os.path.isdir(path):
-            for entry in os.scandir(path):
-                if entry.is_file() and entry.name.endswith(f"features_{model_hash}.feat"):
-                    feature_files.append(entry.path)
-        elif os.path.isfile(path) and path.endswith(f"features_{model_hash}.feat"):
+            for root, _directories, files in os.walk(path):
+                if expected_name in files:
+                    feature_files.append(os.path.join(root, expected_name))
+        elif os.path.isfile(path) and path.lower().endswith(".feat"):
+            if os.path.basename(path) != expected_name:
+                raise ValueError(
+                    f"Feature cache model hash does not match requested model: {path}"
+                )
             feature_files.append(path)
-    return feature_files
+    return sorted(set(feature_files))

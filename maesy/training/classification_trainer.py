@@ -16,22 +16,20 @@ class ClassificationTrainer(BaseTrainer):
     """
 
     def _validation_start(self):
-        self._val_predictions: List[Dict[str, torch.Tensor]] = []
-        self._val_targets: List[Dict[str, torch.Tensor]] = []
+        self._val_predictions: List[torch.Tensor] = []
+        self._val_targets: List[torch.Tensor] = []
 
-    def _validation_step(self, images: torch.Tensor, targets: Optional[List[Dict[str, torch.Tensor]]], losses: Dict[str, torch.Tensor]):
+    def _validation_step(self, images: torch.Tensor, targets: Optional[torch.Tensor], losses: Dict[str, torch.Tensor]):
         if targets is None:
             return
         decoded = losses.get("__decoded_predictions")
         prepared_targets = losses.get("__prepared_targets")
         if decoded is not None:
-            self._val_predictions.extend(decoded)
+            self._val_predictions.append(decoded.detach().cpu())
         if prepared_targets is not None:
-            self._val_targets.extend(prepared_targets)
+            self._val_targets.append(prepared_targets.detach().cpu())
 
     def _validation_finalize(self) -> Dict[str, float]:
-        if len(self._val_predictions) == 0 or len(self._val_targets) == 0:
-            return {}
         return compute_classification_metrics(self._val_predictions, self._val_targets)
 
 
@@ -41,7 +39,7 @@ class ClassificationTrainer(BaseTrainer):
 
         Args:
             images: Input images [B, C, H, W]
-            targets: Targets for classification (e.g., class labels) [B, num_classes]
+            targets: Class indices [B]
             val: Whether this is a validation pass
 
         Returns:

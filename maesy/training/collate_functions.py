@@ -1,6 +1,7 @@
 from typing import List, Dict, Tuple
 import torch
 
+from _maesy_core.dataset.utils import handle_raw_batch
 
 def collate_classification_fn(batch: List[tuple]) -> Tuple[torch.Tensor, torch.Tensor]:
     """
@@ -53,6 +54,5 @@ def collate_detection_fn(batch: List[tuple]) -> Tuple[torch.Tensor, List[Dict[st
     # images = torch.stack(images, dim=0)
     
     return images, targets
-
 
 

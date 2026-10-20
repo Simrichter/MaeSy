@@ -2,13 +2,13 @@ from typing import Tuple
 
 import torch
 import torch.nn as nn
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field
 from ..components import TransformerBlock, Utils
 
 @dataclass
 class TransformerBackboneConfig:
     """Configuration for Vision Transformer Backbone"""
-    type = "TransformerBackbone"
+    type: str = field(default="TransformerBackbone", kw_only=True)
 
     # Image parameters
     image_size: int = 224
@@ -47,7 +47,14 @@ class TransformerBackbone(nn.Module):
 
         # Transformer encoder
         self.encoder_blocks = nn.ModuleList([
-            TransformerBlock(**asdict(config)) for _ in range(config.num_layers)
+            TransformerBlock(
+                embed_dim=config.embed_dim,
+                num_heads=config.num_heads,
+                mlp_ratio=config.mlp_ratio,
+                dropout=config.dropout,
+                attention_dropout=config.attention_dropout,
+            )
+            for _ in range(config.num_layers)
         ])
 
         self.norm = nn.LayerNorm(config.embed_dim)

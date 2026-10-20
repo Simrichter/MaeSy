@@ -25,6 +25,8 @@ class MAETrainingConfig(BaseTrainingConfig):
     # Training parameters
     num_epochs: int = 100
     batch_size: int = 16
+    mask_ratio: float = 0.75
+    mask_patch_size: int = 16
     learning_rate: float = 1e-4
     backbone_learning_rate: float = learning_rate
     weight_decay: float = 1e-4
@@ -79,7 +81,8 @@ def train_mae(
     # Create training configuration
     training_config = MAETrainingConfig(
         batch_size=batch_size,
-        num_epochs=3000, # 750,
+        num_epochs=num_epochs,
+        mask_ratio=mask_ratio,
         learning_rate=1e-4,
         backbone_learning_rate=1e-4,
         weight_decay=1e-4,

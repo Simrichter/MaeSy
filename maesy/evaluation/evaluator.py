@@ -16,7 +16,7 @@ from _maesy_core.inference.inferer import Inferer
 from _maesy_core.model.model_tools import create_model_from_checkpoint
 from torchvision.transforms import v2 as transforms
 
-from ..training.utils import collate_detection_fn
+from ..training.collate_functions import collate_detection_fn
 
 
 GROUPED_PLOT_MODES = (
@@ -295,7 +295,7 @@ class Evaluator:
         dataset = MaesyDataset(dataset_path, split, "detection", transforms=test_transforms, enable_lines=True, enable_ellipses=True)
         self.special_classes = dataset.get_special_classes()
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False, collate_fn=collate_detection_fn)
-        self.inferer = Inferer(model=self.model, model_type=model_type, data_loader=dataloader, device=device)
+        self.inferer = Inferer(model=self.model, data_loader=dataloader, device=device)
         self.class_labels = [
             dataset.id_to_name.get(i, str(i))
             for i in range(self.model.config.num_classes)

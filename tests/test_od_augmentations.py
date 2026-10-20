@@ -2,7 +2,7 @@ import math
 
 import torch
 
-from _maesy_core.dataset import (
+from _maesy_core.dataset.augmentations import (
     _clip_line_to_bounds,
     _crop_targets,
     _resize_targets,
@@ -115,19 +115,37 @@ def test_affine_rotation_uses_normalized_forward_matrix():
     assert torch.allclose(warped["line_points"], torch.tensor([[0.50, 0.75, 0.25, 0.75]]), atol=1e-6)
 
 
-def test_train_transforms_without_targets_returns_image_tensor():
+def test_train_transforms_without_targets_preserves_spatial_shape_when_crop_disabled():
     transforms = ODTrainTransforms(image_size=32, p_affine=0.0, p_hflip=0.0, p_crop=0.0)
     transforms.color_jitter = lambda image: image
     transforms.random_autocontrast = lambda image: image
     transforms.random_grayscale = lambda image: image
-    transforms.random_blur = lambda image: image
-    transforms.random_sharpness = lambda image: image
-    transforms.random_erasing = lambda image: image
+    transforms.blur_sharp = lambda image: image
 
-    image = torch.zeros((3, 16, 16), dtype=torch.float32)
+    image = torch.zeros((3, 16, 24), dtype=torch.float32)
     output = transforms(image)
 
     assert isinstance(output, torch.Tensor)
-    assert output.shape == (3, 32, 32)
+    assert output.shape == (3, 16, 24)
     assert torch.isfinite(output).all()
+
+
+def test_train_transforms_with_targets_preserves_normalized_geometry_when_crop_disabled():
+    transforms = ODTrainTransforms(image_size=32, p_affine=0.0, p_hflip=0.0, p_crop=0.0)
+    transforms.color_jitter = lambda image: image
+    transforms.random_autocontrast = lambda image: image
+    transforms.random_grayscale = lambda image: image
+    transforms.blur_sharp = lambda image: image
+    target = {
+        "boxes": torch.tensor([[0.1, 0.2, 0.8, 0.9]], dtype=torch.float32),
+        "line_points": torch.empty((0, 4), dtype=torch.float32),
+        "ellipses": torch.empty((0, 6), dtype=torch.float32),
+    }
+
+    output, transformed_target = transforms(torch.zeros((3, 16, 24)), target)
+
+    assert output.shape == (3, 16, 24)
+    assert torch.equal(transformed_target["boxes"], target["boxes"])
+    assert torch.isfinite(output).all()
+    assert all(torch.isfinite(value).all() for value in transformed_target.values())
 
